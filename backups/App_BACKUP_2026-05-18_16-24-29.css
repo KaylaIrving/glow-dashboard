@@ -522,12 +522,9 @@ input::placeholder {
 .top-action-panel > button,
 .top-staff-chip button {
   width: 100%;
-  min-width: 0;
   min-height: 38px;
   padding: 8px 10px;
   font-size: 13px;
-  white-space: normal;
-  line-height: 1.15;
 }
 
 .top-staff-chip {
@@ -781,7 +778,7 @@ div[style*="background: #0b0b0b"] {
   }
 
   .top-action-buttons {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

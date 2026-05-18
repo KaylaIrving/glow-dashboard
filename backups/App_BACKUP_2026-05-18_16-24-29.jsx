@@ -368,7 +368,7 @@ function App() {
     const { data, error } = await supabase
       .from('CashUps')
       .select('*')
-      .eq('cashup_date', selectedDate)
+      .eq('cash_up_date', selectedDate)
       .order('created_at', { ascending: false })
       .limit(1)
 
@@ -383,9 +383,9 @@ function App() {
     setCashUpLoadError('')
     setCashUpExistingRecord(record)
     setCashUpStartFloat(record?.starting_cash_float ?? '')
-    setCashUpActualCash(record?.actual_cash ?? '')
+    setCashUpActualCash(record?.actual_cash_counted ?? '')
     setCashUpVarianceNotes(record?.variance_notes || '')
-    setCashUpManagerName(record?.cash_up_completed_by_staff || '')
+    setCashUpManagerName(record?.cash_up_completed_by_staff || record?.manager_sign_off_name || '')
   }
 
   function getDailyTakingsSummary() {
@@ -909,7 +909,7 @@ function App() {
       minutes_sales_total: Number(summary.minutesRevenue.toFixed(2)),
       total_revenue: Number(summary.totalRevenue.toFixed(2)),
       starting_cash_float: Number(startFloat.toFixed(2)),
-      expected_cash: Number(expectedCash.toFixed(2))
+      expected_cash_in_till: Number(expectedCash.toFixed(2))
     }
   }
 
@@ -933,16 +933,12 @@ function App() {
     setCashUpSaving(true)
 
     const staffUser = getCurrentStaffUser()
-    const existingActualCash = Number(cashUpExistingRecord?.actual_cash || 0)
-    const existingExpectedCash = Number(startFloat || 0) + Number(getDailyTakingsSummary().cashTotal || 0)
     const payload = {
-      cashup_date: selectedDate,
+      cash_up_date: selectedDate,
       ...buildCashUpTotalsPayload(getDailyTakingsSummary(), startFloat),
-      actual_cash: existingActualCash,
-      variance: Number((existingActualCash - existingExpectedCash).toFixed(2)),
-      variance_notes: cashUpExistingRecord?.variance_notes || null,
       float_entered_by_staff: staffUser?.name || null,
       float_entered_at: new Date().toISOString(),
+      staff_name: staffUser?.name || cashUpExistingRecord?.staff_name || null,
       cash_up_locked: Boolean(cashUpExistingRecord?.cash_up_locked)
     }
 
@@ -1004,13 +1000,15 @@ function App() {
     setCashUpSaving(true)
 
     const payload = {
-      cashup_date: selectedDate,
+      cash_up_date: selectedDate,
       ...buildCashUpTotalsPayload(summary, startFloat),
-      actual_cash: Number(actualCash.toFixed(2)),
+      actual_cash_counted: Number(actualCash.toFixed(2)),
       variance: Number(variance.toFixed(2)),
       variance_notes: cashUpVarianceNotes.trim() || null,
+      manager_sign_off_name: signOffName,
       cash_up_completed_by_staff: signOffName,
       cash_up_completed_at: new Date().toISOString(),
+      staff_name: staffUser?.name || signOffName || null,
       cash_up_locked: Boolean(cashUpExistingRecord?.cash_up_locked)
     }
 
@@ -1135,7 +1133,7 @@ function App() {
           return query.select('*').gte('appointment_time', dayStart.toISOString()).lte('appointment_time', dayEnd.toISOString()).order('appointment_time', { ascending: true })
         }
         if (tableName === 'CashUps') {
-          return query.select('*').eq('cashup_date', selectedDate)
+          return query.select('*').eq('cash_up_date', selectedDate)
         }
         return query.select('*').gte('created_at', dayStart.toISOString()).lte('created_at', dayEnd.toISOString()).order('created_at', { ascending: false })
       }
@@ -3697,7 +3695,7 @@ function App() {
 
         <div className="top-action-panel" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div className="top-action-buttons">
-            <button onClick={() => setShowCustomerManagement(!showCustomerManagement)}>{showCustomerManagement ? 'Hide Customers' : 'Customers'}</button>
+            <button onClick={() => setShowCustomerManagement(!showCustomerManagement)}>{showCustomerManagement ? 'Hide Customers' : 'Customer Management'}</button>
             <button onClick={collapseCashUp ? openCashUpPanel : () => setCollapseCashUp(true)}>{collapseCashUp ? 'Cash Up' : 'Hide Cash Up'}</button>
             {showManagerView ? <button onClick={() => setShowManagerView(false)}>Hide Manager View</button> : <button onClick={openManagerView}>Manager View</button>}
           </div>
