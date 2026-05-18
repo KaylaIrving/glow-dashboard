@@ -85,11 +85,10 @@ function App() {
   const [addCustomerEmail, setAddCustomerEmail] = useState('')
   const [addCustomerDateOfBirth, setAddCustomerDateOfBirth] = useState('')
   const [addCustomerNotes, setAddCustomerNotes] = useState('')
-  const [addCustomerStandardMinutes, setAddCustomerStandardMinutes] = useState('')
-  const [addCustomerHybridMinutes, setAddCustomerHybridMinutes] = useState('')
+  const [addCustomerCourseMinutes, setAddCustomerCourseMinutes] = useState('')
+  const [addCustomerPayAsYouGo, setAddCustomerPayAsYouGo] = useState(false)
   const [addCustomerActive, setAddCustomerActive] = useState(true)
   const [addCustomerSaving, setAddCustomerSaving] = useState(false)
-  const [addCustomerSuccess, setAddCustomerSuccess] = useState('')
   const [customerPayments, setCustomerPayments] = useState([])
   const [customerLogs, setCustomerLogs] = useState([])
 
@@ -2601,8 +2600,8 @@ function App() {
     setAddCustomerEmail('')
     setAddCustomerDateOfBirth('')
     setAddCustomerNotes('')
-    setAddCustomerStandardMinutes('')
-    setAddCustomerHybridMinutes('')
+    setAddCustomerCourseMinutes('')
+    setAddCustomerPayAsYouGo(false)
     setAddCustomerActive(true)
   }
 
@@ -2614,16 +2613,15 @@ function App() {
     const phone = addCustomerPhone.trim()
     const email = addCustomerEmail.trim()
     const fullName = `${firstName} ${lastName}`.trim()
-    const standardMinutes = addCustomerStandardMinutes === '' ? 0 : Number(addCustomerStandardMinutes || 0)
-    const hybridMinutes = addCustomerHybridMinutes === '' ? 0 : Number(addCustomerHybridMinutes || 0)
+    const courseMinutes = addCustomerCourseMinutes === '' ? 0 : Number(addCustomerCourseMinutes || 0)
 
     if (!firstName && !phone) {
       alert('First name or phone number is required.')
       return
     }
 
-    if ((addCustomerStandardMinutes !== '' && (Number.isNaN(standardMinutes) || standardMinutes < 0)) || (addCustomerHybridMinutes !== '' && (Number.isNaN(hybridMinutes) || hybridMinutes < 0))) {
-      alert('Standard and Hybrid minutes must be 0 or more.')
+    if (addCustomerCourseMinutes !== '' && (Number.isNaN(courseMinutes) || courseMinutes < 0)) {
+      alert('Course minutes balance must be 0 or more.')
       return
     }
 
@@ -2651,7 +2649,10 @@ function App() {
     }
 
     const staffUser = getCurrentStaffUser()
-    const notes = addCustomerNotes.trim()
+    const notes = [
+      addCustomerPayAsYouGo ? 'Pay-as-you-go customer.' : '',
+      addCustomerNotes.trim()
+    ].filter(Boolean).join('\n')
 
     setAddCustomerSaving(true)
     const { data, error } = await supabase.from('Customers').insert({
@@ -2661,8 +2662,8 @@ function App() {
       date_of_birth: addCustomerDateOfBirth || null,
       notes: notes || null,
       minutes_balance: 0,
-      standard_minutes_balance: standardMinutes,
-      hybrid_minutes_balance: hybridMinutes,
+      standard_minutes_balance: courseMinutes,
+      hybrid_minutes_balance: 0,
       is_active: addCustomerActive
     }).select().single()
     setAddCustomerSaving(false)
@@ -2674,13 +2675,12 @@ function App() {
       return
     }
 
-    await createCustomerLog(data, 'Customer added', `Customer added by ${staffUser?.name || 'staff'}. Initial balances: Standard ${standardMinutes}, Hybrid ${hybridMinutes}.`)
+    await createCustomerLog(data, 'Customer added', `Customer added by ${staffUser?.name || 'staff'}. Initial course minutes: ${courseMinutes}. Pay-as-you-go: ${addCustomerPayAsYouGo ? 'yes' : 'no'}.`)
     await getCustomers()
     clearAddCustomerForm()
     setShowAddCustomerForm(false)
-    clearCustomerManager()
-    setAddCustomerSuccess('Customer added successfully')
-    setTimeout(() => setAddCustomerSuccess(''), 3500)
+    if (data.is_active !== false) selectManagerCustomer(data)
+    alert('Customer added successfully.')
   }
 
   function clearMinuteCorrection() {
@@ -3271,16 +3271,10 @@ function App() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
           <h2 style={{ margin: 0 }}>Customer Management</h2>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button onClick={() => { setAddCustomerSuccess(''); setShowAddCustomerForm(!showAddCustomerForm) }}>{showAddCustomerForm ? 'Hide Add Customer' : 'Add New Customer'}</button>
+            <button onClick={() => setShowAddCustomerForm(!showAddCustomerForm)}>{showAddCustomerForm ? 'Hide Add Customer' : 'Add New Customer'}</button>
             {selectedCustomer && <button onClick={clearCustomerManager}>Clear</button>}
           </div>
         </div>
-
-        {addCustomerSuccess && (
-          <div style={{ background: '#0b0b0b', border: '1px solid rgba(212,168,83,0.35)', borderRadius: '10px', padding: '10px 12px', color: '#d4a853', fontWeight: 'bold', marginBottom: '12px' }}>
-            {addCustomerSuccess}
-          </div>
-        )}
 
         {showAddCustomerForm && (
           <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '14px', marginBottom: '15px' }}>
@@ -3291,11 +3285,11 @@ function App() {
               <input placeholder="Phone number" value={addCustomerPhone} onChange={(e) => setAddCustomerPhone(e.target.value)} style={{ padding: '10px' }} />
               <input placeholder="Email" value={addCustomerEmail} onChange={(e) => setAddCustomerEmail(e.target.value)} style={{ padding: '10px' }} />
               <input type="date" value={addCustomerDateOfBirth} onChange={(e) => setAddCustomerDateOfBirth(e.target.value)} style={{ padding: '10px' }} />
-              <input type="number" min="0" placeholder="Standard minutes balance" value={addCustomerStandardMinutes} onChange={(e) => setAddCustomerStandardMinutes(e.target.value)} style={{ padding: '10px' }} />
-              <input type="number" min="0" placeholder="Hybrid minutes balance" value={addCustomerHybridMinutes} onChange={(e) => setAddCustomerHybridMinutes(e.target.value)} style={{ padding: '10px' }} />
+              <input type="number" min="0" placeholder="Course minutes balance optional" value={addCustomerCourseMinutes} onChange={(e) => setAddCustomerCourseMinutes(e.target.value)} style={{ padding: '10px' }} />
             </div>
             <textarea placeholder="Notes" value={addCustomerNotes} onChange={(e) => setAddCustomerNotes(e.target.value)} style={{ width: '100%', minHeight: '70px', padding: '10px', marginBottom: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '12px', fontFamily: 'inherit' }} />
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '10px' }}>
+              <label><input type="checkbox" checked={addCustomerPayAsYouGo} onChange={(e) => setAddCustomerPayAsYouGo(e.target.checked)} style={{ marginRight: '8px' }} />Pay-as-you-go customer</label>
               <label><input type="checkbox" checked={addCustomerActive} onChange={(e) => setAddCustomerActive(e.target.checked)} style={{ marginRight: '8px' }} />Active</label>
             </div>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
