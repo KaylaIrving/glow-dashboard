@@ -1231,96 +1231,16 @@ function App() {
     return bookings.filter((booking) => booking.appointment_time && formatLocalDate(new Date(booking.appointment_time)) === selectedDate)
   }
 
-  function getBookingStatusKey(booking) {
-    return String(booking?.status || '').toLowerCase()
-  }
-
-  function isFinishedBookingStatus(booking) {
-    return ['completed', 'deleted', 'cancelled', 'canceled', 'no_show', 'force_stopped'].includes(getBookingStatusKey(booking))
-  }
-
-  function getLiveBedSession(bedId, excludeBookingId = null) {
-    const liveStatuses = ['undressing', 'running', 'cooldown', 'time_sent', 'sent', 'active', 'customer_started', 'waiting_to_start', 'in_use']
-
-    return bookings.find((booking) => {
-      if (booking.id === excludeBookingId) return false
-      if (Number(booking.bed_id) !== Number(bedId)) return false
-      if (isFinishedBookingStatus(booking)) return false
-
-      const status = getBookingStatusKey(booking)
-      if (liveStatuses.includes(status)) return true
-
-      const phase = String(getPhase(booking) || '').toLowerCase().replaceAll(' ', '_')
-      return liveStatuses.includes(phase)
-    }) || null
-  }
-
-  function isBedLocked(bookingOrBedId, excludeBookingId = null) {
-    if (typeof bookingOrBedId === 'object' && bookingOrBedId !== null) {
-      const booking = bookingOrBedId
-      return Boolean(getLiveBedSession(booking.bed_id, excludeBookingId)?.id === booking.id)
-    }
-
-    return Boolean(getLiveBedSession(bookingOrBedId, excludeBookingId))
-  }
-
-  function isBlockingBookingStatus(booking) {
-    if (isFinishedBookingStatus(booking)) return false
-    return getBookingStatusKey(booking) === 'booked' || isBedLocked(booking)
-  }
-
-  function getBookingBlockedInterval(booking) {
-    if (!booking) return null
-    const startSource = booking.customer_started_at || booking.tmax_sent_at || booking.booking_start || booking.appointment_time
-    if (!startSource) return null
-
-    const start = new Date(startSource)
-    if (Number.isNaN(start.getTime())) return null
-
-    const explicitEndSource = booking.actual_tanning_end || booking.booking_end
-    const end = explicitEndSource
-      ? new Date(explicitEndSource)
-      : new Date(start.getTime() + getTotalBlockMinutes(booking) * 60000)
-
-    if (Number.isNaN(end.getTime())) return null
-    return { start, end }
-  }
-
-  function doesIntervalOverlap(startA, endA, startB, endB) {
-    return startA < endB && endA > startB
-  }
-
-  function doesBedOverlapBlockedTime(bedId, newStart, newEnd, ignoreBookingId = null, activeOnly = false) {
-    return bookings.some((booking) => {
-      if (booking.id === ignoreBookingId) return false
-      if (Number(booking.bed_id) !== Number(bedId)) return false
-      if (activeOnly ? !isBedLocked(booking) : !isBlockingBookingStatus(booking)) return false
-
-      const existing = getBookingBlockedInterval(booking)
-      if (!existing) return false
-
-      return doesIntervalOverlap(newStart, newEnd, existing.start, existing.end)
-    })
-  }
-
   function doesBookingOverlap(bedId, startDateTime, minutes, ignoreBookingId = null) {
     const newStart = new Date(startDateTime)
     const newEnd = new Date(newStart.getTime() + (Number(minutes) + 6) * 60000)
-    return doesBedOverlapBlockedTime(bedId, newStart, newEnd, ignoreBookingId, false)
-  }
-
-  function doesLockedBedOverlapInterval(bedId, startDateTime, minutes, ignoreBookingId = null) {
-    const newStart = new Date(startDateTime)
-    const newEnd = new Date(newStart.getTime() + (Number(minutes) + 6) * 60000)
-    return isBedLocked(bedId, ignoreBookingId) && doesBedOverlapBlockedTime(bedId, newStart, newEnd, ignoreBookingId, true)
-  }
-
-  function showBedOverlapAlert() {
-    alert('This bed is already in use during that time. Please choose another time or bed.')
-  }
-
-  function showBedLockedAlert() {
-    alert('This bed is currently in use or cooling down. Please wait until it is available before starting another session.')
+    return getBookingsForSelectedDate().some((booking) => {
+      if (booking.id === ignoreBookingId) return false
+      if (Number(booking.bed_id) !== Number(bedId)) return false
+      const existingStart = new Date(booking.appointment_time)
+      const existingEnd = new Date(existingStart.getTime() + getTotalBlockMinutes(booking) * 60000)
+      return newStart < existingEnd && newEnd > existingStart
+    })
   }
 
   function hasUsedSunbedWithin24Hours(customerId, ignoreBookingId = null) {
@@ -1351,13 +1271,8 @@ function App() {
 
     const appointmentDateTime = new Date(`${selectedDate}T${modalSlot.time}`)
 
-    if (doesLockedBedOverlapInterval(modalSlot.bedId, appointmentDateTime, 2)) {
-      showBedLockedAlert()
-      return
-    }
-
     if (doesBookingOverlap(modalSlot.bedId, appointmentDateTime, 2)) {
-      showBedOverlapAlert()
+      alert('This test overlaps with another booking on the same bed.')
       return
     }
 
@@ -1428,13 +1343,8 @@ function App() {
     }
 
     const appointmentDateTime = new Date(`${selectedDate}T${modalSlot.time}`)
-    if (doesLockedBedOverlapInterval(modalSlot.bedId, appointmentDateTime, selectedMinutes)) {
-      showBedLockedAlert()
-      return
-    }
-
     if (doesBookingOverlap(modalSlot.bedId, appointmentDateTime, selectedMinutes)) {
-      showBedOverlapAlert()
+      alert('This booking overlaps with another booking on the same bed.')
       return
     }
 
@@ -1482,13 +1392,8 @@ function App() {
     }
 
     const appointmentDateTime = new Date(`${selectedDate}T${modalSlot.time}`)
-    if (doesLockedBedOverlapInterval(modalSlot.bedId, appointmentDateTime, selectedMinutes)) {
-      showBedLockedAlert()
-      return
-    }
-
     if (doesBookingOverlap(modalSlot.bedId, appointmentDateTime, selectedMinutes)) {
-      showBedOverlapAlert()
+      alert('This staff booking overlaps with another booking on the same bed.')
       return
     }
 
@@ -1555,13 +1460,8 @@ function App() {
     }
 
     const appointmentDateTime = new Date(`${selectedDate}T${editTime}`)
-    if (doesLockedBedOverlapInterval(editBedId, appointmentDateTime, selectedMinutes, modalBooking.id)) {
-      showBedLockedAlert()
-      return
-    }
-
     if (doesBookingOverlap(editBedId, appointmentDateTime, selectedMinutes, modalBooking.id)) {
-      showBedOverlapAlert()
+      alert('This edited booking overlaps with another booking on the same bed.')
       return
     }
 
@@ -1708,15 +1608,7 @@ function App() {
     }
 
     const previousStatus = booking.status
-    const { error } = await supabase.from('Bookings').update({
-      status: 'booked',
-      booking_start: null,
-      booking_end: null,
-      tmax_sent_at: null,
-      tmax_status: null,
-      customer_started_at: null,
-      actual_tanning_end: null
-    }).eq('id', booking.id)
+    const { error } = await supabase.from('Bookings').update({ status: 'booked' }).eq('id', booking.id)
     if (error) {
       alert('Booking reset was not saved. Please check the connection and try again.')
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
@@ -1843,27 +1735,17 @@ function App() {
     const customer = customers.find((c) => c.id === Number(booking.customer_id))
     if (customer && !checkCustomerAgeBeforeSunbed(customer)) return
 
-    const now = new Date()
-    const tanningStart = new Date(now.getTime() + UNDRESS_SECONDS * 1000)
-    const tanningEnd = new Date(tanningStart.getTime() + Number(booking.minutes || 0) * 60000)
-    const cooldownEnd = new Date(tanningEnd.getTime() + COOLDOWN_SECONDS * 1000)
-
-    if (getLiveBedSession(booking.bed_id, booking.id)) {
-      showBedLockedAlert()
-      return
-    }
-
-    if (doesBedOverlapBlockedTime(booking.bed_id, now, cooldownEnd, booking.id, true)) {
-      showBedLockedAlert()
-      return
-    }
-
     const deducted = isShopTestBooking(booking)
       ? true
       : isStaffFreeBooking(booking)
         ? await deductStaffFreeMinutesOnce(booking)
         : await deductCustomerMinutesOnce(booking)
     if (!deducted) return
+
+    const now = new Date()
+    const tanningStart = new Date(now.getTime() + UNDRESS_SECONDS * 1000)
+    const tanningEnd = new Date(tanningStart.getTime() + booking.minutes * 60000)
+    const cooldownEnd = new Date(tanningEnd.getTime() + COOLDOWN_SECONDS * 1000)
 
     const { error } = await supabase.from('Bookings').update({
       status: 'undressing',
@@ -1885,6 +1767,52 @@ function App() {
     getBookings()
     getCustomers()
     getStaff()
+  }
+
+  async function customerStartedBed(booking) {
+    if (!booking?.id) return
+
+    if (!requireStaffSignIn()) return
+
+    if (!booking.booking_start && !booking.tmax_sent_at) {
+      alert('Start the session/send time to the bed first.')
+      return
+    }
+
+    if (booking.customer_started_at) {
+      alert('Customer start has already been recorded for this booking.')
+      return
+    }
+
+    if (['completed', 'no_show', 'force_stopped'].includes(String(booking.status || '').toLowerCase())) {
+      alert('This booking is already finished or stopped.')
+      return
+    }
+
+    const actualStart = new Date()
+    const tanningEnd = new Date(actualStart.getTime() + Number(booking.minutes || 0) * 60000)
+    const cooldownEnd = new Date(tanningEnd.getTime() + COOLDOWN_SECONDS * 1000)
+
+    const { error } = await supabase
+      .from('Bookings')
+      .update({
+        status: 'running',
+        customer_started_at: actualStart.toISOString(),
+        actual_tanning_end: cooldownEnd.toISOString(),
+        booking_end: cooldownEnd.toISOString(),
+        tmax_status: 'running'
+      })
+      .eq('id', booking.id)
+
+    if (error) {
+      alert('Customer start was not saved. Please check the connection and try again.')
+      showDataLoadWarning('A booking update failed. Please check the connection.', error)
+      console.log(error)
+      return
+    }
+
+    closeModal()
+    getBookings()
   }
 
   async function forceStop(booking) {
@@ -1923,12 +1851,10 @@ function App() {
 
   function getBookingForBed(bedId) {
     const now = currentTime
-    const lockedBooking = bookings.find((booking) => Number(booking.bed_id) === Number(bedId) && isBedLocked(booking))
-    if (lockedBooking) return lockedBooking
 
     return bookings.find((booking) => {
       if (booking.bed_id !== bedId) return false
-      if (isFinishedBookingStatus(booking)) return false
+      if (['completed', 'no_show', 'force_stopped'].includes(booking.status)) return false
 
       if (booking.booking_start && booking.booking_end) {
         const start = new Date(booking.booking_start)
@@ -2014,7 +1940,6 @@ function App() {
 
   function getBedColour(bedId) {
     if (isBedOutOfService(bedId)) return '#5c1f1f'
-    if (isBedLocked(bedId)) return '#722ed1'
     const booking = getBookingForBed(bedId)
     if (!booking) return '#1f8b4c'
     const phase = getPhase(booking)
@@ -2071,12 +1996,6 @@ function App() {
       alert(`${getBedName(bedId)} is out of service and cannot be booked.`)
       return
     }
-
-    if (doesLockedBedOverlapInterval(bedId, getSlotDateTime(time), 12)) {
-      showBedLockedAlert()
-      return
-    }
-
     setModalBooking(null)
     setModalSlot({ time, bedId })
     setEditMode(false)
@@ -2107,11 +2026,6 @@ function App() {
     clearProductCart()
     setShowProductPicker(false)
     setModalOpen(true)
-  }
-
-  function isStartBlockedByLiveSession(booking) {
-    if (!booking?.bed_id) return false
-    return Boolean(getLiveBedSession(booking.bed_id, booking.id))
   }
 
   function closeModal() {
@@ -3449,10 +3363,8 @@ function App() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
         {beds.map((bed) => {
-          const liveSession = getLiveBedSession(bed.id)
-          const booking = liveSession || getBookingForBed(bed.id)
+          const booking = getBookingForBed(bed.id)
           const phase = getPhase(booking)
-          const liveBedLabel = liveSession ? (phase === 'Cooldown' ? 'COOLDOWN' : 'IN USE') : null
 
           return (
             <div key={bed.id} style={{ background: getBedColour(bed.id), padding: '25px', borderRadius: '20px' }}>
@@ -3463,11 +3375,11 @@ function App() {
                 <>
                   <p>Customer: <strong>{booking.customer_name}</strong></p>
                   <p>Minutes: <strong>{booking.minutes}</strong></p>
-                  <p>Phase: <strong>{liveBedLabel || phase}</strong></p>
+                  <p>Phase: <strong>{phase}</strong></p>
                   {['Undressing', 'Running', 'Cooldown'].includes(phase) && <h1>{getRemainingTime(booking)}</h1>}
                 </>
               ) : (
-                <p><strong>{bed.is_out_of_service ? 'UNAVAILABLE' : liveBedLabel || 'AVAILABLE'}</strong></p>
+                <p><strong>{bed.is_out_of_service ? 'UNAVAILABLE' : 'AVAILABLE'}</strong></p>
               )}
             </div>
           )
@@ -3524,7 +3436,6 @@ function App() {
                             {booking.customer_started_at && (
                               <>
                                 <br />
-                                Customer Started<br />
                                 Started: {new Date(booking.customer_started_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                               </>
                             )}
@@ -3616,21 +3527,20 @@ function App() {
                 <p>Total blocked time: {getTotalBlockMinutes(modalBooking)} mins</p>
                 <p>Phase: <strong>{getPhase(modalBooking)}</strong></p>
                 {modalBooking.tmax_sent_at && <p>Time sent: {new Date(modalBooking.tmax_sent_at).toLocaleTimeString('en-GB')}</p>}
-                {modalBooking.customer_started_at && <p><strong>Customer Started</strong></p>}
                 {modalBooking.customer_started_at && <p>Customer started: {new Date(modalBooking.customer_started_at).toLocaleTimeString('en-GB')}</p>}
                 {['Undressing', 'Running', 'Cooldown'].includes(getPhase(modalBooking)) && <h2>Remaining: {getRemainingTime(modalBooking)}</h2>}
-                {isStartBlockedByLiveSession(modalBooking) && !modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
-                  <p style={{ background: '#0b0b0b', border: '1px solid rgba(255,120,117,0.65)', borderRadius: '12px', padding: '10px', color: '#ffcc66', fontWeight: 'bold' }}>
-                    This bed is currently in use or cooling down. Please wait until it is available before starting another session.
-                  </p>
-                )}
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '20px' }}>
                   {!modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
                     <button
                       onClick={() => startSession(modalBooking)}
-                      disabled={isStartBlockedByLiveSession(modalBooking)}
                     >
                       Send Time / Start Undress
+                    </button>
+                  )}
+
+                  {modalBooking.booking_start && !modalBooking.customer_started_at && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
+                    <button onClick={() => customerStartedBed(modalBooking)}>
+                      Customer Started Bed
                     </button>
                   )}
 

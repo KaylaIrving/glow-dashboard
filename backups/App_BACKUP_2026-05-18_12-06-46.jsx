@@ -1239,29 +1239,23 @@ function App() {
     return ['completed', 'deleted', 'cancelled', 'canceled', 'no_show', 'force_stopped'].includes(getBookingStatusKey(booking))
   }
 
-  function getLiveBedSession(bedId, excludeBookingId = null) {
-    const liveStatuses = ['undressing', 'running', 'cooldown', 'time_sent', 'sent', 'active', 'customer_started', 'waiting_to_start', 'in_use']
-
-    return bookings.find((booking) => {
-      if (booking.id === excludeBookingId) return false
-      if (Number(booking.bed_id) !== Number(bedId)) return false
-      if (isFinishedBookingStatus(booking)) return false
-
-      const status = getBookingStatusKey(booking)
-      if (liveStatuses.includes(status)) return true
-
-      const phase = String(getPhase(booking) || '').toLowerCase().replaceAll(' ', '_')
-      return liveStatuses.includes(phase)
-    }) || null
-  }
-
   function isBedLocked(bookingOrBedId, excludeBookingId = null) {
     if (typeof bookingOrBedId === 'object' && bookingOrBedId !== null) {
       const booking = bookingOrBedId
-      return Boolean(getLiveBedSession(booking.bed_id, excludeBookingId)?.id === booking.id)
+      if (booking.id === excludeBookingId) return false
+      if (isFinishedBookingStatus(booking)) return false
+      return Boolean(
+        ['undressing', 'running', 'active', 'time_sent', 'customer_started', 'sent', 'in_use', 'waiting_to_start'].includes(getBookingStatusKey(booking)) ||
+        booking.booking_start ||
+        booking.tmax_sent_at ||
+        booking.customer_started_at
+      )
     }
 
-    return Boolean(getLiveBedSession(bookingOrBedId, excludeBookingId))
+    return bookings.some((booking) => (
+      Number(booking.bed_id) === Number(bookingOrBedId) &&
+      isBedLocked(booking, excludeBookingId)
+    ))
   }
 
   function isBlockingBookingStatus(booking) {
@@ -1320,7 +1314,7 @@ function App() {
   }
 
   function showBedLockedAlert() {
-    alert('This bed is currently in use or cooling down. Please wait until it is available before starting another session.')
+    alert('This bed is already in use. Please wait until the current session is completed or force stopped.')
   }
 
   function hasUsedSunbedWithin24Hours(customerId, ignoreBookingId = null) {
@@ -1708,15 +1702,7 @@ function App() {
     }
 
     const previousStatus = booking.status
-    const { error } = await supabase.from('Bookings').update({
-      status: 'booked',
-      booking_start: null,
-      booking_end: null,
-      tmax_sent_at: null,
-      tmax_status: null,
-      customer_started_at: null,
-      actual_tanning_end: null
-    }).eq('id', booking.id)
+    const { error } = await supabase.from('Bookings').update({ status: 'booked' }).eq('id', booking.id)
     if (error) {
       alert('Booking reset was not saved. Please check the connection and try again.')
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
@@ -1848,7 +1834,7 @@ function App() {
     const tanningEnd = new Date(tanningStart.getTime() + Number(booking.minutes || 0) * 60000)
     const cooldownEnd = new Date(tanningEnd.getTime() + COOLDOWN_SECONDS * 1000)
 
-    if (getLiveBedSession(booking.bed_id, booking.id)) {
+    if (isBedLocked(booking.bed_id, booking.id)) {
       showBedLockedAlert()
       return
     }
@@ -2107,11 +2093,6 @@ function App() {
     clearProductCart()
     setShowProductPicker(false)
     setModalOpen(true)
-  }
-
-  function isStartBlockedByLiveSession(booking) {
-    if (!booking?.bed_id) return false
-    return Boolean(getLiveBedSession(booking.bed_id, booking.id))
   }
 
   function closeModal() {
@@ -3449,10 +3430,8 @@ function App() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
         {beds.map((bed) => {
-          const liveSession = getLiveBedSession(bed.id)
-          const booking = liveSession || getBookingForBed(bed.id)
+          const booking = getBookingForBed(bed.id)
           const phase = getPhase(booking)
-          const liveBedLabel = liveSession ? (phase === 'Cooldown' ? 'COOLDOWN' : 'IN USE') : null
 
           return (
             <div key={bed.id} style={{ background: getBedColour(bed.id), padding: '25px', borderRadius: '20px' }}>
@@ -3463,11 +3442,11 @@ function App() {
                 <>
                   <p>Customer: <strong>{booking.customer_name}</strong></p>
                   <p>Minutes: <strong>{booking.minutes}</strong></p>
-                  <p>Phase: <strong>{liveBedLabel || phase}</strong></p>
+                  <p>Phase: <strong>{isBedLocked(booking) ? 'IN USE' : phase}</strong></p>
                   {['Undressing', 'Running', 'Cooldown'].includes(phase) && <h1>{getRemainingTime(booking)}</h1>}
                 </>
               ) : (
-                <p><strong>{bed.is_out_of_service ? 'UNAVAILABLE' : liveBedLabel || 'AVAILABLE'}</strong></p>
+                <p><strong>{bed.is_out_of_service ? 'UNAVAILABLE' : isBedLocked(bed.id) ? 'IN USE' : 'AVAILABLE'}</strong></p>
               )}
             </div>
           )
@@ -3619,16 +3598,10 @@ function App() {
                 {modalBooking.customer_started_at && <p><strong>Customer Started</strong></p>}
                 {modalBooking.customer_started_at && <p>Customer started: {new Date(modalBooking.customer_started_at).toLocaleTimeString('en-GB')}</p>}
                 {['Undressing', 'Running', 'Cooldown'].includes(getPhase(modalBooking)) && <h2>Remaining: {getRemainingTime(modalBooking)}</h2>}
-                {isStartBlockedByLiveSession(modalBooking) && !modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
-                  <p style={{ background: '#0b0b0b', border: '1px solid rgba(255,120,117,0.65)', borderRadius: '12px', padding: '10px', color: '#ffcc66', fontWeight: 'bold' }}>
-                    This bed is currently in use or cooling down. Please wait until it is available before starting another session.
-                  </p>
-                )}
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '20px' }}>
                   {!modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
                     <button
                       onClick={() => startSession(modalBooking)}
-                      disabled={isStartBlockedByLiveSession(modalBooking)}
                     >
                       Send Time / Start Undress
                     </button>
