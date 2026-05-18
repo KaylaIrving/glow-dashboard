@@ -111,7 +111,6 @@ function App() {
   const [floatMovementNote, setFloatMovementNote] = useState('')
   const [floatMovementEditingId, setFloatMovementEditingId] = useState('')
   const [floatMovementSaving, setFloatMovementSaving] = useState(false)
-  const [showCashUpLockConfirm, setShowCashUpLockConfirm] = useState(false)
 
   const [currentStaffUserId, setCurrentStaffUserId] = useState('')
   const [staffSelectorOpen, setStaffSelectorOpen] = useState(false)
@@ -914,13 +913,12 @@ function App() {
   }
 
   function canEditSelectedCashUp() {
-    if (isCashUpLocked()) return false
     if (showManagerView) return true
     return isSelectedDateToday() && !isCashUpLocked()
   }
 
   function explainCashUpEditBlock() {
-    if (isCashUpLocked()) return 'Cash-up is locked for this date. Manager access is required to make changes.'
+    if (isCashUpLocked()) return 'This cash-up is locked. Please ask a manager to reopen it before editing.'
     if (!isSelectedDateToday()) return 'Staff can only edit today\'s cash-up. Please select today or ask a manager.'
     return 'This cash-up cannot be edited.'
   }
@@ -1088,7 +1086,7 @@ function App() {
     alert('Start-of-day cash float saved.')
   }
 
-  function getCashUpCompletionValues() {
+  async function saveCashUp() {
     if (!requireStaffSignIn()) return
 
     if (!canEditSelectedCashUp()) {
@@ -1120,25 +1118,14 @@ function App() {
       return
     }
 
-    return { summary, startFloat, movementTotals, actualCash, expectedCash, variance, signOffName }
-  }
+    const confirmed = window.confirm(
+      `Save end-of-day cash-up for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}?\n\nStarting float: GBP ${startFloat.toFixed(2)}\nCash sales: GBP ${summary.cashTotal.toFixed(2)}\nFloat added: GBP ${movementTotals.added.toFixed(2)}\nFloat removed: GBP ${movementTotals.removed.toFixed(2)}\nExpected cash: GBP ${expectedCash.toFixed(2)}\nActual cash: GBP ${actualCash.toFixed(2)}\nVariance: GBP ${variance.toFixed(2)}\nCompleted by: ${signOffName}`
+    )
 
-  async function saveCashUp() {
-    const values = getCashUpCompletionValues()
-    if (!values) return
-
-    setShowCashUpLockConfirm(true)
-  }
-
-  async function completeAndLockCashUp() {
-    const values = getCashUpCompletionValues()
-    if (!values) return
-
-    const { summary, startFloat, actualCash, variance, signOffName } = values
+    if (!confirmed) return
 
     setCashUpSaving(true)
 
-    const now = new Date().toISOString()
     const payload = {
       cashup_date: selectedDate,
       ...buildCashUpTotalsPayload(summary, startFloat),
@@ -1146,10 +1133,8 @@ function App() {
       variance: Number(variance.toFixed(2)),
       variance_notes: cashUpVarianceNotes.trim() || null,
       cash_up_completed_by_staff: signOffName,
-      cash_up_completed_at: now,
-      cash_up_locked: true,
-      cash_up_locked_by_staff: signOffName,
-      cash_up_locked_at: now
+      cash_up_completed_at: new Date().toISOString(),
+      cash_up_locked: Boolean(cashUpExistingRecord?.cash_up_locked)
     }
 
     const request = cashUpExistingRecord?.id
@@ -1167,9 +1152,8 @@ function App() {
       return
     }
 
-    setShowCashUpLockConfirm(false)
     await getCashUpForSelectedDate()
-    alert('End-of-day cash-up completed and locked.')
+    alert('End-of-day cash-up saved.')
   }
 
   async function setCashUpLock(locked) {
@@ -3376,7 +3360,7 @@ function App() {
         )}
         {cashUpLoadError && <p style={{ color: '#ffcc66' }}>Cash-up data could not be loaded: {cashUpLoadError}</p>}
         {floatMovementLoadError && <p style={{ color: '#ffcc66' }}>Float movements could not be loaded: {floatMovementLoadError}</p>}
-        {locked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Cash-up is locked for this date. Manager access is required to make changes.</p>}
+        {locked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>This cash-up is locked. Managers can reopen it from Manager View.</p>}
         {cashUpBlockMessage && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>{cashUpBlockMessage}</p>}
 
         <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
@@ -3502,42 +3486,9 @@ function App() {
         </button>
         {showManagerView && cashUpExistingRecord?.id && (
           <button onClick={() => setCashUpLock(!locked)} style={{ marginTop: '10px', marginLeft: '10px' }}>
-            {locked ? 'Manager Reopen Cash-Up' : 'Lock Cash-Up'}
+            {locked ? 'Reopen Cash-Up' : 'Lock Cash-Up'}
           </button>
         )}
-      </div>
-    )
-  }
-
-  function renderCashUpLockConfirmModal() {
-    if (!showCashUpLockConfirm) return null
-
-    const summary = getDailyTakingsSummary()
-    const startFloat = getCashUpStartFloatAmount()
-    const movementTotals = getFloatMovementTotals()
-    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
-    const actualCash = Number(cashUpActualCash || 0)
-    const variance = actualCash - expectedCash
-
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
-        <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.4)', borderRadius: '12px', padding: '22px', width: '520px', maxWidth: '100%', boxShadow: '0 24px 70px rgba(0,0,0,0.68)' }}>
-          <h2 style={{ marginTop: 0, color: '#d4a853' }}>Complete & Lock Cash-Up</h2>
-          <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>
-            Are you sure you want to complete and lock today’s cash-up? Once locked, staff will not be able to edit today’s cash-up, float, or float movements. A manager will be required to reopen it.
-          </p>
-          <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
-            <p style={{ margin: '0 0 6px' }}>Expected cash in till: <strong>£{expectedCash.toFixed(2)}</strong></p>
-            <p style={{ margin: '0 0 6px' }}>Actual cash counted: <strong>£{actualCash.toFixed(2)}</strong></p>
-            <p style={{ margin: 0 }}>Variance: <strong>£{variance.toFixed(2)}</strong></p>
-          </div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button onClick={() => setShowCashUpLockConfirm(false)} disabled={cashUpSaving}>Cancel</button>
-            <button onClick={completeAndLockCashUp} disabled={cashUpSaving}>
-              {cashUpSaving ? 'Completing...' : 'Yes, Complete & Lock Cash-Up'}
-            </button>
-          </div>
-        </div>
       </div>
     )
   }
@@ -4181,7 +4132,6 @@ function App() {
 
       {renderStaffSelectorModal()}
       {renderSaleReceiptModal()}
-      {renderCashUpLockConfirmModal()}
 
       {showBackToTop && (
         <button onClick={scrollToTop} title="Back to top" style={{ position: 'fixed', right: '24px', bottom: '24px', width: '58px', height: '58px', borderRadius: '50%', fontSize: '26px', zIndex: 1001 }}>
