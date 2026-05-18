@@ -426,14 +426,6 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  function openCashUpPanel() {
-    setCollapseCashUp(false)
-    setTimeout(() => {
-      const cashUpPanel = document.getElementById('cash-up-panel')
-      if (cashUpPanel) cashUpPanel.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 120)
-  }
-
   function jumpToNow() {
     setSelectedDate(formatLocalDate(new Date()))
     setTimeout(() => {
@@ -3680,7 +3672,7 @@ function App() {
           <img src="/logo.png" alt="Glow Tanning" style={{ height: '90px', objectFit: 'contain', filter: 'drop-shadow(0 0 20px rgba(255,200,50,0.35))' }} />
         </div>
 
-        <div className="top-upcoming-panel" style={{ background: '#1e1e1e', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '18px', padding: '14px' }}>
+        <div style={{ background: '#1e1e1e', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '18px', padding: '14px' }}>
           <strong>Upcoming within 20 minutes</strong>
           {upcomingBookings.length === 0 ? <p style={{ color: '#aaa', margin: '8px 0 0' }}>No bookings due.</p> : (
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
@@ -3693,15 +3685,12 @@ function App() {
           )}
         </div>
 
-        <div className="top-action-panel" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div className="top-action-buttons">
-            <button onClick={() => setShowCustomerManagement(!showCustomerManagement)}>{showCustomerManagement ? 'Hide Customers' : 'Customer Management'}</button>
-            <button onClick={collapseCashUp ? openCashUpPanel : () => setCollapseCashUp(true)}>{collapseCashUp ? 'Cash Up' : 'Hide Cash Up'}</button>
-            {showManagerView ? <button onClick={() => setShowManagerView(false)}>Hide Manager View</button> : <button onClick={openManagerView}>Manager View</button>}
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button onClick={() => setShowCustomerManagement(!showCustomerManagement)}>{showCustomerManagement ? 'Hide Customers' : 'Customer Management'}</button>
+          {showManagerView ? <button onClick={() => setShowManagerView(false)}>Hide Manager View</button> : <button onClick={openManagerView}>Manager View</button>}
           {currentStaffUser ? (
-            <div className="top-staff-chip" style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '10px' }}>
-              <span>Signed in: <strong>{currentStaffUser.name}</strong></span>
+            <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '10px' }}>
+              Signed in: <strong>{currentStaffUser.name}</strong><br />
               <button onClick={() => setStaffSelectorOpen(true)} style={{ marginTop: '6px' }}>Switch User</button>
             </div>
           ) : (
@@ -3728,7 +3717,7 @@ function App() {
       )}
 
       {showCustomerManagement && renderCustomerManagementPanel()}
-      {!collapseCashUp && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
+      {renderCashUpPanel()}
       {showManagerView && renderStaffManagementPanel()}
       {showManagerView && renderMaintenancePanel()}
       {showManagerView && renderProductsManagementPanel()}
