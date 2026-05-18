@@ -586,12 +586,11 @@ input::placeholder {
 .bed-card.premium-bed-card {
   position: relative;
   overflow: hidden;
-  min-height: 150px;
+  min-height: 210px;
   border-radius: 10px !important;
   border: 1px solid rgba(255, 230, 170, 0.2);
   box-shadow: var(--glow-shadow);
   text-align: left;
-  padding: 16px 18px !important;
 }
 
 .bed-card.premium-bed-card::before {
@@ -611,22 +610,21 @@ input::placeholder {
 
 .bed-card.premium-bed-card h2 {
   margin-top: 0;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   color: #fff6e6;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
 }
 
 .bed-card.premium-bed-card p {
-  margin: 5px 0;
+  margin: 8px 0;
   color: rgba(255, 248, 233, 0.88);
-  font-size: 14px;
 }
 
 .bed-card.premium-bed-card h1 {
-  margin: 8px 0 0;
+  margin: 14px 0 0;
   color: #fff6dc;
-  font-size: 30px;
+  font-size: 42px;
   font-weight: 600;
 }
 
@@ -831,7 +829,7 @@ div[style*="background: #0b0b0b"] {
   }
 
   .bed-card.premium-bed-card {
-    min-height: 140px;
+    min-height: 180px;
   }
 }
 

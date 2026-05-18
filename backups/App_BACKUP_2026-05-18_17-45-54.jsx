@@ -58,7 +58,6 @@ function App() {
   const [editTime, setEditTime] = useState('')
   const [editBedId, setEditBedId] = useState('')
   const [showBookingTopUp, setShowBookingTopUp] = useState(false)
-  const [showBookingProducts, setShowBookingProducts] = useState(false)
   const [bookingSaving, setBookingSaving] = useState(false)
 
   const [showCustomerManagement, setShowCustomerManagement] = useState(false)
@@ -2449,14 +2448,14 @@ function App() {
 
   function getBedColour(bedId) {
     if (isBedOutOfService(bedId)) return '#581f25'
-    const booking = getLiveBedSession(bedId) || getBookingForBed(bedId)
+    if (isBedLocked(bedId)) return '#3f2358'
+    const booking = getBookingForBed(bedId)
     if (!booking) return '#0f5b3c'
     const phase = getPhase(booking)
-    if (phase === 'Booked' || phase === 'Waiting' || phase === 'Shop Test') return '#2f2f2f'
-    if (phase === 'Undressing') return '#b56a22'
-    if (phase === 'Running' || phase === 'Customer Started') return '#5a2f7d'
-    if (phase === 'Cooldown') return '#5aa8d6'
-    if (phase === 'Completed') return '#2f7a4b'
+    if (phase === 'Booked') return '#2b5068'
+    if (phase === 'Undressing') return '#8f6425'
+    if (phase === 'Running') return '#3f2358'
+    if (phase === 'Cooldown') return '#2f5460'
     return '#151515'
   }
 
@@ -2465,33 +2464,12 @@ function App() {
     const phase = getPhase(booking)
     if (booking.status === 'force_stopped') return '#7a1f2a'
     if (booking.status === 'no_show') return '#3a3632'
-    if (phase === 'Booked' || phase === 'Waiting' || phase === 'Shop Test') return '#2f2f2f'
-    if (phase === 'Undressing') return '#b56a22'
-    if (phase === 'Running' || phase === 'Customer Started') return '#5a2f7d'
-    if (phase === 'Cooldown') return '#5aa8d6'
-    if (phase === 'Completed') return '#2f7a4b'
+    if (phase === 'Booked') return '#2b5068'
+    if (phase === 'Undressing') return '#8f6425'
+    if (phase === 'Running') return '#3f2358'
+    if (phase === 'Cooldown') return '#2f5460'
+    if (phase === 'Completed') return '#315f43'
     return '#151515'
-  }
-
-  function getStatusChipStyle(phase) {
-    const background = phase === 'Undressing'
-      ? '#b56a22'
-      : ['Running', 'Customer Started'].includes(phase)
-        ? '#5a2f7d'
-        : phase === 'Cooldown'
-          ? '#5aa8d6'
-          : phase === 'Completed'
-            ? '#2f7a4b'
-            : '#2f2f2f'
-    return {
-      display: 'inline-block',
-      background,
-      color: 'white',
-      border: '1px solid rgba(255,255,255,0.16)',
-      borderRadius: '8px',
-      padding: '4px 9px',
-      fontWeight: 'bold'
-    }
   }
 
   function getCalendarCellBackground(booking, bedId) {
@@ -2543,7 +2521,6 @@ function App() {
     resetPaymentFields(bedId)
     setSelectedMinutes(12)
     setShowBookingTopUp(false)
-    setShowBookingProducts(false)
     setBookingSaving(false)
     clearProductCart()
     setShowProductPicker(false)
@@ -2562,7 +2539,6 @@ function App() {
     resetPaymentFields(booking.bed_id)
     setSelectedMinutes(booking.minutes || 12)
     setShowBookingTopUp(false)
-    setShowBookingProducts(false)
     setBookingSaving(false)
     setEditBedId(String(booking.bed_id))
     setEditTime(`${String(bookingTime.getHours()).padStart(2, '0')}:${String(bookingTime.getMinutes()).padStart(2, '0')}`)
@@ -2588,7 +2564,6 @@ function App() {
     resetPaymentFields()
     setSelectedMinutes(12)
     setShowBookingTopUp(false)
-    setShowBookingProducts(false)
     setBookingSaving(false)
     setEditTime('')
     setEditBedId('')
@@ -3254,6 +3229,7 @@ function App() {
   function renderProductPicker() {
     return (
       <div style={{ marginTop: '12px' }}>
+        <button type="button" onClick={() => { if (requireStaffSignIn()) setShowProductPicker(true) }}>+ Add Products</button>
         {productCart.length > 0 && (
           <>
             {renderProductCart()}
@@ -3295,17 +3271,10 @@ function App() {
     if (!selectedCustomer || selectedStaff || isShopTestCustomer(selectedCustomer)) return null
 
     return (
-      <>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '15px', marginBottom: '12px' }}>
-        <button type="button" onClick={() => setShowBookingTopUp(!showBookingTopUp)}>
+      <div style={{ background: '#111', padding: '16px', borderRadius: '14px', marginTop: '15px', marginBottom: '15px', border: '1px solid #333' }}>
+        <button type="button" onClick={() => setShowBookingTopUp(!showBookingTopUp)} style={{ marginBottom: showBookingTopUp ? '12px' : 0 }}>
           {showBookingTopUp ? 'Hide Top Up Minutes' : 'Add / Top Up Minutes'}
         </button>
-        <button type="button" onClick={() => { if (requireStaffSignIn()) setShowBookingProducts(!showBookingProducts) }}>
-          {showBookingProducts ? 'Hide Products' : 'Add Products'}
-        </button>
-      </div>
-      <div style={{ background: '#111', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid #333' }}>
-        {!showBookingTopUp && showBookingProducts && renderProductPicker()}
         {showBookingTopUp && (
           <>
         <h3 style={{ marginTop: 0 }}>Top up minutes</h3>
@@ -3360,13 +3329,12 @@ function App() {
           </div>
         )}
 
-        {showBookingProducts && renderProductPicker()}
+        {renderProductPicker()}
         <p>Total to pay: <strong>£{(purchase.total + getProductCartTotal()).toFixed(2)}</strong></p>
         <button onClick={topUpSelectedCustomer}>Payment Taken + Add Minutes</button>
           </>
         )}
       </div>
-      </>
     )
   }
 
@@ -4239,7 +4207,7 @@ function App() {
                 <>
                   <p>Customer: <strong>{booking.customer_name}</strong></p>
                   <p>Minutes: <strong>{booking.minutes}</strong></p>
-                  <p>Status: <strong>{liveBedLabel || phase}</strong></p>
+                  <p>Phase: <strong>{liveBedLabel || phase}</strong></p>
                   {['Undressing', 'Running', 'Cooldown'].includes(phase) && <h1>{getRemainingTime(booking)}</h1>}
                 </>
               ) : (
@@ -4296,7 +4264,7 @@ function App() {
                             <strong>{booking.customer_name}</strong><br />
                             {booking.minutes} mins<br />
                             Blocked: {getTotalBlockMinutes(booking)} mins<br />
-                            <span style={getStatusChipStyle(getPhase(booking))}>{getPhase(booking)}</span>
+                            {getPhase(booking)}
                             {booking.customer_started_at && (
                               <>
                                 <br />
@@ -4380,7 +4348,7 @@ function App() {
                   </>
                 )}
                 <p>Total blocked time: {getTotalBlockMinutes(modalBooking)} mins</p>
-                <p>Status: <span style={getStatusChipStyle(modalPhase)}>{modalPhase}</span></p>
+                <p>Phase: <strong>{modalPhase}</strong></p>
                 {modalBooking.tmax_sent_at && <p>Time sent: {new Date(modalBooking.tmax_sent_at).toLocaleTimeString('en-GB')}</p>}
                 {modalBooking.customer_started_at && <p><strong>Customer Started</strong></p>}
                 {modalBooking.customer_started_at && <p>Customer started: {new Date(modalBooking.customer_started_at).toLocaleTimeString('en-GB')}</p>}
