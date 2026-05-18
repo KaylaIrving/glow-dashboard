@@ -101,9 +101,6 @@ function App() {
   const [cashUpVarianceNotes, setCashUpVarianceNotes] = useState('')
   const [cashUpManagerName, setCashUpManagerName] = useState('')
   const [cashUpSaving, setCashUpSaving] = useState(false)
-  const [cashUpStartFloat, setCashUpStartFloat] = useState('')
-  const [cashUpExistingRecord, setCashUpExistingRecord] = useState(null)
-  const [cashUpLoadError, setCashUpLoadError] = useState('')
 
   const [currentStaffUserId, setCurrentStaffUserId] = useState('')
   const [staffSelectorOpen, setStaffSelectorOpen] = useState(false)
@@ -151,7 +148,6 @@ function App() {
 
   useEffect(() => {
     getDailyTakings()
-    getCashUpForSelectedDate()
   }, [selectedDate])
 
   useEffect(() => {
@@ -364,30 +360,6 @@ function App() {
     setDailyProductSales(productSalesData || [])
   }
 
-  async function getCashUpForSelectedDate() {
-    const { data, error } = await supabase
-      .from('CashUps')
-      .select('*')
-      .eq('cash_up_date', selectedDate)
-      .order('created_at', { ascending: false })
-      .limit(1)
-
-    if (error) {
-      setCashUpLoadError(error.message || 'Could not load CashUps table.')
-      showDataLoadWarning('Cash-up record could not be loaded. Please check the connection.', error)
-      setCashUpExistingRecord(null)
-      return
-    }
-
-    const record = data?.[0] || null
-    setCashUpLoadError('')
-    setCashUpExistingRecord(record)
-    setCashUpStartFloat(record?.starting_cash_float ?? '')
-    setCashUpActualCash(record?.actual_cash_counted ?? '')
-    setCashUpVarianceNotes(record?.variance_notes || '')
-    setCashUpManagerName(record?.cash_up_completed_by_staff || record?.manager_sign_off_name || '')
-  }
-
   function getDailyTakingsSummary() {
     const base = { totalRevenue: 0, cardTotal: 0, cashTotal: 0, bankTransferTotal: 0, otherTotal: 0, totalMinutes: 0, paymentCount: 0, productRevenue: 0, minutesRevenue: 0 }
     for (const payment of dailyTakings) {
@@ -418,7 +390,11 @@ function App() {
   function openManagerView() {
     if (!requireStaffSignIn()) return
 
-    if (!requireManagerPin('Manager PIN required:')) return
+    const pin = window.prompt('Manager PIN required:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN.')
+      return
+    }
     setShowManagerView(true)
   }
 
@@ -467,15 +443,6 @@ function App() {
     alert('Please sign in as staff first.')
     setStaffSelectorOpen(true)
     return false
-  }
-
-  function requireManagerPin(promptText = 'Manager PIN required:') {
-    const pin = window.prompt(promptText)
-    if (pin !== MANAGER_PIN) {
-      alert('Incorrect manager PIN.')
-      return false
-    }
-    return true
   }
 
   function selectCurrentStaffUser(member) {
@@ -867,94 +834,17 @@ function App() {
     alert('Correction saved and logged.')
   }
 
-  function getCashUpStartFloatAmount() {
-    return cashUpStartFloat === '' ? 0 : Number(cashUpStartFloat || 0)
-  }
-
-  function isCashUpLocked() {
-    return Boolean(cashUpExistingRecord?.cash_up_locked)
-  }
-
-  function buildCashUpTotalsPayload(summary, startFloat) {
-    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0)
-    return {
-      card_total: Number(summary.cardTotal.toFixed(2)),
-      cash_total: Number(summary.cashTotal.toFixed(2)),
-      bank_transfer_total: Number(summary.bankTransferTotal.toFixed(2)),
-      other_total: Number(summary.otherTotal.toFixed(2)),
-      product_sales_total: Number(summary.productRevenue.toFixed(2)),
-      minutes_sales_total: Number(summary.minutesRevenue.toFixed(2)),
-      total_revenue: Number(summary.totalRevenue.toFixed(2)),
-      starting_cash_float: Number(startFloat.toFixed(2)),
-      expected_cash_in_till: Number(expectedCash.toFixed(2))
-    }
-  }
-
-  async function saveStartDayFloat() {
-    if (!requireStaffSignIn()) return
-
-    if (isCashUpLocked() && !showManagerView) {
-      alert('This cash-up is locked. Please ask a manager to reopen it before editing.')
-      return
-    }
-
-    const startFloat = getCashUpStartFloatAmount()
-    if (cashUpStartFloat === '' || Number.isNaN(startFloat) || startFloat < 0) {
-      alert('Please enter a valid start-of-day cash float.')
-      return
-    }
-
-    const confirmed = window.confirm(`Save start-of-day cash float of GBP ${startFloat.toFixed(2)} for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}?`)
-    if (!confirmed) return
-
-    setCashUpSaving(true)
-
-    const staffUser = getCurrentStaffUser()
-    const payload = {
-      cash_up_date: selectedDate,
-      ...buildCashUpTotalsPayload(getDailyTakingsSummary(), startFloat),
-      float_entered_by_staff: staffUser?.name || null,
-      float_entered_at: new Date().toISOString(),
-      staff_name: staffUser?.name || cashUpExistingRecord?.staff_name || null,
-      cash_up_locked: Boolean(cashUpExistingRecord?.cash_up_locked)
-    }
-
-    const request = cashUpExistingRecord?.id
-      ? supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
-      : supabase.from('CashUps').insert(payload)
-
-    const { error } = await request
-    setCashUpSaving(false)
-
-    if (error) {
-      alert('Start-of-day cash float was not saved. Please check the connection and try again.')
-      showDataLoadWarning('Start-of-day cash float failed to save. Please check the connection.', error)
-      console.log(error)
-      return
-    }
-
-    await getCashUpForSelectedDate()
-    alert('Start-of-day cash float saved.')
-  }
-
   async function saveCashUp() {
     if (!requireStaffSignIn()) return
 
-    if (isCashUpLocked() && !showManagerView) {
-      alert('This cash-up is locked. Please ask a manager to reopen it before editing.')
-      return
-    }
-
     const summary = getDailyTakingsSummary()
-    const startFloat = getCashUpStartFloatAmount()
     const actualCash = Number(cashUpActualCash || 0)
-    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0)
+    const expectedCash = Number(summary.cashTotal || 0)
     const variance = Number((actualCash - expectedCash).toFixed(2))
-    const staffUser = getCurrentStaffUser()
-    const signOffName = cashUpManagerName.trim() || staffUser?.name || ''
+    const managerName = cashUpManagerName.trim()
 
-    if (cashUpStartFloat === '' || Number.isNaN(startFloat) || startFloat < 0) {
-      alert('Please enter the start-of-day cash float first.')
+    if (!managerName) {
+      alert('Please enter the manager sign-off name.')
       return
     }
 
@@ -963,37 +853,31 @@ function App() {
       return
     }
 
-    if (!signOffName) {
-      alert('Please enter the staff member completing cash-up.')
-      return
-    }
-
     const confirmed = window.confirm(
-      `Save end-of-day cash-up for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}?\n\nStarting float: GBP ${startFloat.toFixed(2)}\nCash sales: GBP ${summary.cashTotal.toFixed(2)}\nExpected cash: GBP ${expectedCash.toFixed(2)}\nActual cash: GBP ${actualCash.toFixed(2)}\nVariance: GBP ${variance.toFixed(2)}\nCompleted by: ${signOffName}`
+      `Save end-of-day cash-up for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}?\n\nExpected cash: GBP ${expectedCash.toFixed(2)}\nActual cash: GBP ${actualCash.toFixed(2)}\nVariance: GBP ${variance.toFixed(2)}\nManager: ${managerName}`
     )
 
     if (!confirmed) return
 
     setCashUpSaving(true)
 
-    const payload = {
+    const staffUser = getCurrentStaffUser()
+    const { error } = await supabase.from('CashUps').insert({
       cash_up_date: selectedDate,
-      ...buildCashUpTotalsPayload(summary, startFloat),
+      card_total: Number(summary.cardTotal.toFixed(2)),
+      cash_total: Number(summary.cashTotal.toFixed(2)),
+      bank_transfer_total: Number(summary.bankTransferTotal.toFixed(2)),
+      other_total: Number(summary.otherTotal.toFixed(2)),
+      product_sales_total: Number(summary.productRevenue.toFixed(2)),
+      minutes_sales_total: Number(summary.minutesRevenue.toFixed(2)),
+      total_revenue: Number(summary.totalRevenue.toFixed(2)),
+      expected_cash_in_till: Number(expectedCash.toFixed(2)),
       actual_cash_counted: Number(actualCash.toFixed(2)),
       variance: Number(variance.toFixed(2)),
       variance_notes: cashUpVarianceNotes.trim() || null,
-      manager_sign_off_name: signOffName,
-      cash_up_completed_by_staff: signOffName,
-      cash_up_completed_at: new Date().toISOString(),
-      staff_name: staffUser?.name || signOffName || null,
-      cash_up_locked: Boolean(cashUpExistingRecord?.cash_up_locked)
-    }
-
-    const request = cashUpExistingRecord?.id
-      ? supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
-      : supabase.from('CashUps').insert(payload)
-
-    const { error } = await request
+      manager_sign_off_name: managerName,
+      staff_name: staffUser?.name || null
+    })
 
     setCashUpSaving(false)
 
@@ -1004,42 +888,10 @@ function App() {
       return
     }
 
-    await getCashUpForSelectedDate()
+    setCashUpActualCash('')
+    setCashUpVarianceNotes('')
+    setCashUpManagerName('')
     alert('End-of-day cash-up saved.')
-  }
-
-  async function setCashUpLock(locked) {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerPin(locked ? 'Manager PIN required to lock cash-up:' : 'Manager PIN required to reopen cash-up:')) return
-
-    if (!cashUpExistingRecord?.id) {
-      alert('Please save the cash-up before locking it.')
-      return
-    }
-
-    const staffUser = getCurrentStaffUser()
-    const payload = locked
-      ? {
-          cash_up_locked: true,
-          cash_up_locked_by_staff: staffUser?.name || null,
-          cash_up_locked_at: new Date().toISOString()
-        }
-      : {
-          cash_up_locked: false,
-          cash_up_reopened_by_staff: staffUser?.name || null,
-          cash_up_reopened_at: new Date().toISOString()
-        }
-
-    const { error } = await supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
-    if (error) {
-      alert('Cash-up lock status was not saved. Please check the connection and try again.')
-      showDataLoadWarning('Cash-up lock status failed to save. Please check the connection.', error)
-      console.log(error)
-      return
-    }
-
-    await getCashUpForSelectedDate()
-    alert(locked ? 'Cash-up locked.' : 'Cash-up reopened.')
   }
 
   function buildCsv(rows) {
@@ -1789,7 +1641,6 @@ function App() {
 
   async function deleteBooking(booking) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerPin('Manager PIN required to delete bookings:')) return
 
     const confirmed = window.confirm(`Delete booking for ${booking.customer_name}? This cannot be undone.`)
     if (!confirmed) return
@@ -2104,7 +1955,6 @@ function App() {
 
   async function forceStop(booking) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerPin('Manager PIN required to force stop a session:')) return
 
     const { error } = await supabase.from('Bookings').update({ status: 'force_stopped', booking_end: new Date().toISOString(), tmax_status: 'force_stopped' }).eq('id', booking.id)
     if (error) {
@@ -2594,7 +2444,6 @@ function App() {
 
   async function saveStaffMember() {
     if (!requireStaffSignIn()) return
-    if (!requireManagerPin('Manager PIN required to edit staff accounts:')) return
 
     if (!staffName.trim()) {
       alert('Staff name is required.')
@@ -2697,7 +2546,6 @@ function App() {
 
   async function saveProduct() {
     if (!requireStaffSignIn()) return
-    if (!requireManagerPin('Manager PIN required to edit products/prices:')) return
 
     if (!productName.trim()) {
       alert('Product name is required.')
@@ -2746,7 +2594,6 @@ function App() {
 
   async function deactivateProduct(product) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerPin('Manager PIN required to deactivate products:')) return
 
     const confirmed = window.confirm(`Deactivate ${product.name}?`)
     if (!confirmed) return
@@ -3187,56 +3034,21 @@ function App() {
   }
 
   function renderCashUpPanel() {
+    if (!showManagerView) return null
+
     const summary = getDailyTakingsSummary()
-    const startFloat = getCashUpStartFloatAmount()
     const actualCash = cashUpActualCash === '' ? 0 : Number(cashUpActualCash || 0)
-    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0)
+    const expectedCash = Number(summary.cashTotal || 0)
     const variance = actualCash - expectedCash
     const itemStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '12px' }
-    const locked = isCashUpLocked()
-    const signedIn = Boolean(getCurrentStaffUser())
 
     return renderCollapsibleSection(
-      'Cash-Up',
+      'End-of-Day Cash-Up',
       collapseCashUp,
       setCollapseCashUp,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
         <h3 style={{ marginTop: 0 }}>Cash-Up — {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}</h3>
-        {!signedIn && (
-          <p style={{ color: '#ffcc66', fontWeight: 'bold', marginTop: 0 }}>
-            Please sign in before entering float or completing cash up.
-          </p>
-        )}
-        {cashUpLoadError && <p style={{ color: '#ffcc66' }}>Cash-up data could not be loaded: {cashUpLoadError}</p>}
-        {locked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>This cash-up is locked. Managers can reopen it from Manager View.</p>}
-
-        <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
-          <h3 style={{ marginTop: 0 }}>Start Day Float</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 260px) auto', gap: '10px', alignItems: 'center' }}>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Start of Day Cash Float"
-              value={cashUpStartFloat}
-              disabled={locked && !showManagerView}
-              onChange={(e) => setCashUpStartFloat(e.target.value)}
-              style={{ padding: '10px' }}
-            />
-            <button onClick={saveStartDayFloat} disabled={cashUpSaving || (locked && !showManagerView)}>
-              Save Start Day Float
-            </button>
-          </div>
-          {cashUpExistingRecord?.float_entered_by_staff && (
-            <p style={{ color: '#aaa', marginBottom: 0 }}>
-              Entered by {cashUpExistingRecord.float_entered_by_staff}
-              {cashUpExistingRecord.float_entered_at ? ` on ${new Date(cashUpExistingRecord.float_entered_at).toLocaleString('en-GB')}` : ''}
-            </p>
-          )}
-        </div>
-
-        <h3>End of Day Cash Up</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <div style={itemStyle}><span>Starting float</span><h2>£{startFloat.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Card total</span><h2>£{summary.cardTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Cash total</span><h2>£{summary.cashTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Bank transfer</span><h2>£{summary.bankTransferTotal.toFixed(2)}</h2></div>
@@ -3253,14 +3065,12 @@ function App() {
             step="0.01"
             placeholder="Actual cash counted"
             value={cashUpActualCash}
-            disabled={locked && !showManagerView}
             onChange={(e) => setCashUpActualCash(e.target.value)}
             style={{ padding: '10px' }}
           />
           <input
-            placeholder="Staff completing cash-up"
+            placeholder="Manager sign-off name"
             value={cashUpManagerName}
-            disabled={locked && !showManagerView}
             onChange={(e) => setCashUpManagerName(e.target.value)}
             style={{ padding: '10px' }}
           />
@@ -3273,19 +3083,13 @@ function App() {
         <textarea
           placeholder="Variance notes"
           value={cashUpVarianceNotes}
-          disabled={locked && !showManagerView}
           onChange={(e) => setCashUpVarianceNotes(e.target.value)}
           style={{ width: '100%', minHeight: '76px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box' }}
         />
 
-        <button onClick={saveCashUp} disabled={cashUpSaving || (locked && !showManagerView)} style={{ marginTop: '10px' }}>
+        <button onClick={saveCashUp} disabled={cashUpSaving} style={{ marginTop: '10px' }}>
           {cashUpSaving ? 'Saving Cash-Up...' : 'Save Cash-Up'}
         </button>
-        {showManagerView && cashUpExistingRecord?.id && (
-          <button onClick={() => setCashUpLock(!locked)} style={{ marginTop: '10px', marginLeft: '10px' }}>
-            {locked ? 'Reopen Cash-Up' : 'Lock Cash-Up'}
-          </button>
-        )}
       </div>
     )
   }
@@ -3699,11 +3503,11 @@ function App() {
       )}
 
       {showCustomerManagement && renderCustomerManagementPanel()}
-      {renderCashUpPanel()}
       {showManagerView && renderStaffManagementPanel()}
       {showManagerView && renderMaintenancePanel()}
       {showManagerView && renderProductsManagementPanel()}
       {showManagerView && renderCorrectionsPanel()}
+      {showManagerView && renderCashUpPanel()}
       {showManagerView && renderExportsPanel()}
       {showManagerView && renderDailyTakingsPanel()}
 
