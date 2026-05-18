@@ -72,7 +72,6 @@ function App() {
 
   const [showCustomerManagement, setShowCustomerManagement] = useState(false)
   const [showManagerView, setShowManagerView] = useState(false)
-  const [managerUnlocked, setManagerUnlocked] = useState(false)
   const [collapseStaffManagement, setCollapseStaffManagement] = useState(true)
   const [collapseMaintenance, setCollapseMaintenance] = useState(true)
   const [collapseProducts, setCollapseProducts] = useState(true)
@@ -487,13 +486,8 @@ function App() {
   function openManagerView() {
     if (!requireStaffSignIn()) return
 
-    if (!requireManagerAccess('Manager PIN required:')) return
+    if (!requireManagerPin('Manager PIN required:')) return
     setShowManagerView(true)
-  }
-
-  function lockManagerView() {
-    setManagerUnlocked(false)
-    setShowManagerView(false)
   }
 
   function scrollToTop() {
@@ -557,13 +551,6 @@ function App() {
       alert('Incorrect manager PIN.')
       return false
     }
-    return true
-  }
-
-  function requireManagerAccess(promptText = 'Manager PIN required:') {
-    if (managerUnlocked) return true
-    if (!requireManagerPin(promptText)) return false
-    setManagerUnlocked(true)
     return true
   }
 
@@ -888,7 +875,12 @@ function App() {
 
   async function applyManagerCorrection() {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required for correction:')) return
+
+    const pin = window.prompt('Manager PIN required for correction:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN. Correction was not applied.')
+      return
+    }
 
     const customer = customers.find((item) => String(item.id) === String(managerCorrectionCustomerId))
     const minutesAmount = Number(managerCorrectionAmount || 0)
@@ -1129,7 +1121,7 @@ function App() {
 
   async function deleteFloatMovement(movement) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to delete float movements:')) return
+    if (!requireManagerPin('Manager PIN required to delete float movements:')) return
 
     const confirmed = window.confirm(`Delete this float movement of GBP ${Number(movement.amount || 0).toFixed(2)}?`)
     if (!confirmed) return
@@ -1284,7 +1276,7 @@ function App() {
 
   async function setCashUpLock(locked) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess(locked ? 'Manager PIN required to lock cash-up:' : 'Manager PIN required to reopen cash-up:')) return
+    if (!requireManagerPin(locked ? 'Manager PIN required to lock cash-up:' : 'Manager PIN required to reopen cash-up:')) return
 
     if (!cashUpExistingRecord?.id) {
       alert('Please save the cash-up before locking it.')
@@ -1355,7 +1347,12 @@ function App() {
 
   async function exportTableRows({ tableName, filename, queryBuilder }) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required for export:')) return
+
+    const pin = window.prompt('Manager PIN required for export:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN. Export was not created.')
+      return
+    }
 
     const { data, error } = await queryBuilder(supabase.from(tableName))
     if (error) {
@@ -2074,7 +2071,7 @@ function App() {
 
   async function deleteBooking(booking) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to delete bookings:')) return
+    if (!requireManagerPin('Manager PIN required to delete bookings:')) return
 
     const confirmed = window.confirm(`Delete booking for ${booking.customer_name}? This cannot be undone.`)
     if (!confirmed) return
@@ -2141,7 +2138,6 @@ function App() {
 
   async function updateBedMaintenance(bedId, updates) {
     if (!requireStaffSignIn()) return false
-    if (!requireManagerAccess('Manager PIN required to update maintenance:')) return false
 
     const { error } = await supabase.from('Beds').update(updates).eq('id', bedId)
     if (error) {
@@ -2159,7 +2155,11 @@ function App() {
 
     const confirmed = window.confirm(`Reset runtime for ${bed.name}? Use this after a tube change.`)
     if (!confirmed) return
-    if (!requireManagerAccess('Manager PIN required:')) return
+    const pin = window.prompt('Manager PIN required:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN.')
+      return
+    }
     await updateBedMaintenance(bed.id, {
       total_runtime_minutes: 0,
       last_tube_change_date: formatLocalDate(new Date())
@@ -2202,7 +2202,11 @@ function App() {
 
     const confirmed = window.confirm(`Manager Reset this booking for ${booking.customer_name}? This returns it to Booked. Deducted minutes will NOT change.`)
     if (!confirmed) return
-    if (!requireManagerAccess('Manager PIN required to reset booking:')) return
+    const pin = window.prompt('Manager PIN required to reset booking:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN. Booking was not reset.')
+      return
+    }
 
     const previousStatus = booking.status
     const { error } = await supabase.from('Bookings').update({
@@ -2382,7 +2386,7 @@ function App() {
 
   async function forceStop(booking) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to force stop a session:')) return
+    if (!requireManagerPin('Manager PIN required to force stop a session:')) return
 
     const { error } = await supabase.from('Bookings').update({ status: 'force_stopped', booking_end: new Date().toISOString(), tmax_status: 'force_stopped' }).eq('id', booking.id)
     if (error) {
@@ -2855,7 +2859,11 @@ function App() {
   function openMinuteCorrection() {
     if (!requireStaffSignIn()) return
 
-    if (!requireManagerAccess('Manager PIN required to correct customer minutes:')) return
+    const pin = window.prompt('Manager PIN required to correct customer minutes:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN. Minute correction was not opened.')
+      return
+    }
     setShowMinuteCorrection(true)
   }
 
@@ -2910,7 +2918,11 @@ function App() {
       return
     }
 
-    if (!requireManagerAccess('Manager PIN required to apply correction:')) return
+    const pin = window.prompt('Manager PIN required to apply correction:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN. Minute correction was not applied.')
+      return
+    }
 
     const { error } = await supabase.from('Customers').update({
       standard_minutes_balance: newStandard,
@@ -2956,7 +2968,11 @@ function App() {
     const now = new Date().toISOString()
 
     if (oldStandard !== newStandard || oldHybrid !== newHybrid) {
-      if (!requireManagerAccess('Manager PIN required to change customer minutes:')) return
+      const pin = window.prompt('Manager PIN required to change customer minutes:')
+      if (pin !== MANAGER_PIN) {
+        alert('Incorrect manager PIN. Customer minutes were not changed.')
+        return
+      }
     }
 
     const { error } = await supabase.from('Customers').update({
@@ -3001,7 +3017,11 @@ function App() {
     }
     const confirmed = window.confirm(`Deactivate ${customer.name}? They will no longer appear in active customer search. History and payments remain saved.`)
     if (!confirmed) return
-    if (!requireManagerAccess('Manager PIN required to deactivate customer:')) return
+    const pin = window.prompt('Manager PIN required to deactivate customer:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN. Customer was not deactivated.')
+      return
+    }
     const { error } = await supabase.from('Customers').update({ is_active: false }).eq('id', customer.id)
     if (error) {
       alert('Customer was not deactivated. Please check the connection and try again.')
@@ -3016,7 +3036,7 @@ function App() {
 
   async function saveStaffMember() {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to edit staff accounts:')) return
+    if (!requireManagerPin('Manager PIN required to edit staff accounts:')) return
 
     if (!staffName.trim()) {
       alert('Staff name is required.')
@@ -3060,7 +3080,11 @@ function App() {
 
     const confirmed = window.confirm(`Deactivate staff member ${member.name}?`)
     if (!confirmed) return
-    if (!requireManagerAccess('Manager PIN required:')) return
+    const pin = window.prompt('Manager PIN required:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN.')
+      return
+    }
     const { error } = await supabase.from('Staff').update({ is_active: false }).eq('id', member.id)
     if (error) {
       alert('Staff account was not deactivated. Please check the connection and try again.')
@@ -3089,7 +3113,11 @@ function App() {
       alert('Enter a reason for the adjustment.')
       return
     }
-    if (!requireManagerAccess('Manager PIN required:')) return
+    const pin = window.prompt('Manager PIN required:')
+    if (pin !== MANAGER_PIN) {
+      alert('Incorrect manager PIN.')
+      return
+    }
 
     const oldBalance = Number(member.weekly_free_minutes_balance || 0)
     const newBalance = Math.max(0, oldBalance + amount)
@@ -3111,7 +3139,7 @@ function App() {
 
   async function saveProduct() {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to edit products/prices:')) return
+    if (!requireManagerPin('Manager PIN required to edit products/prices:')) return
 
     if (!productName.trim()) {
       alert('Product name is required.')
@@ -3160,7 +3188,7 @@ function App() {
 
   async function deactivateProduct(product) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to deactivate products:')) return
+    if (!requireManagerPin('Manager PIN required to deactivate products:')) return
 
     const confirmed = window.confirm(`Deactivate ${product.name}?`)
     if (!confirmed) return
@@ -3886,7 +3914,7 @@ function App() {
       setCollapseExports,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
         <p style={{ color: '#aaa', marginTop: 0 }}>
-          Export CSV backups without changing salon data. Manager View access is required.
+          Export CSV backups without changing salon data. Manager PIN is required for each export.
         </p>
 
         <h3 style={{ marginTop: 0 }}>Selected Date — {dateLabel}</h3>
@@ -4257,14 +4285,7 @@ function App() {
           <div className="top-action-buttons">
             <button onClick={() => setShowCustomerManagement(!showCustomerManagement)}>{showCustomerManagement ? 'Hide Customers' : 'Customers'}</button>
             <button onClick={collapseCashUp ? openCashUpPanel : () => setCollapseCashUp(true)}>{collapseCashUp ? 'Cash Up' : 'Hide Cash Up'}</button>
-            {showManagerView ? (
-              <>
-                <button onClick={() => setShowManagerView(false)}>Hide Manager View</button>
-                <button onClick={lockManagerView}>Lock Manager View</button>
-              </>
-            ) : (
-              <button onClick={openManagerView}>Manager View</button>
-            )}
+            {showManagerView ? <button onClick={() => setShowManagerView(false)}>Hide Manager View</button> : <button onClick={openManagerView}>Manager View</button>}
           </div>
           {currentStaffUser ? (
             <div className="top-staff-chip" style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '10px' }}>
