@@ -143,8 +143,6 @@ function App() {
   const [productLoadError, setProductLoadError] = useState('')
   const [productCart, setProductCart] = useState([])
   const [showProductPicker, setShowProductPicker] = useState(false)
-  const [bookingProductId, setBookingProductId] = useState('')
-  const [bookingProductQuantity, setBookingProductQuantity] = useState(1)
   const [showStandalonePOS, setShowStandalonePOS] = useState(false)
   const [posPaymentMethod, setPosPaymentMethod] = useState('card')
   const [posCashReceived, setPosCashReceived] = useState('')
@@ -727,53 +725,6 @@ function App() {
 
   function clearProductCart() {
     setProductCart([])
-  }
-
-  function addSelectedBookingProduct() {
-    if (!requireStaffSignIn()) return
-
-    const product = products.find((entry) => String(entry.id) === String(bookingProductId))
-    if (!product) {
-      alert('Please select a product first.')
-      return
-    }
-
-    const quantity = Number(bookingProductQuantity || 0)
-    if (quantity <= 0) {
-      alert('Please enter a valid product quantity.')
-      return
-    }
-
-    const stock = getProductStockQuantity(product)
-    const existing = productCart.find((item) => item.product_id === product.id)
-    const nextQuantity = Number(existing?.quantity || 0) + quantity
-
-    if (stock <= 0) {
-      alert(`${product.name} is out of stock and cannot be sold.`)
-      return
-    }
-
-    if (nextQuantity > stock) {
-      alert(`${product.name} only has ${stock} in stock.`)
-      return
-    }
-
-    setProductCart((cart) => {
-      const existingItem = cart.find((item) => item.product_id === product.id)
-      if (existingItem) {
-        return cart.map((item) => item.product_id === product.id ? { ...item, quantity: Number(item.quantity || 0) + quantity } : item)
-      }
-      return [...cart, {
-        product_id: product.id,
-        product_name: product.name,
-        category: product.category,
-        price: Number(product.price || 0),
-        quantity,
-        stock_quantity: product.stock_quantity
-      }]
-    })
-
-    setBookingProductQuantity(1)
   }
 
   async function recordProductSales({ paymentMethodForSale, customer = null }) {
@@ -2594,8 +2545,6 @@ function App() {
     setShowBookingTopUp(false)
     setShowBookingProducts(false)
     setBookingSaving(false)
-    setBookingProductId('')
-    setBookingProductQuantity(1)
     clearProductCart()
     setShowProductPicker(false)
     setModalOpen(true)
@@ -2615,8 +2564,6 @@ function App() {
     setShowBookingTopUp(false)
     setShowBookingProducts(false)
     setBookingSaving(false)
-    setBookingProductId('')
-    setBookingProductQuantity(1)
     setEditBedId(String(booking.bed_id))
     setEditTime(`${String(bookingTime.getHours()).padStart(2, '0')}:${String(bookingTime.getMinutes()).padStart(2, '0')}`)
     clearProductCart()
@@ -2643,8 +2590,6 @@ function App() {
     setShowBookingTopUp(false)
     setShowBookingProducts(false)
     setBookingSaving(false)
-    setBookingProductId('')
-    setBookingProductQuantity(1)
     setEditTime('')
     setEditBedId('')
     clearProductCart()
@@ -3294,11 +3239,10 @@ function App() {
           <p style={{ color: '#aaa' }}>No products added.</p>
         ) : (
           productCart.map((item) => (
-            <div key={item.product_id} style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) 80px 80px auto', gap: '8px', alignItems: 'center', borderBottom: '1px solid #333', padding: '8px 0' }}>
+            <div key={item.product_id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px', gap: '8px', alignItems: 'center', borderBottom: '1px solid #333', padding: '8px 0' }}>
                     <span>{item.product_name}<br /><small>£{Number(item.price || 0).toFixed(2)} — Stock {item.stock_quantity || 0}</small></span>
               <input type="number" value={item.quantity} min="0" onChange={(e) => updateProductCartQuantity(item.product_id, e.target.value)} style={{ padding: '8px' }} />
               <strong>£{(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)}</strong>
-              <button type="button" onClick={() => updateProductCartQuantity(item.product_id, 0)} style={{ padding: '8px 10px' }}>Remove</button>
             </div>
           ))
         )}
@@ -3308,47 +3252,35 @@ function App() {
   }
 
   function renderProductPicker() {
-    const activeProducts = getActiveProducts()
-
     return (
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginTop: '12px' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '10px' }}>Add Products</h3>
-        {productLoadError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{productLoadError}</p>}
-        {activeProducts.length === 0 ? (
-          <p style={{ color: '#aaa', marginBottom: 0 }}>No products available. Check Products table.</p>
-        ) : (
+      <div style={{ marginTop: '12px' }}>
+        {productCart.length > 0 && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) 100px auto', gap: '10px', alignItems: 'center' }}>
-              <select value={bookingProductId} onChange={(e) => setBookingProductId(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}>
-                <option value="">Select product...</option>
-                {activeProducts.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name} - £{Number(product.price || 0).toFixed(2)} - {getProductStockStatus(product)}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={bookingProductQuantity}
-                onChange={(e) => setBookingProductQuantity(e.target.value)}
-                style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-              />
-              <button type="button" onClick={addSelectedBookingProduct}>Add Product</button>
-            </div>
-            {bookingProductId && (
-              <p style={{ color: '#aaa', margin: '8px 0 0', fontSize: '13px' }}>
-                {(() => {
-                  const selectedProduct = products.find((entry) => String(entry.id) === String(bookingProductId))
-                  if (!selectedProduct) return ''
-                  return `${formatStatus(selectedProduct.category)} - Stock ${getProductStockQuantity(selectedProduct)} - ${getProductStockStatus(selectedProduct)}`
-                })()}
-              </p>
-            )}
             {renderProductCart()}
-            {productCart.length > 0 && <button type="button" onClick={clearProductCart} style={{ marginTop: '8px' }}>Clear Products</button>}
+            <button type="button" onClick={clearProductCart} style={{ marginTop: '8px' }}>Clear Products</button>
           </>
+        )}
+
+        {showProductPicker && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#1e1e1e', padding: '24px', borderRadius: '18px', width: '520px', maxWidth: '92%', maxHeight: '85vh', overflowY: 'auto' }}>
+              <h2>Add Products</h2>
+              {productLoadError && <p style={{ color: '#ff7875' }}>{productLoadError}</p>}
+              {getActiveProducts().length === 0 ? <p>No active products found.</p> : (
+                getActiveProducts().map((product) => (
+                  <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '12px', marginBottom: '8px' }}>
+                  <div>
+                    <strong>{product.name}</strong><br />
+                      <small>{formatStatus(product.category)} — £{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — <span style={getProductStockStatusStyle(product)}>{getProductStockStatus(product)}</span></small>
+                  </div>
+                    <button type="button" onClick={() => addProductToCart(product)}>Add</button>
+                  </div>
+                ))
+              )}
+              {renderProductCart()}
+              <button type="button" onClick={() => setShowProductPicker(false)}>Done</button>
+            </div>
+          </div>
         )}
       </div>
     )
