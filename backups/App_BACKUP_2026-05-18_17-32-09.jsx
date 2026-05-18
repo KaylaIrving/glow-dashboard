@@ -57,8 +57,6 @@ function App() {
   const [selectedMinutes, setSelectedMinutes] = useState(12)
   const [editTime, setEditTime] = useState('')
   const [editBedId, setEditBedId] = useState('')
-  const [showBookingTopUp, setShowBookingTopUp] = useState(false)
-  const [bookingSaving, setBookingSaving] = useState(false)
 
   const [showCustomerManagement, setShowCustomerManagement] = useState(false)
   const [showManagerView, setShowManagerView] = useState(false)
@@ -80,7 +78,6 @@ function App() {
   const [managerHybridBalance, setManagerHybridBalance] = useState(0)
   const [managerTermsAccepted, setManagerTermsAccepted] = useState(false)
   const [managerIdChecked, setManagerIdChecked] = useState(false)
-  const [managerActive, setManagerActive] = useState(true)
   const [showAddCustomerForm, setShowAddCustomerForm] = useState(false)
   const [addCustomerFirstName, setAddCustomerFirstName] = useState('')
   const [addCustomerLastName, setAddCustomerLastName] = useState('')
@@ -552,18 +549,6 @@ function App() {
 
   function isShopTestBooking(booking) {
     return booking?.source === 'shop_test'
-  }
-
-  function isShopTestCustomer(customer) {
-    return String(customer?.name || '').trim().toLowerCase() === 'shop test'
-  }
-
-  function getMinuteOptionsForBooking() {
-    const customer = getSelectedCustomer()
-    const includeShopTestMinutes = isShopTestCustomer(customer) || isShopTestBooking(modalBooking)
-    const start = includeShopTestMinutes ? 2 : 3
-    const end = 20
-    return Array.from({ length: end - start + 1 }, (_, index) => index + start)
   }
 
   function getStaffIdFromBooking(booking) {
@@ -1795,7 +1780,6 @@ function App() {
   }
 
   async function createBookingFromModal() {
-    if (bookingSaving) return
     if (!requireStaffSignIn()) return
 
     let customer = getSelectedCustomer()
@@ -1817,20 +1801,16 @@ function App() {
       return
     }
 
-    const isInternalShopTest = isShopTestCustomer(customer)
+    if (!checkCustomerAgeBeforeSunbed(customer)) return
+    customer = await ensureCustomerTermsAccepted(customer)
+    if (!customer) return
 
-    if (!isInternalShopTest && !checkCustomerAgeBeforeSunbed(customer)) return
-    if (!isInternalShopTest) {
-      customer = await ensureCustomerTermsAccepted(customer)
-      if (!customer) return
-    }
-
-    if (!isInternalShopTest && !customerHasEnoughMinutes(customer, selectedMinutes, modalSlot.bedId)) {
+    if (!customerHasEnoughMinutes(customer, selectedMinutes, modalSlot.bedId)) {
       alert(`${customer.name} only has ${getUsableMinutesForBed(customer, modalSlot.bedId)} usable mins for this bed. Please top up before booking ${selectedMinutes} mins.`)
       return
     }
 
-    if (!isInternalShopTest && hasUsedSunbedWithin24Hours(customer.id)) {
+    if (hasUsedSunbedWithin24Hours(customer.id)) {
       const override = window.confirm(`${customer.name} has used or booked a sunbed within the last 24 hours. Continue anyway?`)
       if (!override) return
     }
@@ -1846,7 +1826,6 @@ function App() {
       return
     }
 
-    setBookingSaving(true)
     const { error } = await supabase.from('Bookings').insert({
       customer_id: customer.id,
       customer_name: customer.name,
@@ -1854,12 +1833,11 @@ function App() {
       customer_email: customer.email || null,
       bed_id: Number(modalSlot.bedId),
       minutes: Number(selectedMinutes),
-      minutes_deducted: isInternalShopTest,
+      minutes_deducted: false,
       appointment_time: appointmentDateTime.toISOString(),
       status: 'booked',
-      source: isInternalShopTest ? 'shop_test' : 'calendar'
+      source: 'calendar'
     })
-    setBookingSaving(false)
 
     if (!error) {
       closeModal()
@@ -1928,7 +1906,6 @@ function App() {
   }
 
   async function saveEditedBooking() {
-    if (bookingSaving) return
     if (!requireStaffSignIn()) return
 
 
@@ -1951,20 +1928,16 @@ function App() {
       return
     }
 
-    const isInternalShopTest = isShopTestCustomer(customer)
+    if (!checkCustomerAgeBeforeSunbed(customer)) return
+    customer = await ensureCustomerTermsAccepted(customer)
+    if (!customer) return
 
-    if (!isInternalShopTest && !checkCustomerAgeBeforeSunbed(customer)) return
-    if (!isInternalShopTest) {
-      customer = await ensureCustomerTermsAccepted(customer)
-      if (!customer) return
-    }
-
-    if (!isInternalShopTest && !modalBooking.minutes_deducted && !customerHasEnoughMinutes(customer, selectedMinutes, editBedId)) {
+    if (!modalBooking.minutes_deducted && !customerHasEnoughMinutes(customer, selectedMinutes, editBedId)) {
       alert(`${customer.name} only has ${getUsableMinutesForBed(customer, editBedId)} usable mins for this bed. Please top up before booking ${selectedMinutes} mins.`)
       return
     }
 
-    if (!isInternalShopTest && hasUsedSunbedWithin24Hours(customer.id, modalBooking.id)) {
+    if (hasUsedSunbedWithin24Hours(customer.id, modalBooking.id)) {
       const override = window.confirm(`${customer.name} has used or booked a sunbed within the last 24 hours. Continue anyway?`)
       if (!override) return
     }
@@ -1980,7 +1953,6 @@ function App() {
       return
     }
 
-    setBookingSaving(true)
     const { error } = await supabase.from('Bookings').update({
       customer_id: customer.id,
       customer_name: customer.name,
@@ -1988,11 +1960,8 @@ function App() {
       customer_email: customer.email || null,
       bed_id: Number(editBedId),
       minutes: Number(selectedMinutes),
-      appointment_time: appointmentDateTime.toISOString(),
-      source: isInternalShopTest ? 'shop_test' : modalBooking.source || 'calendar',
-      minutes_deducted: isInternalShopTest ? true : modalBooking.minutes_deducted
+      appointment_time: appointmentDateTime.toISOString()
     }).eq('id', modalBooking.id)
-    setBookingSaving(false)
 
     if (!error) {
       closeModal()
@@ -2284,7 +2253,7 @@ function App() {
     }
 
     const customer = customers.find((c) => c.id === Number(booking.customer_id))
-    if (!isShopTestBooking(booking) && customer && !checkCustomerAgeBeforeSunbed(customer)) return
+    if (customer && !checkCustomerAgeBeforeSunbed(customer)) return
 
     const now = new Date()
     const tanningStart = new Date(now.getTime() + UNDRESS_SECONDS * 1000)
@@ -2520,8 +2489,6 @@ function App() {
     setNewCustomerBalance(0)
     resetPaymentFields(bedId)
     setSelectedMinutes(12)
-    setShowBookingTopUp(false)
-    setBookingSaving(false)
     clearProductCart()
     setShowProductPicker(false)
     setModalOpen(true)
@@ -2538,8 +2505,6 @@ function App() {
     setNewCustomerBalance(0)
     resetPaymentFields(booking.bed_id)
     setSelectedMinutes(booking.minutes || 12)
-    setShowBookingTopUp(false)
-    setBookingSaving(false)
     setEditBedId(String(booking.bed_id))
     setEditTime(`${String(bookingTime.getHours()).padStart(2, '0')}:${String(bookingTime.getMinutes()).padStart(2, '0')}`)
     clearProductCart()
@@ -2563,41 +2528,10 @@ function App() {
     setNewCustomerBalance(0)
     resetPaymentFields()
     setSelectedMinutes(12)
-    setShowBookingTopUp(false)
-    setBookingSaving(false)
     setEditTime('')
     setEditBedId('')
     clearProductCart()
     setShowProductPicker(false)
-  }
-
-  async function openCustomerManagementFromBooking(booking) {
-    if (!requireStaffSignIn()) return
-
-    if (!booking?.customer_id || isShopTestBooking(booking) || isStaffFreeBooking(booking)) {
-      alert('This booking is not linked to a customer record.')
-      return
-    }
-
-    let customer = customers.find((item) => Number(item.id) === Number(booking.customer_id))
-    if (!customer) {
-      const { data, error } = await supabase.from('Customers').select('*').eq('id', booking.customer_id).single()
-      if (error) {
-        alert('Customer details could not be loaded. Please check the connection.')
-        showDataLoadWarning('Customer details failed to load. Please check the connection.', error)
-        console.log(error)
-        return
-      }
-      customer = data
-    }
-
-    selectManagerCustomer(customer)
-    setShowCustomerManagement(true)
-    closeModal()
-    setTimeout(() => {
-      const panel = document.querySelector('.customer-management-panel')
-      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 120)
   }
 
   function getSelectedManagerCustomer() {
@@ -2639,7 +2573,6 @@ function App() {
     setManagerHybridBalance(Number(customer.hybrid_minutes_balance || 0))
     setManagerTermsAccepted(Boolean(customer.terms_accepted))
     setManagerIdChecked(Boolean(customer.id_checked))
-    setManagerActive(customer.is_active !== false)
     clearMinuteCorrection()
     loadCustomerHistory(customer.id)
   }
@@ -2656,7 +2589,6 @@ function App() {
     setManagerHybridBalance(0)
     setManagerTermsAccepted(false)
     setManagerIdChecked(false)
-    setManagerActive(true)
     clearMinuteCorrection()
     setCustomerPayments([])
     setCustomerLogs([])
@@ -2891,8 +2823,7 @@ function App() {
       terms_accepted_by_staff: managerTermsAccepted && !oldTermsAccepted ? staffUser?.name || null : customer.terms_accepted_by_staff || null,
       id_checked: managerIdChecked,
       id_checked_at: managerIdChecked && !oldIdChecked ? now : customer.id_checked_at || null,
-      id_checked_by_staff: managerIdChecked && !oldIdChecked ? staffUser?.name || null : customer.id_checked_by_staff || null,
-      is_active: managerActive
+      id_checked_by_staff: managerIdChecked && !oldIdChecked ? staffUser?.name || null : customer.id_checked_by_staff || null
     }).eq('id', customer.id)
 
     if (error) {
@@ -3268,15 +3199,10 @@ function App() {
     const purchase = getPurchaseDetails()
     const isCustom = purchase.isCustom
 
-    if (!selectedCustomer || selectedStaff || isShopTestCustomer(selectedCustomer)) return null
+    if (!selectedCustomer || selectedStaff) return null
 
     return (
       <div style={{ background: '#111', padding: '16px', borderRadius: '14px', marginTop: '15px', marginBottom: '15px', border: '1px solid #333' }}>
-        <button type="button" onClick={() => setShowBookingTopUp(!showBookingTopUp)} style={{ marginBottom: showBookingTopUp ? '12px' : 0 }}>
-          {showBookingTopUp ? 'Hide Top Up Minutes' : 'Add / Top Up Minutes'}
-        </button>
-        {showBookingTopUp && (
-          <>
         <h3 style={{ marginTop: 0 }}>Top up minutes</h3>
         <select value={purchaseOption} onChange={(e) => { setPurchaseOption(e.target.value); setTopUpMinutes(0) }} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
           {Object.entries(PURCHASE_OPTIONS).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
@@ -3332,8 +3258,6 @@ function App() {
         {renderProductPicker()}
         <p>Total to pay: <strong>£{(purchase.total + getProductCartTotal()).toFixed(2)}</strong></p>
         <button onClick={topUpSelectedCustomer}>Payment Taken + Add Minutes</button>
-          </>
-        )}
       </div>
     )
   }
@@ -3417,10 +3341,6 @@ function App() {
               <label style={{ display: 'block' }}>
                 <input type="checkbox" checked={managerIdChecked} onChange={(e) => setManagerIdChecked(e.target.checked)} style={{ marginRight: '8px' }} />
                 ID checked
-              </label>
-              <label style={{ display: 'block', marginTop: '8px' }}>
-                <input type="checkbox" checked={managerActive} onChange={(e) => setManagerActive(e.target.checked)} style={{ marginRight: '8px' }} />
-                Active customer
               </label>
             </div>
 
@@ -4122,9 +4042,6 @@ function App() {
 
   const upcomingBookings = getUpcomingBookingsWithin20Minutes()
   const currentStaffUser = getCurrentStaffUser()
-  const modalCustomer = modalBooking ? getCustomerForBooking(modalBooking) : null
-  const modalPhase = modalBooking ? getPhase(modalBooking) : ''
-  const modalStartBlocked = modalBooking ? isStartBlockedByLiveSession(modalBooking) : false
 
   return (
     <div className="glow-app-shell" style={{ padding: '24px', background: '#050505', minHeight: '100vh', color: 'white' }}>
@@ -4297,16 +4214,27 @@ function App() {
                 <p>{getBedName(modalSlot?.bedId)} at {modalSlot?.time}</p>
                 {renderCustomerSearchBox()}
                 <select value={selectedMinutes} onChange={(e) => setSelectedMinutes(e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '12px', boxSizing: 'border-box' }}>
-                  {getMinuteOptionsForBooking().map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
+                  {Array.from({ length: 18 }, (_, i) => i + 3).map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
                 </select>
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
                 {renderTopUpSection()}
 
+                <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px', textAlign: 'center' }}>
+                  <h3 style={{ marginTop: 0, marginBottom: '8px', color: '#d4a853' }}>Shop-only test</h3>
+                  <p style={{ margin: '0 0 10px', color: '#aaa', fontSize: '14px' }}>
+                    Use this for a 2 min wake-up/test, mainly for Bed 2 before opening.
+                  </p>
+                  <button
+                    onClick={createShopTestBookingFromModal}
+                  >
+                    Create 2 Min Shop Test
+                  </button>
+                </div>
+
                 <button
                   onClick={createBookingFromModal}
-                  disabled={bookingSaving}
                 >
-                  {bookingSaving ? 'Saving...' : 'Create Booking'}
+                  Create Booking
                 </button>
                 <button onClick={closeModal} style={{ marginLeft: '10px' }}>Cancel</button>
               </>
@@ -4321,15 +4249,14 @@ function App() {
                   {beds.map((bed) => <option key={bed.id} value={bed.id}>{bed.name}</option>)}
                 </select>
                 <select value={selectedMinutes} onChange={(e) => setSelectedMinutes(e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '12px', boxSizing: 'border-box' }}>
-                  {getMinuteOptionsForBooking().map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
+                  {Array.from({ length: 18 }, (_, i) => i + 3).map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
                 </select>
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
                 {renderTopUpSection()}
                 <button
                   onClick={saveEditedBooking}
-                  disabled={bookingSaving}
                 >
-                  {bookingSaving ? 'Saving...' : 'Save Changes'}
+                  Save Changes
                 </button>
                 <button onClick={() => setEditMode(false)} style={{ marginLeft: '10px' }}>Cancel</button>
               </>
@@ -4341,32 +4268,28 @@ function App() {
                 <p>Minutes: {modalBooking.minutes}</p>
                 {isStaffFreeBooking(modalBooking) ? (
                   <p>Staff free booking</p>
-                ) : modalCustomer && (
+                ) : getCustomerForBooking(modalBooking) && (
                   <>
-                    <p>Standard balance: <strong>{modalCustomer.standard_minutes_balance || 0} mins</strong></p>
-                    <p>Hybrid balance: <strong>{modalCustomer.hybrid_minutes_balance || 0} mins</strong></p>
+                    <p>Standard balance: <strong>{getCustomerForBooking(modalBooking).standard_minutes_balance || 0} mins</strong></p>
+                    <p>Hybrid balance: <strong>{getCustomerForBooking(modalBooking).hybrid_minutes_balance || 0} mins</strong></p>
                   </>
                 )}
                 <p>Total blocked time: {getTotalBlockMinutes(modalBooking)} mins</p>
-                <p>Phase: <strong>{modalPhase}</strong></p>
+                <p>Phase: <strong>{getPhase(modalBooking)}</strong></p>
                 {modalBooking.tmax_sent_at && <p>Time sent: {new Date(modalBooking.tmax_sent_at).toLocaleTimeString('en-GB')}</p>}
                 {modalBooking.customer_started_at && <p><strong>Customer Started</strong></p>}
                 {modalBooking.customer_started_at && <p>Customer started: {new Date(modalBooking.customer_started_at).toLocaleTimeString('en-GB')}</p>}
-                {['Undressing', 'Running', 'Cooldown'].includes(modalPhase) && <h2>Remaining: {getRemainingTime(modalBooking)}</h2>}
-                {modalStartBlocked && !modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
+                {['Undressing', 'Running', 'Cooldown'].includes(getPhase(modalBooking)) && <h2>Remaining: {getRemainingTime(modalBooking)}</h2>}
+                {isStartBlockedByLiveSession(modalBooking) && !modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
                   <p style={{ background: '#0b0b0b', border: '1px solid rgba(255,120,117,0.65)', borderRadius: '12px', padding: '10px', color: '#ffcc66', fontWeight: 'bold' }}>
                     This bed is currently in use or cooling down. Please wait until it is available before starting another session.
                   </p>
                 )}
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '20px' }}>
-                  {modalBooking.customer_id && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
-                    <button onClick={() => openCustomerManagementFromBooking(modalBooking)}>View/Edit Customer</button>
-                  )}
-
                   {!modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
                     <button
                       onClick={() => startSession(modalBooking)}
-                      disabled={modalStartBlocked}
+                      disabled={isStartBlockedByLiveSession(modalBooking)}
                     >
                       Send Time / Start Undress
                     </button>
