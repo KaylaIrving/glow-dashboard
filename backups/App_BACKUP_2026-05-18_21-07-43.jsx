@@ -9,15 +9,6 @@ const MANAGER_PIN = '3090'
 const WEEKLY_STAFF_FREE_MINUTES = 18
 const LOW_STOCK_THRESHOLD = 5
 
-const PRODUCT_CATEGORIES = [
-  { value: 'sachets', label: 'Sachets' },
-  { value: 'bottles', label: 'Bottles' },
-  { value: 'drinks', label: 'Drinks' },
-  { value: 'lip_balm', label: 'Lip Balm' },
-  { value: 'shots', label: 'Shots' },
-  { value: 'other_accessories', label: 'Other Accessories' }
-]
-
 const DEFAULT_STAFF = [
   { name: 'Charlie', role: 'manager' },
   { name: 'Jazz', role: 'manager' },
@@ -154,12 +145,11 @@ function App() {
   const [showProductPicker, setShowProductPicker] = useState(false)
   const [bookingProductId, setBookingProductId] = useState('')
   const [bookingProductQuantity, setBookingProductQuantity] = useState(1)
-  const [bookingProductCategoryFilter, setBookingProductCategoryFilter] = useState('')
   const [showStandalonePOS, setShowStandalonePOS] = useState(false)
   const [posPaymentMethod, setPosPaymentMethod] = useState('card')
   const [posCashReceived, setPosCashReceived] = useState('')
   const [productName, setProductName] = useState('')
-  const [productCategory, setProductCategory] = useState('sachets')
+  const [productCategory, setProductCategory] = useState('tanning_lotions')
   const [productPrice, setProductPrice] = useState('')
   const [productStockQuantity, setProductStockQuantity] = useState('')
   const [productEditingId, setProductEditingId] = useState('')
@@ -627,10 +617,6 @@ function App() {
 
   function getActiveProducts() {
     return products.filter((product) => product.is_active !== false)
-  }
-
-  function getProductCategoryLabel(category) {
-    return PRODUCT_CATEGORIES.find((item) => item.value === category)?.label || formatStatus(category || 'other')
   }
 
   function getProductStockQuantity(product) {
@@ -2610,7 +2596,6 @@ function App() {
     setBookingSaving(false)
     setBookingProductId('')
     setBookingProductQuantity(1)
-    setBookingProductCategoryFilter('')
     clearProductCart()
     setShowProductPicker(false)
     setModalOpen(true)
@@ -2632,7 +2617,6 @@ function App() {
     setBookingSaving(false)
     setBookingProductId('')
     setBookingProductQuantity(1)
-    setBookingProductCategoryFilter('')
     setEditBedId(String(booking.bed_id))
     setEditTime(`${String(bookingTime.getHours()).padStart(2, '0')}:${String(bookingTime.getMinutes()).padStart(2, '0')}`)
     clearProductCart()
@@ -2661,7 +2645,6 @@ function App() {
     setBookingSaving(false)
     setBookingProductId('')
     setBookingProductQuantity(1)
-    setBookingProductCategoryFilter('')
     setEditTime('')
     setEditBedId('')
     clearProductCart()
@@ -3181,7 +3164,7 @@ function App() {
   function clearProductForm() {
     setProductEditingId('')
     setProductName('')
-    setProductCategory('sachets')
+    setProductCategory('tanning_lotions')
     setProductPrice('')
     setProductStockQuantity('')
   }
@@ -3311,11 +3294,11 @@ function App() {
           <p style={{ color: '#aaa' }}>No products added.</p>
         ) : (
           productCart.map((item) => (
-            <div key={item.product_id} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #333', padding: '8px 0' }}>
-              <span style={{ flex: '1 1 180px', minWidth: 0 }}>{item.product_name}<br /><small>£{Number(item.price || 0).toFixed(2)} — Stock {item.stock_quantity || 0}</small></span>
-              <input type="number" value={item.quantity} min="0" onChange={(e) => updateProductCartQuantity(item.product_id, e.target.value)} style={{ flex: '0 1 80px', width: '80px', padding: '8px', boxSizing: 'border-box' }} />
-              <strong style={{ flex: '0 0 auto' }}>£{(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)}</strong>
-              <button type="button" onClick={() => updateProductCartQuantity(item.product_id, 0)} style={{ flex: '0 1 auto', padding: '8px 10px' }}>Remove</button>
+            <div key={item.product_id} style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) 80px 80px auto', gap: '8px', alignItems: 'center', borderBottom: '1px solid #333', padding: '8px 0' }}>
+                    <span>{item.product_name}<br /><small>£{Number(item.price || 0).toFixed(2)} — Stock {item.stock_quantity || 0}</small></span>
+              <input type="number" value={item.quantity} min="0" onChange={(e) => updateProductCartQuantity(item.product_id, e.target.value)} style={{ padding: '8px' }} />
+              <strong>£{(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)}</strong>
+              <button type="button" onClick={() => updateProductCartQuantity(item.product_id, 0)} style={{ padding: '8px 10px' }}>Remove</button>
             </div>
           ))
         )}
@@ -3326,9 +3309,6 @@ function App() {
 
   function renderProductPicker() {
     const activeProducts = getActiveProducts()
-    const filteredProducts = bookingProductCategoryFilter
-      ? activeProducts.filter((product) => product.category === bookingProductCategoryFilter)
-      : activeProducts
 
     return (
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginTop: '12px' }}>
@@ -3338,25 +3318,12 @@ function App() {
           <p style={{ color: '#aaa', marginBottom: 0 }}>No products available. Check Products table.</p>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', alignItems: 'center' }}>
-              <select
-                value={bookingProductCategoryFilter}
-                onChange={(e) => {
-                  setBookingProductCategoryFilter(e.target.value)
-                  setBookingProductId('')
-                }}
-                style={{ width: '100%', minWidth: 0, padding: '10px', boxSizing: 'border-box' }}
-              >
-                <option value="">All categories</option>
-                {PRODUCT_CATEGORIES.map((category) => (
-                  <option key={category.value} value={category.value}>{category.label}</option>
-                ))}
-              </select>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) 100px auto', gap: '10px', alignItems: 'center' }}>
               <select value={bookingProductId} onChange={(e) => setBookingProductId(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}>
                 <option value="">Select product...</option>
-                {filteredProducts.map((product) => (
+                {activeProducts.map((product) => (
                   <option key={product.id} value={product.id}>
-                    {product.name} - £{Number(product.price || 0).toFixed(2)}
+                    {product.name} - £{Number(product.price || 0).toFixed(2)} - {getProductStockStatus(product)}
                   </option>
                 ))}
               </select>
@@ -3366,19 +3333,16 @@ function App() {
                 step="1"
                 value={bookingProductQuantity}
                 onChange={(e) => setBookingProductQuantity(e.target.value)}
-                style={{ width: '100%', minWidth: 0, padding: '10px', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
               />
-              <button type="button" onClick={addSelectedBookingProduct} style={{ width: '100%', minWidth: 0 }}>Add Product</button>
+              <button type="button" onClick={addSelectedBookingProduct}>Add Product</button>
             </div>
-            {filteredProducts.length === 0 && (
-              <p style={{ color: '#aaa', margin: '8px 0 0' }}>No products in this category.</p>
-            )}
             {bookingProductId && (
               <p style={{ color: '#aaa', margin: '8px 0 0', fontSize: '13px' }}>
                 {(() => {
                   const selectedProduct = products.find((entry) => String(entry.id) === String(bookingProductId))
                   if (!selectedProduct) return ''
-                  return `${getProductCategoryLabel(selectedProduct.category)} - Stock ${getProductStockQuantity(selectedProduct)} - ${getProductStockStatus(selectedProduct)}`
+                  return `${formatStatus(selectedProduct.category)} - Stock ${getProductStockQuantity(selectedProduct)} - ${getProductStockStatus(selectedProduct)}`
                 })()}
               </p>
             )}
@@ -4142,9 +4106,10 @@ function App() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '15px' }}>
           <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
           <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} style={{ padding: '10px' }}>
-            {PRODUCT_CATEGORIES.map((category) => (
-              <option key={category.value} value={category.value}>{category.label}</option>
-            ))}
+            <option value="tanning_lotions">Tanning lotions</option>
+            <option value="drinks">Drinks</option>
+            <option value="accessories">Accessories</option>
+            <option value="other">Other</option>
           </select>
           <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
           <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
@@ -4190,7 +4155,7 @@ function App() {
             <option value="">Select product...</option>
             {products.map((product) => (
               <option key={product.id} value={product.id}>
-                {product.name} — {getProductCategoryLabel(product.category)} — £{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — {getProductStockStatus(product)} — {product.is_active === false ? 'Inactive' : 'Active'}
+                {product.name} — {formatStatus(product.category)} — £{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — {getProductStockStatus(product)} — {product.is_active === false ? 'Inactive' : 'Active'}
               </option>
             ))}
           </select>
@@ -4199,7 +4164,7 @@ function App() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '10px', alignItems: 'center', marginTop: '12px', padding: '12px', background: '#111', borderRadius: '12px' }}>
               <div>
                 <strong>{selectedProduct.name}</strong><br />
-                <span>{getProductCategoryLabel(selectedProduct.category)} — £{Number(selectedProduct.price || 0).toFixed(2)} — Stock {getProductStockQuantity(selectedProduct)}</span><br />
+                <span>{formatStatus(selectedProduct.category)} — £{Number(selectedProduct.price || 0).toFixed(2)} — Stock {getProductStockQuantity(selectedProduct)}</span><br />
                 <span style={getProductStockStatusStyle(selectedProduct)}>{getProductStockStatus(selectedProduct)}</span><br />
                 <span>Status: {selectedProduct.is_active === false ? 'Inactive' : 'Active'}</span>
               </div>
