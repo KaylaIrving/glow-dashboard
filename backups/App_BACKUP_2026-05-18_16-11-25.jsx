@@ -2244,34 +2244,34 @@ function App() {
   }
 
   function getBedColour(bedId) {
-    if (isBedOutOfService(bedId)) return '#581f25'
-    if (isBedLocked(bedId)) return '#3f2358'
+    if (isBedOutOfService(bedId)) return '#5c1f1f'
+    if (isBedLocked(bedId)) return '#722ed1'
     const booking = getBookingForBed(bedId)
-    if (!booking) return '#0f5b3c'
+    if (!booking) return '#1f8b4c'
     const phase = getPhase(booking)
-    if (phase === 'Booked') return '#2b5068'
-    if (phase === 'Undressing') return '#8f6425'
-    if (phase === 'Running') return '#3f2358'
-    if (phase === 'Cooldown') return '#2f5460'
-    return '#151515'
+    if (phase === 'Booked') return '#1890ff'
+    if (phase === 'Undressing') return '#fa8c16'
+    if (phase === 'Running') return '#722ed1'
+    if (phase === 'Cooldown') return '#13c2c2'
+    return '#1e1e1e'
   }
 
   function getCalendarBookingColour(booking) {
     if (!booking) return 'transparent'
     const phase = getPhase(booking)
-    if (booking.status === 'force_stopped') return '#7a1f2a'
-    if (booking.status === 'no_show') return '#3a3632'
-    if (phase === 'Booked') return '#2b5068'
-    if (phase === 'Undressing') return '#8f6425'
-    if (phase === 'Running') return '#3f2358'
-    if (phase === 'Cooldown') return '#2f5460'
-    if (phase === 'Completed') return '#315f43'
-    return '#151515'
+    if (booking.status === 'force_stopped') return '#cf1322'
+    if (booking.status === 'no_show') return '#434343'
+    if (phase === 'Booked') return '#1890ff'
+    if (phase === 'Undressing') return '#fa8c16'
+    if (phase === 'Running') return '#722ed1'
+    if (phase === 'Cooldown') return '#13c2c2'
+    if (phase === 'Completed') return '#389e0d'
+    return '#1e1e1e'
   }
 
   function getCalendarCellBackground(booking, bedId) {
     if (booking) return getCalendarBookingColour(booking)
-    return isBedOutOfService(bedId) ? '#32191d' : 'transparent'
+    return isBedOutOfService(bedId) ? '#3a1f1f' : 'transparent'
   }
 
   function getCalendarBookingStartingAt(time, bedId) {
@@ -3666,7 +3666,7 @@ function App() {
   const currentStaffUser = getCurrentStaffUser()
 
   return (
-    <div className="glow-app-shell" style={{ padding: '24px', background: '#050505', minHeight: '100vh', color: 'white' }}>
+    <div style={{ padding: '24px', background: '#050505', minHeight: '100vh', color: 'white' }}>
       <div className="top-dashboard-header" style={{ display: 'grid', gridTemplateColumns: '180px 1fr auto auto', gap: '16px', alignItems: 'center', marginBottom: '24px' }}>
         <div className="glow-header" style={{ margin: 0, justifyContent: 'flex-start' }}>
           <img src="/logo.png" alt="Glow Tanning" style={{ height: '90px', objectFit: 'contain', filter: 'drop-shadow(0 0 20px rgba(255,200,50,0.35))' }} />
@@ -3727,7 +3727,7 @@ function App() {
 
       <h2 style={{ textAlign: 'center' }}>Sunbeds</h2>
 
-      <div className="sunbeds-grid premium-sunbeds-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
         {beds.map((bed) => {
           const liveSession = getLiveBedSession(bed.id)
           const booking = liveSession || getBookingForBed(bed.id)
@@ -3735,7 +3735,7 @@ function App() {
           const liveBedLabel = liveSession ? (phase === 'Cooldown' ? 'COOLDOWN' : 'IN USE') : null
 
           return (
-            <div key={bed.id} className="bed-card premium-bed-card" style={{ background: getBedColour(bed.id), padding: '25px', borderRadius: '20px' }}>
+            <div key={bed.id} style={{ background: getBedColour(bed.id), padding: '25px', borderRadius: '20px' }}>
               <h2>{bed.name}</h2>
               <p>T-Max Room: {bed.tmax_room}</p>
               {bed.is_out_of_service && <h2>OUT OF SERVICE</h2>}
@@ -3754,7 +3754,7 @@ function App() {
         })}
       </div>
 
-      <div className="calendar-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
         <h2>Daily Calendar</h2>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button onClick={jumpToNow}>Jump to Now</button>
@@ -3762,8 +3762,8 @@ function App() {
         </div>
       </div>
 
-      <div className="calendar-shell" style={{ overflowX: 'auto', background: '#1e1e1e', borderRadius: '16px', padding: '20px' }}>
-        <table className="calendar-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+      <div style={{ overflowX: 'auto', background: '#1e1e1e', borderRadius: '16px', padding: '20px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
           <thead>
             <tr>
               <th style={{ border: '1px solid #444', padding: '10px' }}>Time</th>
@@ -3794,7 +3794,7 @@ function App() {
                     if (isSlotCoveredByEarlierBooking(time, bed.id)) return null
                     const booking = getCalendarBookingStartingAt(time, bed.id)
                     return (
-                      <td key={bed.id} className={booking ? 'calendar-booking-cell' : 'calendar-empty-cell'} rowSpan={booking ? getTotalSlotCount(booking) : 1} onClick={() => booking ? openBooking(booking) : openEmptySlot(time, bed.id)} style={{ border: currentRow ? '2px solid #ff4d4f' : '1px solid #444', padding: '8px', minHeight: '40px', background: getCalendarCellBackground(booking, bed.id), cursor: 'pointer', verticalAlign: 'top' }}>
+                      <td key={bed.id} rowSpan={booking ? getTotalSlotCount(booking) : 1} onClick={() => booking ? openBooking(booking) : openEmptySlot(time, bed.id)} style={{ border: currentRow ? '2px solid #ff4d4f' : '1px solid #444', padding: '8px', minHeight: '40px', background: getCalendarCellBackground(booking, bed.id), cursor: 'pointer', verticalAlign: 'top' }}>
                         {booking ? (
                           <div>
                             <strong>{booking.customer_name}</strong><br />
