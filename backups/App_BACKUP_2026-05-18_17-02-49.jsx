@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import './App.css'
 
@@ -78,17 +78,6 @@ function App() {
   const [managerHybridBalance, setManagerHybridBalance] = useState(0)
   const [managerTermsAccepted, setManagerTermsAccepted] = useState(false)
   const [managerIdChecked, setManagerIdChecked] = useState(false)
-  const [showAddCustomerForm, setShowAddCustomerForm] = useState(false)
-  const [addCustomerFirstName, setAddCustomerFirstName] = useState('')
-  const [addCustomerLastName, setAddCustomerLastName] = useState('')
-  const [addCustomerPhone, setAddCustomerPhone] = useState('')
-  const [addCustomerEmail, setAddCustomerEmail] = useState('')
-  const [addCustomerDateOfBirth, setAddCustomerDateOfBirth] = useState('')
-  const [addCustomerNotes, setAddCustomerNotes] = useState('')
-  const [addCustomerCourseMinutes, setAddCustomerCourseMinutes] = useState('')
-  const [addCustomerPayAsYouGo, setAddCustomerPayAsYouGo] = useState(false)
-  const [addCustomerActive, setAddCustomerActive] = useState(true)
-  const [addCustomerSaving, setAddCustomerSaving] = useState(false)
   const [customerPayments, setCustomerPayments] = useState([])
   const [customerLogs, setCustomerLogs] = useState([])
 
@@ -111,8 +100,7 @@ function App() {
   const [cashUpActualCash, setCashUpActualCash] = useState('')
   const [cashUpVarianceNotes, setCashUpVarianceNotes] = useState('')
   const [cashUpManagerName, setCashUpManagerName] = useState('')
-  const [cashFloatSaving, setCashFloatSaving] = useState(false)
-  const [cashUpCompleting, setCashUpCompleting] = useState(false)
+  const [cashUpSaving, setCashUpSaving] = useState(false)
   const [cashUpStartFloat, setCashUpStartFloat] = useState('')
   const [cashUpExistingRecord, setCashUpExistingRecord] = useState(null)
   const [cashUpLoadError, setCashUpLoadError] = useState('')
@@ -174,42 +162,6 @@ function App() {
     getCashUpForSelectedDate()
     getFloatMovements()
   }, [selectedDate])
-
-  const dailyTakingsSummary = useMemo(() => {
-    const base = { totalRevenue: 0, cardTotal: 0, cashTotal: 0, bankTransferTotal: 0, otherTotal: 0, totalMinutes: 0, paymentCount: 0, productRevenue: 0, minutesRevenue: 0 }
-    for (const payment of dailyTakings) {
-      const amount = Number(payment.total_amount || 0)
-      const minutes = Number(payment.minutes_added || 0)
-      base.totalRevenue += amount
-      base.minutesRevenue += amount
-      base.totalMinutes += minutes
-      base.paymentCount += 1
-      if (payment.payment_method === 'card') base.cardTotal += amount
-      else if (payment.payment_method === 'cash') base.cashTotal += amount
-      else if (payment.payment_method === 'bank_transfer') base.bankTransferTotal += amount
-      else base.otherTotal += amount
-    }
-    for (const sale of dailyProductSales) {
-      const amount = Number(sale.total_amount || 0)
-      base.totalRevenue += amount
-      base.productRevenue += amount
-      base.paymentCount += 1
-      if (sale.payment_method === 'card') base.cardTotal += amount
-      else if (sale.payment_method === 'cash') base.cashTotal += amount
-      else if (sale.payment_method === 'bank_transfer') base.bankTransferTotal += amount
-      else base.otherTotal += amount
-    }
-    return base
-  }, [dailyTakings, dailyProductSales])
-
-  const floatMovementTotals = useMemo(() => {
-    return floatMovements.reduce((totals, movement) => {
-      const amount = Number(movement.amount || 0)
-      if (movement.type === 'added') totals.added += amount
-      if (movement.type === 'removed') totals.removed += amount
-      return totals
-    }, { added: 0, removed: 0 })
-  }, [floatMovements])
 
   useEffect(() => {
     function handleScroll() {
@@ -463,7 +415,30 @@ function App() {
   }
 
   function getDailyTakingsSummary() {
-    return dailyTakingsSummary
+    const base = { totalRevenue: 0, cardTotal: 0, cashTotal: 0, bankTransferTotal: 0, otherTotal: 0, totalMinutes: 0, paymentCount: 0, productRevenue: 0, minutesRevenue: 0 }
+    for (const payment of dailyTakings) {
+      const amount = Number(payment.total_amount || 0)
+      const minutes = Number(payment.minutes_added || 0)
+      base.totalRevenue += amount
+      base.minutesRevenue += amount
+      base.totalMinutes += minutes
+      base.paymentCount += 1
+      if (payment.payment_method === 'card') base.cardTotal += amount
+      else if (payment.payment_method === 'cash') base.cashTotal += amount
+      else if (payment.payment_method === 'bank_transfer') base.bankTransferTotal += amount
+      else base.otherTotal += amount
+    }
+    for (const sale of dailyProductSales) {
+      const amount = Number(sale.total_amount || 0)
+      base.totalRevenue += amount
+      base.productRevenue += amount
+      base.paymentCount += 1
+      if (sale.payment_method === 'card') base.cardTotal += amount
+      else if (sale.payment_method === 'cash') base.cashTotal += amount
+      else if (sale.payment_method === 'bank_transfer') base.bankTransferTotal += amount
+      else base.otherTotal += amount
+    }
+    return base
   }
 
   function openManagerView() {
@@ -951,7 +926,12 @@ function App() {
   }
 
   function getFloatMovementTotals() {
-    return floatMovementTotals
+    return floatMovements.reduce((totals, movement) => {
+      const amount = Number(movement.amount || 0)
+      if (movement.type === 'added') totals.added += amount
+      if (movement.type === 'removed') totals.removed += amount
+      return totals
+    }, { added: 0, removed: 0 })
   }
 
   function buildCashUpTotalsPayload(summary, startFloat) {
@@ -985,7 +965,6 @@ function App() {
   }
 
   async function saveFloatMovement() {
-    if (floatMovementSaving) return
     if (!requireStaffSignIn()) return
 
     if (!canEditSelectedCashUp()) {
@@ -1058,7 +1037,6 @@ function App() {
   }
 
   async function saveStartDayFloat() {
-    if (cashFloatSaving) return
     if (!requireStaffSignIn()) return
 
     if (!canEditSelectedCashUp()) {
@@ -1072,16 +1050,18 @@ function App() {
       return
     }
 
-    setCashFloatSaving(true)
+    const confirmed = window.confirm(`Save start-of-day cash float of GBP ${startFloat.toFixed(2)} for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}?`)
+    if (!confirmed) return
+
+    setCashUpSaving(true)
 
     const staffUser = getCurrentStaffUser()
     const existingActualCash = Number(cashUpExistingRecord?.actual_cash || 0)
-    const summary = getDailyTakingsSummary()
     const movementTotals = getFloatMovementTotals()
-    const existingExpectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
+    const existingExpectedCash = Number(startFloat || 0) + Number(getDailyTakingsSummary().cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
     const payload = {
       cashup_date: selectedDate,
-      ...buildCashUpTotalsPayload(summary, startFloat),
+      ...buildCashUpTotalsPayload(getDailyTakingsSummary(), startFloat),
       actual_cash: existingActualCash,
       variance: Number((existingActualCash - existingExpectedCash).toFixed(2)),
       variance_notes: cashUpExistingRecord?.variance_notes || null,
@@ -1095,7 +1075,7 @@ function App() {
       : supabase.from('CashUps').insert(payload)
 
     const { error } = await request
-    setCashFloatSaving(false)
+    setCashUpSaving(false)
 
     if (error) {
       alert('Start-of-day cash float was not saved. Please check the connection and try again.')
@@ -1144,7 +1124,6 @@ function App() {
   }
 
   async function saveCashUp() {
-    if (cashUpCompleting) return
     const values = getCashUpCompletionValues()
     if (!values) return
 
@@ -1152,13 +1131,12 @@ function App() {
   }
 
   async function completeAndLockCashUp() {
-    if (cashUpCompleting) return
     const values = getCashUpCompletionValues()
     if (!values) return
 
     const { summary, startFloat, actualCash, variance, signOffName } = values
 
-    setCashUpCompleting(true)
+    setCashUpSaving(true)
 
     const now = new Date().toISOString()
     const payload = {
@@ -1180,7 +1158,7 @@ function App() {
 
     const { error } = await request
 
-    setCashUpCompleting(false)
+    setCashUpSaving(false)
 
     if (error) {
       alert('Cash-up was not saved. Please check the connection and try again.')
@@ -2593,96 +2571,6 @@ function App() {
     setCustomerLogs([])
   }
 
-  function clearAddCustomerForm() {
-    setAddCustomerFirstName('')
-    setAddCustomerLastName('')
-    setAddCustomerPhone('')
-    setAddCustomerEmail('')
-    setAddCustomerDateOfBirth('')
-    setAddCustomerNotes('')
-    setAddCustomerCourseMinutes('')
-    setAddCustomerPayAsYouGo(false)
-    setAddCustomerActive(true)
-  }
-
-  async function saveNewManagedCustomer() {
-    if (!requireStaffSignIn()) return
-
-    const firstName = addCustomerFirstName.trim()
-    const lastName = addCustomerLastName.trim()
-    const phone = addCustomerPhone.trim()
-    const email = addCustomerEmail.trim()
-    const fullName = `${firstName} ${lastName}`.trim()
-    const courseMinutes = addCustomerCourseMinutes === '' ? 0 : Number(addCustomerCourseMinutes || 0)
-
-    if (!firstName && !phone) {
-      alert('First name or phone number is required.')
-      return
-    }
-
-    if (addCustomerCourseMinutes !== '' && (Number.isNaN(courseMinutes) || courseMinutes < 0)) {
-      alert('Course minutes balance must be 0 or more.')
-      return
-    }
-
-    if (phone || email) {
-      const duplicateFilters = []
-      if (phone) duplicateFilters.push(`phone.eq.${phone}`)
-      if (email) duplicateFilters.push(`email.eq.${email}`)
-      const { data: duplicates, error: duplicateError } = await supabase
-        .from('Customers')
-        .select('id,name,phone,email')
-        .or(duplicateFilters.join(','))
-        .limit(1)
-
-      if (duplicateError) {
-        alert('Could not check for duplicate customers. Please check the connection and try again.')
-        showDataLoadWarning('Duplicate customer check failed. Please check the connection.', duplicateError)
-        console.log(duplicateError)
-        return
-      }
-
-      if (duplicates && duplicates.length > 0) {
-        alert('This customer may already exist.')
-        return
-      }
-    }
-
-    const staffUser = getCurrentStaffUser()
-    const notes = [
-      addCustomerPayAsYouGo ? 'Pay-as-you-go customer.' : '',
-      addCustomerNotes.trim()
-    ].filter(Boolean).join('\n')
-
-    setAddCustomerSaving(true)
-    const { data, error } = await supabase.from('Customers').insert({
-      name: fullName || phone,
-      phone: phone || null,
-      email: email || null,
-      date_of_birth: addCustomerDateOfBirth || null,
-      notes: notes || null,
-      minutes_balance: 0,
-      standard_minutes_balance: courseMinutes,
-      hybrid_minutes_balance: 0,
-      is_active: addCustomerActive
-    }).select().single()
-    setAddCustomerSaving(false)
-
-    if (error) {
-      alert('Customer was not added. Please check the connection and try again.')
-      showDataLoadWarning('A customer save failed. Please check the connection.', error)
-      console.log(error)
-      return
-    }
-
-    await createCustomerLog(data, 'Customer added', `Customer added by ${staffUser?.name || 'staff'}. Initial course minutes: ${courseMinutes}. Pay-as-you-go: ${addCustomerPayAsYouGo ? 'yes' : 'no'}.`)
-    await getCustomers()
-    clearAddCustomerForm()
-    setShowAddCustomerForm(false)
-    if (data.is_active !== false) selectManagerCustomer(data)
-    alert('Customer added successfully.')
-  }
-
   function clearMinuteCorrection() {
     setShowMinuteCorrection(false)
     setCorrectionType('move_standard_to_hybrid')
@@ -3270,34 +3158,8 @@ function App() {
       <div className="customer-management-panel" style={{ background: '#1e1e1e', padding: '22px', borderRadius: '18px', marginBottom: '30px', border: '1px solid rgba(212,168,83,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
           <h2 style={{ margin: 0 }}>Customer Management</h2>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button onClick={() => setShowAddCustomerForm(!showAddCustomerForm)}>{showAddCustomerForm ? 'Hide Add Customer' : 'Add New Customer'}</button>
-            {selectedCustomer && <button onClick={clearCustomerManager}>Clear</button>}
-          </div>
+          {selectedCustomer && <button onClick={clearCustomerManager}>Clear</button>}
         </div>
-
-        {showAddCustomerForm && (
-          <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '14px', marginBottom: '15px' }}>
-            <h3 style={{ marginTop: 0 }}>Add New Customer</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '10px' }}>
-              <input placeholder="First name" value={addCustomerFirstName} onChange={(e) => setAddCustomerFirstName(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Last name" value={addCustomerLastName} onChange={(e) => setAddCustomerLastName(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Phone number" value={addCustomerPhone} onChange={(e) => setAddCustomerPhone(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Email" value={addCustomerEmail} onChange={(e) => setAddCustomerEmail(e.target.value)} style={{ padding: '10px' }} />
-              <input type="date" value={addCustomerDateOfBirth} onChange={(e) => setAddCustomerDateOfBirth(e.target.value)} style={{ padding: '10px' }} />
-              <input type="number" min="0" placeholder="Course minutes balance optional" value={addCustomerCourseMinutes} onChange={(e) => setAddCustomerCourseMinutes(e.target.value)} style={{ padding: '10px' }} />
-            </div>
-            <textarea placeholder="Notes" value={addCustomerNotes} onChange={(e) => setAddCustomerNotes(e.target.value)} style={{ width: '100%', minHeight: '70px', padding: '10px', marginBottom: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '12px', fontFamily: 'inherit' }} />
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '10px' }}>
-              <label><input type="checkbox" checked={addCustomerPayAsYouGo} onChange={(e) => setAddCustomerPayAsYouGo(e.target.checked)} style={{ marginRight: '8px' }} />Pay-as-you-go customer</label>
-              <label><input type="checkbox" checked={addCustomerActive} onChange={(e) => setAddCustomerActive(e.target.checked)} style={{ marginRight: '8px' }} />Active</label>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button onClick={saveNewManagedCustomer} disabled={addCustomerSaving}>{addCustomerSaving ? 'Saving...' : 'Save New Customer'}</button>
-              <button onClick={() => { clearAddCustomerForm(); setShowAddCustomerForm(false) }}>Cancel</button>
-            </div>
-          </div>
-        )}
 
         <input placeholder="Search customer by name, phone or email..." value={customerManagerSearch} onChange={(e) => { setCustomerManagerSearch(e.target.value); setSelectedManagerCustomerId('') }} style={{ width: '100%', padding: '12px', marginBottom: '10px' }} />
 
@@ -3529,8 +3391,8 @@ function App() {
               onChange={(e) => setCashUpStartFloat(e.target.value)}
               style={{ padding: '10px' }}
             />
-            <button onClick={saveStartDayFloat} disabled={cashFloatSaving || !canEditCashUp}>
-              {cashFloatSaving ? 'Saving Float...' : 'Save Start Day Float'}
+            <button onClick={saveStartDayFloat} disabled={cashUpSaving || !canEditCashUp}>
+              Save Start Day Float
             </button>
           </div>
           {cashUpExistingRecord?.float_entered_by_staff && (
@@ -3635,8 +3497,8 @@ function App() {
           style={{ width: '100%', minHeight: '76px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box' }}
         />
 
-        <button onClick={saveCashUp} disabled={cashUpCompleting || !canEditCashUp} style={{ marginTop: '10px' }}>
-          {cashUpCompleting ? 'Completing Cash-Up...' : 'Complete Cash-Up'}
+        <button onClick={saveCashUp} disabled={cashUpSaving || !canEditCashUp} style={{ marginTop: '10px' }}>
+          {cashUpSaving ? 'Saving Cash-Up...' : 'Save Cash-Up'}
         </button>
         {showManagerView && cashUpExistingRecord?.id && (
           <button onClick={() => setCashUpLock(!locked)} style={{ marginTop: '10px', marginLeft: '10px' }}>
@@ -3670,9 +3532,9 @@ function App() {
             <p style={{ margin: 0 }}>Variance: <strong>£{variance.toFixed(2)}</strong></p>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button onClick={() => setShowCashUpLockConfirm(false)} disabled={cashUpCompleting}>Cancel</button>
-            <button onClick={completeAndLockCashUp} disabled={cashUpCompleting}>
-              {cashUpCompleting ? 'Completing...' : 'Yes, Complete & Lock Cash-Up'}
+            <button onClick={() => setShowCashUpLockConfirm(false)} disabled={cashUpSaving}>Cancel</button>
+            <button onClick={completeAndLockCashUp} disabled={cashUpSaving}>
+              {cashUpSaving ? 'Completing...' : 'Yes, Complete & Lock Cash-Up'}
             </button>
           </div>
         </div>

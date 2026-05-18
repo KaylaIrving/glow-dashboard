@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import './App.css'
 
@@ -111,8 +111,7 @@ function App() {
   const [cashUpActualCash, setCashUpActualCash] = useState('')
   const [cashUpVarianceNotes, setCashUpVarianceNotes] = useState('')
   const [cashUpManagerName, setCashUpManagerName] = useState('')
-  const [cashFloatSaving, setCashFloatSaving] = useState(false)
-  const [cashUpCompleting, setCashUpCompleting] = useState(false)
+  const [cashUpSaving, setCashUpSaving] = useState(false)
   const [cashUpStartFloat, setCashUpStartFloat] = useState('')
   const [cashUpExistingRecord, setCashUpExistingRecord] = useState(null)
   const [cashUpLoadError, setCashUpLoadError] = useState('')
@@ -174,42 +173,6 @@ function App() {
     getCashUpForSelectedDate()
     getFloatMovements()
   }, [selectedDate])
-
-  const dailyTakingsSummary = useMemo(() => {
-    const base = { totalRevenue: 0, cardTotal: 0, cashTotal: 0, bankTransferTotal: 0, otherTotal: 0, totalMinutes: 0, paymentCount: 0, productRevenue: 0, minutesRevenue: 0 }
-    for (const payment of dailyTakings) {
-      const amount = Number(payment.total_amount || 0)
-      const minutes = Number(payment.minutes_added || 0)
-      base.totalRevenue += amount
-      base.minutesRevenue += amount
-      base.totalMinutes += minutes
-      base.paymentCount += 1
-      if (payment.payment_method === 'card') base.cardTotal += amount
-      else if (payment.payment_method === 'cash') base.cashTotal += amount
-      else if (payment.payment_method === 'bank_transfer') base.bankTransferTotal += amount
-      else base.otherTotal += amount
-    }
-    for (const sale of dailyProductSales) {
-      const amount = Number(sale.total_amount || 0)
-      base.totalRevenue += amount
-      base.productRevenue += amount
-      base.paymentCount += 1
-      if (sale.payment_method === 'card') base.cardTotal += amount
-      else if (sale.payment_method === 'cash') base.cashTotal += amount
-      else if (sale.payment_method === 'bank_transfer') base.bankTransferTotal += amount
-      else base.otherTotal += amount
-    }
-    return base
-  }, [dailyTakings, dailyProductSales])
-
-  const floatMovementTotals = useMemo(() => {
-    return floatMovements.reduce((totals, movement) => {
-      const amount = Number(movement.amount || 0)
-      if (movement.type === 'added') totals.added += amount
-      if (movement.type === 'removed') totals.removed += amount
-      return totals
-    }, { added: 0, removed: 0 })
-  }, [floatMovements])
 
   useEffect(() => {
     function handleScroll() {
@@ -463,7 +426,30 @@ function App() {
   }
 
   function getDailyTakingsSummary() {
-    return dailyTakingsSummary
+    const base = { totalRevenue: 0, cardTotal: 0, cashTotal: 0, bankTransferTotal: 0, otherTotal: 0, totalMinutes: 0, paymentCount: 0, productRevenue: 0, minutesRevenue: 0 }
+    for (const payment of dailyTakings) {
+      const amount = Number(payment.total_amount || 0)
+      const minutes = Number(payment.minutes_added || 0)
+      base.totalRevenue += amount
+      base.minutesRevenue += amount
+      base.totalMinutes += minutes
+      base.paymentCount += 1
+      if (payment.payment_method === 'card') base.cardTotal += amount
+      else if (payment.payment_method === 'cash') base.cashTotal += amount
+      else if (payment.payment_method === 'bank_transfer') base.bankTransferTotal += amount
+      else base.otherTotal += amount
+    }
+    for (const sale of dailyProductSales) {
+      const amount = Number(sale.total_amount || 0)
+      base.totalRevenue += amount
+      base.productRevenue += amount
+      base.paymentCount += 1
+      if (sale.payment_method === 'card') base.cardTotal += amount
+      else if (sale.payment_method === 'cash') base.cashTotal += amount
+      else if (sale.payment_method === 'bank_transfer') base.bankTransferTotal += amount
+      else base.otherTotal += amount
+    }
+    return base
   }
 
   function openManagerView() {
@@ -951,7 +937,12 @@ function App() {
   }
 
   function getFloatMovementTotals() {
-    return floatMovementTotals
+    return floatMovements.reduce((totals, movement) => {
+      const amount = Number(movement.amount || 0)
+      if (movement.type === 'added') totals.added += amount
+      if (movement.type === 'removed') totals.removed += amount
+      return totals
+    }, { added: 0, removed: 0 })
   }
 
   function buildCashUpTotalsPayload(summary, startFloat) {
@@ -985,7 +976,6 @@ function App() {
   }
 
   async function saveFloatMovement() {
-    if (floatMovementSaving) return
     if (!requireStaffSignIn()) return
 
     if (!canEditSelectedCashUp()) {
@@ -1058,7 +1048,6 @@ function App() {
   }
 
   async function saveStartDayFloat() {
-    if (cashFloatSaving) return
     if (!requireStaffSignIn()) return
 
     if (!canEditSelectedCashUp()) {
@@ -1072,16 +1061,18 @@ function App() {
       return
     }
 
-    setCashFloatSaving(true)
+    const confirmed = window.confirm(`Save start-of-day cash float of GBP ${startFloat.toFixed(2)} for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}?`)
+    if (!confirmed) return
+
+    setCashUpSaving(true)
 
     const staffUser = getCurrentStaffUser()
     const existingActualCash = Number(cashUpExistingRecord?.actual_cash || 0)
-    const summary = getDailyTakingsSummary()
     const movementTotals = getFloatMovementTotals()
-    const existingExpectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
+    const existingExpectedCash = Number(startFloat || 0) + Number(getDailyTakingsSummary().cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
     const payload = {
       cashup_date: selectedDate,
-      ...buildCashUpTotalsPayload(summary, startFloat),
+      ...buildCashUpTotalsPayload(getDailyTakingsSummary(), startFloat),
       actual_cash: existingActualCash,
       variance: Number((existingActualCash - existingExpectedCash).toFixed(2)),
       variance_notes: cashUpExistingRecord?.variance_notes || null,
@@ -1095,7 +1086,7 @@ function App() {
       : supabase.from('CashUps').insert(payload)
 
     const { error } = await request
-    setCashFloatSaving(false)
+    setCashUpSaving(false)
 
     if (error) {
       alert('Start-of-day cash float was not saved. Please check the connection and try again.')
@@ -1144,7 +1135,6 @@ function App() {
   }
 
   async function saveCashUp() {
-    if (cashUpCompleting) return
     const values = getCashUpCompletionValues()
     if (!values) return
 
@@ -1152,13 +1142,12 @@ function App() {
   }
 
   async function completeAndLockCashUp() {
-    if (cashUpCompleting) return
     const values = getCashUpCompletionValues()
     if (!values) return
 
     const { summary, startFloat, actualCash, variance, signOffName } = values
 
-    setCashUpCompleting(true)
+    setCashUpSaving(true)
 
     const now = new Date().toISOString()
     const payload = {
@@ -1180,7 +1169,7 @@ function App() {
 
     const { error } = await request
 
-    setCashUpCompleting(false)
+    setCashUpSaving(false)
 
     if (error) {
       alert('Cash-up was not saved. Please check the connection and try again.')
@@ -3529,8 +3518,8 @@ function App() {
               onChange={(e) => setCashUpStartFloat(e.target.value)}
               style={{ padding: '10px' }}
             />
-            <button onClick={saveStartDayFloat} disabled={cashFloatSaving || !canEditCashUp}>
-              {cashFloatSaving ? 'Saving Float...' : 'Save Start Day Float'}
+            <button onClick={saveStartDayFloat} disabled={cashUpSaving || !canEditCashUp}>
+              Save Start Day Float
             </button>
           </div>
           {cashUpExistingRecord?.float_entered_by_staff && (
@@ -3635,8 +3624,8 @@ function App() {
           style={{ width: '100%', minHeight: '76px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box' }}
         />
 
-        <button onClick={saveCashUp} disabled={cashUpCompleting || !canEditCashUp} style={{ marginTop: '10px' }}>
-          {cashUpCompleting ? 'Completing Cash-Up...' : 'Complete Cash-Up'}
+        <button onClick={saveCashUp} disabled={cashUpSaving || !canEditCashUp} style={{ marginTop: '10px' }}>
+          {cashUpSaving ? 'Saving Cash-Up...' : 'Save Cash-Up'}
         </button>
         {showManagerView && cashUpExistingRecord?.id && (
           <button onClick={() => setCashUpLock(!locked)} style={{ marginTop: '10px', marginLeft: '10px' }}>
@@ -3670,9 +3659,9 @@ function App() {
             <p style={{ margin: 0 }}>Variance: <strong>£{variance.toFixed(2)}</strong></p>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button onClick={() => setShowCashUpLockConfirm(false)} disabled={cashUpCompleting}>Cancel</button>
-            <button onClick={completeAndLockCashUp} disabled={cashUpCompleting}>
-              {cashUpCompleting ? 'Completing...' : 'Yes, Complete & Lock Cash-Up'}
+            <button onClick={() => setShowCashUpLockConfirm(false)} disabled={cashUpSaving}>Cancel</button>
+            <button onClick={completeAndLockCashUp} disabled={cashUpSaving}>
+              {cashUpSaving ? 'Completing...' : 'Yes, Complete & Lock Cash-Up'}
             </button>
           </div>
         </div>
