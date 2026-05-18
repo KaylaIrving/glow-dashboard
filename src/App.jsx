@@ -875,6 +875,21 @@ function App() {
     return Boolean(cashUpExistingRecord?.cash_up_locked)
   }
 
+  function isSelectedDateToday() {
+    return selectedDate === formatLocalDate(new Date())
+  }
+
+  function canEditSelectedCashUp() {
+    if (showManagerView) return true
+    return isSelectedDateToday() && !isCashUpLocked()
+  }
+
+  function explainCashUpEditBlock() {
+    if (isCashUpLocked()) return 'This cash-up is locked. Please ask a manager to reopen it before editing.'
+    if (!isSelectedDateToday()) return 'Staff can only edit today\'s cash-up. Please select today or ask a manager.'
+    return 'This cash-up cannot be edited.'
+  }
+
   function buildCashUpTotalsPayload(summary, startFloat) {
     const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0)
     return {
@@ -893,8 +908,8 @@ function App() {
   async function saveStartDayFloat() {
     if (!requireStaffSignIn()) return
 
-    if (isCashUpLocked() && !showManagerView) {
-      alert('This cash-up is locked. Please ask a manager to reopen it before editing.')
+    if (!canEditSelectedCashUp()) {
+      alert(explainCashUpEditBlock())
       return
     }
 
@@ -940,8 +955,8 @@ function App() {
   async function saveCashUp() {
     if (!requireStaffSignIn()) return
 
-    if (isCashUpLocked() && !showManagerView) {
-      alert('This cash-up is locked. Please ask a manager to reopen it before editing.')
+    if (!canEditSelectedCashUp()) {
+      alert(explainCashUpEditBlock())
       return
     }
 
@@ -3195,6 +3210,8 @@ function App() {
     const itemStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '12px' }
     const locked = isCashUpLocked()
     const signedIn = Boolean(getCurrentStaffUser())
+    const canEditCashUp = canEditSelectedCashUp()
+    const cashUpBlockMessage = signedIn && !canEditCashUp ? explainCashUpEditBlock() : ''
 
     return renderCollapsibleSection(
       'Cash-Up',
@@ -3209,6 +3226,7 @@ function App() {
         )}
         {cashUpLoadError && <p style={{ color: '#ffcc66' }}>Cash-up data could not be loaded: {cashUpLoadError}</p>}
         {locked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>This cash-up is locked. Managers can reopen it from Manager View.</p>}
+        {cashUpBlockMessage && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>{cashUpBlockMessage}</p>}
 
         <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
           <h3 style={{ marginTop: 0 }}>Start Day Float</h3>
@@ -3218,11 +3236,11 @@ function App() {
               step="0.01"
               placeholder="Start of Day Cash Float"
               value={cashUpStartFloat}
-              disabled={locked && !showManagerView}
+              disabled={!canEditCashUp}
               onChange={(e) => setCashUpStartFloat(e.target.value)}
               style={{ padding: '10px' }}
             />
-            <button onClick={saveStartDayFloat} disabled={cashUpSaving || (locked && !showManagerView)}>
+            <button onClick={saveStartDayFloat} disabled={cashUpSaving || !canEditCashUp}>
               Save Start Day Float
             </button>
           </div>
@@ -3253,14 +3271,14 @@ function App() {
             step="0.01"
             placeholder="Actual cash counted"
             value={cashUpActualCash}
-            disabled={locked && !showManagerView}
+            disabled={!canEditCashUp}
             onChange={(e) => setCashUpActualCash(e.target.value)}
             style={{ padding: '10px' }}
           />
           <input
             placeholder="Staff completing cash-up"
             value={cashUpManagerName}
-            disabled={locked && !showManagerView}
+            disabled={!canEditCashUp}
             onChange={(e) => setCashUpManagerName(e.target.value)}
             style={{ padding: '10px' }}
           />
@@ -3273,12 +3291,12 @@ function App() {
         <textarea
           placeholder="Variance notes"
           value={cashUpVarianceNotes}
-          disabled={locked && !showManagerView}
+          disabled={!canEditCashUp}
           onChange={(e) => setCashUpVarianceNotes(e.target.value)}
           style={{ width: '100%', minHeight: '76px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box' }}
         />
 
-        <button onClick={saveCashUp} disabled={cashUpSaving || (locked && !showManagerView)} style={{ marginTop: '10px' }}>
+        <button onClick={saveCashUp} disabled={cashUpSaving || !canEditCashUp} style={{ marginTop: '10px' }}>
           {cashUpSaving ? 'Saving Cash-Up...' : 'Save Cash-Up'}
         </button>
         {showManagerView && cashUpExistingRecord?.id && (
