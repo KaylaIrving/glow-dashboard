@@ -104,13 +104,6 @@ function App() {
   const [cashUpStartFloat, setCashUpStartFloat] = useState('')
   const [cashUpExistingRecord, setCashUpExistingRecord] = useState(null)
   const [cashUpLoadError, setCashUpLoadError] = useState('')
-  const [floatMovements, setFloatMovements] = useState([])
-  const [floatMovementLoadError, setFloatMovementLoadError] = useState('')
-  const [floatMovementType, setFloatMovementType] = useState('added')
-  const [floatMovementAmount, setFloatMovementAmount] = useState('')
-  const [floatMovementNote, setFloatMovementNote] = useState('')
-  const [floatMovementEditingId, setFloatMovementEditingId] = useState('')
-  const [floatMovementSaving, setFloatMovementSaving] = useState(false)
 
   const [currentStaffUserId, setCurrentStaffUserId] = useState('')
   const [staffSelectorOpen, setStaffSelectorOpen] = useState(false)
@@ -159,7 +152,6 @@ function App() {
   useEffect(() => {
     getDailyTakings()
     getCashUpForSelectedDate()
-    getFloatMovements()
   }, [selectedDate])
 
   useEffect(() => {
@@ -394,23 +386,6 @@ function App() {
     setCashUpActualCash(record?.actual_cash ?? '')
     setCashUpVarianceNotes(record?.variance_notes || '')
     setCashUpManagerName(record?.cash_up_completed_by_staff || '')
-  }
-
-  async function getFloatMovements() {
-    const { data, error } = await supabase
-      .from('FloatMovements')
-      .select('*')
-      .eq('date', selectedDate)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      setFloatMovementLoadError(error.message || 'Could not load FloatMovements table.')
-      setFloatMovements([])
-      return
-    }
-
-    setFloatMovementLoadError('')
-    setFloatMovements(data || [])
   }
 
   function getDailyTakingsSummary() {
@@ -923,18 +898,8 @@ function App() {
     return 'This cash-up cannot be edited.'
   }
 
-  function getFloatMovementTotals() {
-    return floatMovements.reduce((totals, movement) => {
-      const amount = Number(movement.amount || 0)
-      if (movement.type === 'added') totals.added += amount
-      if (movement.type === 'removed') totals.removed += amount
-      return totals
-    }, { added: 0, removed: 0 })
-  }
-
   function buildCashUpTotalsPayload(summary, startFloat) {
-    const movementTotals = getFloatMovementTotals()
-    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
+    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0)
     return {
       card_total: Number(summary.cardTotal.toFixed(2)),
       cash_total: Number(summary.cashTotal.toFixed(2)),
@@ -946,92 +911,6 @@ function App() {
       starting_cash_float: Number(startFloat.toFixed(2)),
       expected_cash: Number(expectedCash.toFixed(2))
     }
-  }
-
-  function clearFloatMovementForm() {
-    setFloatMovementType('added')
-    setFloatMovementAmount('')
-    setFloatMovementNote('')
-    setFloatMovementEditingId('')
-  }
-
-  function editFloatMovement(movement) {
-    setFloatMovementEditingId(String(movement.id))
-    setFloatMovementType(movement.type || 'added')
-    setFloatMovementAmount(movement.amount ?? '')
-    setFloatMovementNote(movement.note || '')
-  }
-
-  async function saveFloatMovement() {
-    if (!requireStaffSignIn()) return
-
-    if (!canEditSelectedCashUp()) {
-      alert(explainCashUpEditBlock())
-      return
-    }
-
-    if (floatMovementEditingId && !showManagerView) {
-      alert('Only managers can edit float movements. Please ask a manager or add a new movement.')
-      return
-    }
-
-    const amount = Number(floatMovementAmount || 0)
-    if (floatMovementAmount === '' || Number.isNaN(amount) || amount <= 0) {
-      alert('Please enter a valid float movement amount.')
-      return
-    }
-
-    if (!floatMovementNote.trim()) {
-      alert('Please enter a reason or note for the float movement.')
-      return
-    }
-
-    const staffUser = getCurrentStaffUser()
-    const payload = {
-      date: selectedDate,
-      type: floatMovementType,
-      amount: Number(amount.toFixed(2)),
-      note: floatMovementNote.trim(),
-      staff_id: staffUser?.id || null,
-      staff_name: staffUser?.name || null
-    }
-
-    setFloatMovementSaving(true)
-    const request = floatMovementEditingId
-      ? supabase.from('FloatMovements').update(payload).eq('id', floatMovementEditingId)
-      : supabase.from('FloatMovements').insert(payload)
-
-    const { error } = await request
-    setFloatMovementSaving(false)
-
-    if (error) {
-      alert('Float movement was not saved. Please check the FloatMovements table and connection.')
-      setFloatMovementLoadError(error.message || 'Float movement save failed.')
-      console.log(error)
-      return
-    }
-
-    clearFloatMovementForm()
-    await getFloatMovements()
-    alert('Float movement saved.')
-  }
-
-  async function deleteFloatMovement(movement) {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerPin('Manager PIN required to delete float movements:')) return
-
-    const confirmed = window.confirm(`Delete this float movement of GBP ${Number(movement.amount || 0).toFixed(2)}?`)
-    if (!confirmed) return
-
-    const { error } = await supabase.from('FloatMovements').delete().eq('id', movement.id)
-    if (error) {
-      alert('Float movement was not deleted. Please check the connection.')
-      setFloatMovementLoadError(error.message || 'Float movement delete failed.')
-      console.log(error)
-      return
-    }
-
-    await getFloatMovements()
   }
 
   async function saveStartDayFloat() {
@@ -1055,8 +934,7 @@ function App() {
 
     const staffUser = getCurrentStaffUser()
     const existingActualCash = Number(cashUpExistingRecord?.actual_cash || 0)
-    const movementTotals = getFloatMovementTotals()
-    const existingExpectedCash = Number(startFloat || 0) + Number(getDailyTakingsSummary().cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
+    const existingExpectedCash = Number(startFloat || 0) + Number(getDailyTakingsSummary().cashTotal || 0)
     const payload = {
       cashup_date: selectedDate,
       ...buildCashUpTotalsPayload(getDailyTakingsSummary(), startFloat),
@@ -1096,9 +974,8 @@ function App() {
 
     const summary = getDailyTakingsSummary()
     const startFloat = getCashUpStartFloatAmount()
-    const movementTotals = getFloatMovementTotals()
     const actualCash = Number(cashUpActualCash || 0)
-    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
+    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0)
     const variance = Number((actualCash - expectedCash).toFixed(2))
     const staffUser = getCurrentStaffUser()
     const signOffName = cashUpManagerName.trim() || staffUser?.name || ''
@@ -1119,7 +996,7 @@ function App() {
     }
 
     const confirmed = window.confirm(
-      `Save end-of-day cash-up for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}?\n\nStarting float: GBP ${startFloat.toFixed(2)}\nCash sales: GBP ${summary.cashTotal.toFixed(2)}\nFloat added: GBP ${movementTotals.added.toFixed(2)}\nFloat removed: GBP ${movementTotals.removed.toFixed(2)}\nExpected cash: GBP ${expectedCash.toFixed(2)}\nActual cash: GBP ${actualCash.toFixed(2)}\nVariance: GBP ${variance.toFixed(2)}\nCompleted by: ${signOffName}`
+      `Save end-of-day cash-up for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}?\n\nStarting float: GBP ${startFloat.toFixed(2)}\nCash sales: GBP ${summary.cashTotal.toFixed(2)}\nExpected cash: GBP ${expectedCash.toFixed(2)}\nActual cash: GBP ${actualCash.toFixed(2)}\nVariance: GBP ${variance.toFixed(2)}\nCompleted by: ${signOffName}`
     )
 
     if (!confirmed) return
@@ -3337,9 +3214,8 @@ function App() {
   function renderCashUpPanel() {
     const summary = getDailyTakingsSummary()
     const startFloat = getCashUpStartFloatAmount()
-    const movementTotals = getFloatMovementTotals()
     const actualCash = cashUpActualCash === '' ? 0 : Number(cashUpActualCash || 0)
-    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0) + Number(movementTotals.added || 0) - Number(movementTotals.removed || 0)
+    const expectedCash = Number(startFloat || 0) + Number(summary.cashTotal || 0)
     const variance = actualCash - expectedCash
     const itemStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '12px' }
     const locked = isCashUpLocked()
@@ -3359,7 +3235,6 @@ function App() {
           </p>
         )}
         {cashUpLoadError && <p style={{ color: '#ffcc66' }}>Cash-up data could not be loaded: {cashUpLoadError}</p>}
-        {floatMovementLoadError && <p style={{ color: '#ffcc66' }}>Float movements could not be loaded: {floatMovementLoadError}</p>}
         {locked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>This cash-up is locked. Managers can reopen it from Manager View.</p>}
         {cashUpBlockMessage && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>{cashUpBlockMessage}</p>}
 
@@ -3387,59 +3262,9 @@ function App() {
           )}
         </div>
 
-        <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
-          <h3 style={{ marginTop: 0 }}>Cash Float Movement</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', alignItems: 'center' }}>
-            <select value={floatMovementType} disabled={!canEditCashUp || (floatMovementEditingId && !showManagerView)} onChange={(e) => setFloatMovementType(e.target.value)} style={{ padding: '10px' }}>
-              <option value="added">Added</option>
-              <option value="removed">Removed</option>
-            </select>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Amount"
-              value={floatMovementAmount}
-              disabled={!canEditCashUp || (floatMovementEditingId && !showManagerView)}
-              onChange={(e) => setFloatMovementAmount(e.target.value)}
-              style={{ padding: '10px' }}
-            />
-            <input
-              placeholder="Reason / notes"
-              value={floatMovementNote}
-              disabled={!canEditCashUp || (floatMovementEditingId && !showManagerView)}
-              onChange={(e) => setFloatMovementNote(e.target.value)}
-              style={{ padding: '10px' }}
-            />
-            <button onClick={saveFloatMovement} disabled={floatMovementSaving || !canEditCashUp || (floatMovementEditingId && !showManagerView)}>
-              {floatMovementSaving ? 'Saving...' : floatMovementEditingId ? 'Save Movement' : 'Add Float Movement'}
-            </button>
-            {floatMovementEditingId && <button onClick={clearFloatMovementForm}>Cancel Edit</button>}
-          </div>
-          <p style={{ color: '#aaa', marginBottom: '8px' }}>
-            Staff: <strong>{getCurrentStaffUser()?.name || 'Not signed in'}</strong>
-          </p>
-          <div style={{ maxHeight: '190px', overflowY: 'auto', border: '1px solid #333', borderRadius: '10px' }}>
-            {floatMovements.length === 0 ? (
-              <p style={{ color: '#aaa', margin: 0, padding: '10px' }}>No float movements recorded for this date.</p>
-            ) : floatMovements.map((movement) => (
-              <div key={movement.id} style={{ display: 'grid', gridTemplateColumns: '90px 1fr auto auto', gap: '10px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
-                <span style={{ color: '#aaa' }}>{movement.created_at ? new Date(movement.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                <span>
-                  <strong>{movement.staff_name || 'Staff'}</strong> - {formatStatus(movement.type)} GBP {Number(movement.amount || 0).toFixed(2)}<br />
-                  <span style={{ color: '#aaa' }}>{movement.note}</span>
-                </span>
-                {showManagerView && <button onClick={() => editFloatMovement(movement)}>Edit</button>}
-                {showManagerView && <button onClick={() => deleteFloatMovement(movement)}>Delete</button>}
-              </div>
-            ))}
-          </div>
-        </div>
-
         <h3>End of Day Cash Up</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '12px' }}>
           <div style={itemStyle}><span>Starting float</span><h2>£{startFloat.toFixed(2)}</h2></div>
-          <div style={itemStyle}><span>Float added</span><h2>£{movementTotals.added.toFixed(2)}</h2></div>
-          <div style={itemStyle}><span>Float removed</span><h2>£{movementTotals.removed.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Card total</span><h2>£{summary.cardTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Cash total</span><h2>£{summary.cashTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Bank transfer</span><h2>£{summary.bankTransferTotal.toFixed(2)}</h2></div>
