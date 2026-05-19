@@ -21,14 +21,7 @@ const SPRAY_TAN_SERVICES = [
   { name: 'Express Tan', price: 35 },
   { name: 'Face & Neck', price: 8 },
   { name: 'Legs Only', price: 18 },
-  { name: 'Upper Body & Face', price: 22 },
-  { name: 'Patch Test', price: 0 }
-]
-
-const SPRAY_TAN_COLUMNS = [
-  { value: 'spray_tan', label: 'Spray Tan' },
-  { value: 'express_tan', label: 'Express Tan' },
-  { value: 'patch_test', label: 'Patch Test' }
+  { name: 'Upper Body & Face', price: 22 }
 ]
 
 const SPRAY_TAN_STATUSES = [
@@ -118,20 +111,6 @@ function App() {
   const [showBookingTopUp, setShowBookingTopUp] = useState(false)
   const [showBookingProducts, setShowBookingProducts] = useState(false)
   const [bookingSaving, setBookingSaving] = useState(false)
-  const [sprayTanModalOpen, setSprayTanModalOpen] = useState(false)
-  const [sprayTanSlot, setSprayTanSlot] = useState(null)
-  const [sprayTanColumn, setSprayTanColumn] = useState('spray_tan')
-  const [sprayTanService, setSprayTanService] = useState('Full Body')
-  const [sprayTanDate, setSprayTanDate] = useState(formatLocalDate(new Date()))
-  const [sprayTanTime, setSprayTanTime] = useState('09:00')
-  const [sprayTanDuration, setSprayTanDuration] = useState(30)
-  const [sprayTanArtist, setSprayTanArtist] = useState('')
-  const [sprayTanNotes, setSprayTanNotes] = useState('')
-  const [sprayTanDepositRequired, setSprayTanDepositRequired] = useState(15)
-  const [sprayTanDepositPaid, setSprayTanDepositPaid] = useState('')
-  const [sprayTanPatchCompleted, setSprayTanPatchCompleted] = useState(false)
-  const [sprayTanApprovalStatus, setSprayTanApprovalStatus] = useState('approved')
-  const [sprayTanSaving, setSprayTanSaving] = useState(false)
 
   const [showCustomerManagement, setShowCustomerManagement] = useState(false)
   const [showManagerView, setShowManagerView] = useState(false)
@@ -2019,48 +1998,6 @@ function App() {
     return SPRAY_TAN_SERVICES.find((service) => service.name === serviceName)?.price || 0
   }
 
-  function getSprayTanColumnLabel(column) {
-    return SPRAY_TAN_COLUMNS.find((item) => item.value === column)?.label || 'Spray Tan'
-  }
-
-  function getDefaultSprayTanDeposit(serviceName) {
-    const price = getSprayTanServicePrice(serviceName)
-    return serviceName === 'Patch Test' ? 0 : Number((price * 0.5).toFixed(2))
-  }
-
-  function getSprayTanDepositStatus(serviceName, required, paid) {
-    if (serviceName === 'Patch Test' || Number(required || 0) <= 0) return 'not_required'
-    return Number(paid || 0) >= Number(required || 0) ? 'paid' : 'pending'
-  }
-
-  function getLatestCustomerPatchTestDate(customerId) {
-    const customer = customers.find((item) => Number(item.id) === Number(customerId))
-    const dates = []
-    if (customer?.last_patch_test_date) dates.push(new Date(customer.last_patch_test_date))
-    bookings.forEach((booking) => {
-      if (!isSprayTanBooking(booking)) return
-      if (Number(booking.customer_id) !== Number(customerId)) return
-      if (getBookingStatusKey(booking) === 'cancelled' || getBookingStatusKey(booking) === 'canceled') return
-      if (booking.spraytan_service === 'Patch Test' || booking.spraytan_column === 'patch_test' || booking.patch_test_completed) {
-        const dateSource = booking.patch_test_date || booking.appointment_time
-        if (dateSource) dates.push(new Date(dateSource))
-      }
-    })
-
-    return dates
-      .filter((date) => !Number.isNaN(date.getTime()))
-      .sort((a, b) => b - a)[0] || null
-  }
-
-  function getPatchTestWarning(customer, appointmentDateTime, serviceName) {
-    if (!customer || serviceName === 'Patch Test') return ''
-    const latestPatchTestDate = getLatestCustomerPatchTestDate(customer.id)
-    if (!latestPatchTestDate) return 'No patch test recorded for this customer.'
-    const hoursBeforeAppointment = (appointmentDateTime - latestPatchTestDate) / (60 * 60 * 1000)
-    if (hoursBeforeAppointment < 24) return 'Patch test should be at least 24 hours before a paid spray tan where possible.'
-    return ''
-  }
-
   function getSprayTanStatusLabel(booking) {
     const status = getBookingStatusKey(booking)
     if (status === 'completed') return 'Completed'
@@ -2074,11 +2011,11 @@ function App() {
   function getSprayTanStatusStyle(label) {
     const colours = {
       'Pending Approval': '#8a6420',
-      Approved: '#3d5368',
+      Approved: '#2f7a4b',
       'Deposit Pending': '#b56a22',
-      'Deposit Paid': '#2f7a4b',
+      'Deposit Paid': '#5a2f7d',
       Completed: '#2f7a4b',
-      Cancelled: '#2f2f2f'
+      Cancelled: '#7a1f2a'
     }
     return {
       display: 'inline-block',
@@ -3258,160 +3195,6 @@ function App() {
     setEditBedId('')
     clearProductCart()
     setShowProductPicker(false)
-  }
-
-  function setSprayTanServiceWithDefaults(serviceName) {
-    setSprayTanService(serviceName)
-    setSprayTanDepositRequired(getDefaultSprayTanDeposit(serviceName))
-    if (serviceName === 'Patch Test') {
-      setSprayTanColumn('patch_test')
-      setSprayTanDuration(10)
-      setSprayTanDepositPaid(0)
-      setSprayTanPatchCompleted(true)
-    }
-  }
-
-  function openSprayTanSlot(time, column) {
-    if (!requireStaffSignIn()) return
-    const defaultService = column === 'patch_test'
-      ? 'Patch Test'
-      : column === 'express_tan'
-        ? 'Express Tan'
-        : 'Full Body'
-    setSprayTanSlot({ time, column })
-    setSprayTanColumn(column)
-    setSprayTanService(defaultService)
-    setSprayTanDate(selectedDate)
-    setSprayTanTime(time)
-    setSprayTanDuration(column === 'patch_test' ? 10 : 30)
-    setSprayTanArtist('')
-    setSprayTanNotes('')
-    setSprayTanDepositRequired(getDefaultSprayTanDeposit(defaultService))
-    setSprayTanDepositPaid(column === 'patch_test' ? 0 : '')
-    setSprayTanPatchCompleted(column === 'patch_test')
-    setSprayTanApprovalStatus('approved')
-    setSelectedCustomerId('')
-    setSelectedStaffAsCustomerId('')
-    setCustomerSearch('')
-    setNewCustomerBalance(0)
-    setBookingSaving(false)
-    setSprayTanSaving(false)
-    setSprayTanModalOpen(true)
-  }
-
-  function closeSprayTanModal() {
-    setSprayTanModalOpen(false)
-    setSprayTanSlot(null)
-    setSprayTanColumn('spray_tan')
-    setSprayTanService('Full Body')
-    setSprayTanDate(selectedDate)
-    setSprayTanTime('09:00')
-    setSprayTanDuration(30)
-    setSprayTanArtist('')
-    setSprayTanNotes('')
-    setSprayTanDepositRequired(15)
-    setSprayTanDepositPaid('')
-    setSprayTanPatchCompleted(false)
-    setSprayTanApprovalStatus('approved')
-    setSprayTanSaving(false)
-    setSelectedCustomerId('')
-    setSelectedStaffAsCustomerId('')
-    setCustomerSearch('')
-  }
-
-  async function createSprayTanBookingFromModal() {
-    if (sprayTanSaving) return
-    if (!requireStaffSignIn()) return
-
-    let customer = getSelectedCustomer()
-    const selectedStaff = getSelectedStaffAsCustomer()
-    if (selectedStaff) {
-      alert('Please select a customer for spray tan bookings, not a staff free-minutes account.')
-      return
-    }
-
-    if (!customer && customerSearch.trim()) {
-      const shouldCreate = window.confirm(`Create new customer "${customerSearch.trim()}"?`)
-      if (!shouldCreate) return
-      customer = await createNewCustomerFromSearch()
-    }
-
-    if (!customer) {
-      alert('Please select or create a customer.')
-      return
-    }
-
-    const appointmentDateTime = new Date(`${sprayTanDate}T${sprayTanTime}`)
-    if (Number.isNaN(appointmentDateTime.getTime())) {
-      alert('Please choose a valid date and time.')
-      return
-    }
-
-    const servicePrice = getSprayTanServicePrice(sprayTanService)
-    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || getDefaultSprayTanDeposit(sprayTanService))
-    const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
-    const balanceDue = Math.max(0, servicePrice - depositPaid)
-    const depositStatus = getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid)
-    const patchWarning = getPatchTestWarning(customer, appointmentDateTime, sprayTanService)
-
-    if (depositPaid > servicePrice) {
-      alert('Deposit paid cannot be more than the service price.')
-      return
-    }
-
-    if (patchWarning && !sprayTanPatchCompleted) {
-      const proceed = window.confirm(`${patchWarning}\n\nContinue creating this spray tan booking?`)
-      if (!proceed) return
-    }
-
-    setSprayTanSaving(true)
-    const { error, data } = await supabase.from('Bookings').insert({
-      customer_id: customer.id,
-      customer_name: customer.name,
-      customer_phone: customer.phone || null,
-      customer_email: customer.email || null,
-      appointment_time: appointmentDateTime.toISOString(),
-      status: 'booked',
-      booking_source: 'dashboard',
-      booking_type: 'spraytan',
-      spraytan_column: sprayTanColumn,
-      spraytan_service: sprayTanService,
-      spraytan_artist: sprayTanArtist || null,
-      deposit_required: depositRequired,
-      deposit_paid: depositPaid,
-      deposit_status: depositStatus,
-      patch_test_required: sprayTanService !== 'Patch Test',
-      patch_test_completed: sprayTanService === 'Patch Test' ? true : sprayTanPatchCompleted,
-      patch_test_date: sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || null,
-      approval_status: sprayTanApprovalStatus,
-      approved_by: sprayTanApprovalStatus === 'approved' ? getCurrentStaffUser()?.name || null : null,
-      approved_at: sprayTanApprovalStatus === 'approved' ? new Date().toISOString() : null,
-      spraytan_duration_minutes: Number(sprayTanDuration || 0),
-      spraytan_balance_due: balanceDue,
-      notes: sprayTanNotes || null
-    }).select().single()
-    setSprayTanSaving(false)
-
-    if (error) {
-      alert('Spray tan booking was not saved. Please check the connection and Spray Tan booking columns.')
-      showDataLoadWarning('Spray tan booking failed to save.', error)
-      console.log(error)
-      return
-    }
-
-    if (sprayTanService === 'Patch Test' || sprayTanPatchCompleted) {
-      const patchDate = sprayTanService === 'Patch Test'
-        ? appointmentDateTime.toISOString()
-        : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || new Date().toISOString()
-      await supabase.from('Customers').update({ last_patch_test_date: patchDate }).eq('id', customer.id)
-      await createCustomerLog(customer, 'Patch test recorded', `Patch test recorded from spray tan booking. Date: ${new Date(patchDate).toLocaleString('en-GB')}.`)
-    }
-
-    await createCustomerLog(customer, 'Spray tan booking created', `${sprayTanService} booked for ${appointmentDateTime.toLocaleString('en-GB')}. Deposit required £${depositRequired.toFixed(2)}, paid £${depositPaid.toFixed(2)}.`)
-    closeSprayTanModal()
-    await getBookings()
-    await getCustomers()
-    if (data) setDashboardView('spraytan')
   }
 
   async function openCustomerManagementFromBooking(booking) {
@@ -5686,182 +5469,6 @@ function App() {
     )
   }
 
-  function renderManualSprayTanCalendarView() {
-    const sprayTanBookings = getSprayTanBookingsForSelectedDate()
-      .slice()
-      .sort((a, b) => new Date(a.appointment_time) - new Date(b.appointment_time))
-    const timelineSlots = generateTimeSlots('09:00', '20:00').filter((_, index) => index % 3 === 0)
-
-    return (
-      <div className="spraytan-view">
-        <div className="calendar-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <div>
-            <h2 style={{ marginBottom: '6px' }}>Spray Tans</h2>
-            <p style={{ color: '#aaa', margin: 0 }}>Manual spray tan appointments are separate from the sunbed calendar.</p>
-          </div>
-          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '18px' }}>
-          {SPRAY_TAN_SERVICES.map((service) => (
-            <div key={service.name} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }}>
-              <strong>{service.name}</strong>
-              <p style={{ color: '#d4a853', margin: '6px 0 0', fontWeight: 'bold' }}>£{service.price.toFixed(2)}</p>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '18px' }}>
-          {SPRAY_TAN_STATUSES.map((status) => (
-            <span key={status} style={getSprayTanStatusStyle(status)}>{status}</span>
-          ))}
-        </div>
-
-        <div style={{ background: '#1e1e1e', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
-          <div style={{ minWidth: '980px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', padding: '0 0 10px', color: '#d4a853', fontWeight: 'bold' }}>
-              <span>Time</span>
-              {SPRAY_TAN_COLUMNS.map((column) => <span key={column.value}>{column.label}</span>)}
-            </div>
-
-            {timelineSlots.map((time) => (
-              <div key={time} style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', borderTop: '1px solid #333', padding: '10px 0', minHeight: '82px' }}>
-                <strong>{time}</strong>
-                {SPRAY_TAN_COLUMNS.map((column) => {
-                  const slotAppointments = sprayTanBookings.filter((booking) => getBookingStartTimeString(booking) === time && (booking.spraytan_column || 'spray_tan') === column.value)
-                  return (
-                    <div key={`${time}-${column.value}`} onClick={() => slotAppointments.length === 0 && openSprayTanSlot(time, column.value)} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', cursor: slotAppointments.length === 0 ? 'pointer' : 'default', minHeight: '64px' }}>
-                      {slotAppointments.length === 0 ? (
-                        <span style={{ color: '#666' }}>+ Add {column.label}</span>
-                      ) : slotAppointments.map((booking) => {
-                        const customer = getCustomerForBooking(booking)
-                        const serviceName = booking.spraytan_service || 'Spray tan service'
-                        const servicePrice = getSprayTanServicePrice(serviceName)
-                        const depositRequired = Number(booking.deposit_required || 0)
-                        const depositPaid = Number(booking.deposit_paid || 0)
-                        const balanceDue = Number(booking.spraytan_balance_due ?? Math.max(0, servicePrice - depositPaid))
-                        const statusLabel = getSprayTanStatusLabel(booking)
-                        const lastPatchTestDate = customer?.last_patch_test_date || booking.patch_test_date
-
-                        return (
-                          <div key={booking.id} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.22)', borderRadius: '8px', padding: '10px', marginBottom: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                              <strong>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
-                              <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
-                            </div>
-                            <p style={{ margin: '6px 0', color: '#aaa' }}>
-                              {serviceName} · £{servicePrice.toFixed(2)} · {Number(booking.spraytan_duration_minutes || 0)} mins
-                            </p>
-                            <p style={{ margin: '4px 0', color: '#ddd' }}>
-                              Deposit: £{depositPaid.toFixed(2)} / £{depositRequired.toFixed(2)} · Balance £{balanceDue.toFixed(2)}
-                            </p>
-                            <p style={{ margin: '4px 0', color: '#aaa' }}>Artist: {booking.spraytan_artist || 'To assign'}</p>
-                            {serviceName !== 'Patch Test' && !booking.patch_test_completed && (
-                              <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>
-                                Patch test warning{lastPatchTestDate ? ` · Last ${new Date(lastPatchTestDate).toLocaleDateString('en-GB')}` : ''}
-                              </p>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  function renderSprayTanBookingModal() {
-    if (!sprayTanModalOpen) return null
-
-    const customer = getSelectedCustomer()
-    const selectedStaff = getSelectedStaffAsCustomer()
-    const servicePrice = getSprayTanServicePrice(sprayTanService)
-    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || getDefaultSprayTanDeposit(sprayTanService))
-    const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
-    const balanceDue = Math.max(0, servicePrice - depositPaid)
-    const appointmentDateTime = new Date(`${sprayTanDate}T${sprayTanTime}`)
-    const patchWarning = customer ? getPatchTestWarning(customer, appointmentDateTime, sprayTanService) : ''
-    const latestPatchTestDate = customer ? getLatestCustomerPatchTestDate(customer.id) : null
-
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
-        <div style={{ background: '#1e1e1e', padding: '24px', borderRadius: '16px', width: '620px', maxWidth: '94%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid rgba(212,168,83,0.35)' }}>
-          <h2 style={{ marginTop: 0 }}>Create Spray Tan Booking</h2>
-          <p style={{ color: '#aaa' }}>{getSprayTanColumnLabel(sprayTanSlot?.column || sprayTanColumn)} at {sprayTanSlot?.time || sprayTanTime}</p>
-
-          {renderCustomerSearchBox()}
-          {selectedStaff && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Spray tan bookings must be linked to a customer, not a staff free-minutes account.</p>}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-            <div>
-              <label>Service column</label>
-              <select
-                value={sprayTanColumn}
-                onChange={(e) => {
-                  const column = e.target.value
-                  setSprayTanColumn(column)
-                  if (column === 'patch_test') setSprayTanServiceWithDefaults('Patch Test')
-                  if (column === 'express_tan') setSprayTanServiceWithDefaults('Express Tan')
-                }}
-                style={{ width: '100%', padding: '10px', marginTop: '5px' }}
-              >
-                {SPRAY_TAN_COLUMNS.map((column) => <option key={column.value} value={column.value}>{column.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>Specific service / price</label>
-              <select value={sprayTanService} onChange={(e) => setSprayTanServiceWithDefaults(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                {SPRAY_TAN_SERVICES.map((service) => <option key={service.name} value={service.name}>{service.name} - £{service.price.toFixed(2)}</option>)}
-              </select>
-            </div>
-            <div><label>Date</label><input type="date" value={sprayTanDate} onChange={(e) => setSprayTanDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Time</label><input type="time" value={sprayTanTime} onChange={(e) => setSprayTanTime(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Duration</label><input type="number" min="5" value={sprayTanDuration} onChange={(e) => setSprayTanDuration(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Artist</label><input value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} placeholder="Artist name" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit required</label><input type="number" step="0.01" value={depositRequired} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanDepositRequired(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit paid</label><input type="number" step="0.01" value={depositPaid} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanDepositPaid(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Approval status</label>
-              <select value={sprayTanApprovalStatus} onChange={(e) => setSprayTanApprovalStatus(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                <option value="pending">Pending Approval</option>
-                <option value="approved">Approved</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
-            <p style={{ margin: '0 0 6px' }}>Service price: <strong>£{servicePrice.toFixed(2)}</strong></p>
-            <p style={{ margin: '0 0 6px' }}>Balance due: <strong>£{balanceDue.toFixed(2)}</strong></p>
-            <p style={{ margin: 0 }}>Deposit status: <strong>{formatStatus(getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid))}</strong></p>
-          </div>
-
-          <label style={{ display: 'block', marginBottom: '8px', color: sprayTanPatchCompleted ? '#9ccfae' : '#ffcc66' }}>
-            <input type="checkbox" checked={sprayTanPatchCompleted} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanPatchCompleted(e.target.checked)} style={{ marginRight: '8px' }} />
-            Patch test completed
-          </label>
-          {latestPatchTestDate && <p style={{ color: '#aaa', marginTop: 0 }}>Last patch test: {latestPatchTestDate.toLocaleDateString('en-GB')}</p>}
-          {patchWarning && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>{patchWarning}</p>}
-
-          <textarea
-            placeholder="Spray tan notes"
-            value={sprayTanNotes}
-            onChange={(e) => setSprayTanNotes(e.target.value)}
-            style={{ width: '100%', minHeight: '80px', padding: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box', fontFamily: 'inherit' }}
-          />
-
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
-            <button onClick={createSprayTanBookingFromModal} disabled={sprayTanSaving}>{sprayTanSaving ? 'Saving...' : 'Create Spray Tan Booking'}</button>
-            <button onClick={closeSprayTanModal} disabled={sprayTanSaving}>Cancel</button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   const upcomingBookings = getUpcomingBookingsWithin20Minutes()
   const currentStaffUser = getCurrentStaffUser()
   const modalCustomer = modalBooking ? getCustomerForBooking(modalBooking) : null
@@ -6056,8 +5663,7 @@ function App() {
         </>
       )}
 
-      {dashboardView === 'spraytan' && renderManualSprayTanCalendarView()}
-      {renderSprayTanBookingModal()}
+      {dashboardView === 'spraytan' && renderSprayTanCalendarView()}
 
       {modalOpen && (
         <div className="booking-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
