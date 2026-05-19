@@ -91,14 +91,9 @@ function App() {
   const [customerManagerSearch, setCustomerManagerSearch] = useState('')
   const [selectedManagerCustomerId, setSelectedManagerCustomerId] = useState('')
   const [managerName, setManagerName] = useState('')
-  const [managerFirstName, setManagerFirstName] = useState('')
-  const [managerLastName, setManagerLastName] = useState('')
   const [managerPhone, setManagerPhone] = useState('')
   const [managerEmail, setManagerEmail] = useState('')
   const [managerDateOfBirth, setManagerDateOfBirth] = useState('')
-  const [managerAddress, setManagerAddress] = useState('')
-  const [managerPostcode, setManagerPostcode] = useState('')
-  const [managerGender, setManagerGender] = useState('')
   const [managerNotes, setManagerNotes] = useState('')
   const [managerStandardBalance, setManagerStandardBalance] = useState(0)
   const [managerHybridBalance, setManagerHybridBalance] = useState(0)
@@ -111,9 +106,6 @@ function App() {
   const [addCustomerPhone, setAddCustomerPhone] = useState('')
   const [addCustomerEmail, setAddCustomerEmail] = useState('')
   const [addCustomerDateOfBirth, setAddCustomerDateOfBirth] = useState('')
-  const [addCustomerAddress, setAddCustomerAddress] = useState('')
-  const [addCustomerPostcode, setAddCustomerPostcode] = useState('')
-  const [addCustomerGender, setAddCustomerGender] = useState('')
   const [addCustomerNotes, setAddCustomerNotes] = useState('')
   const [addCustomerStandardMinutes, setAddCustomerStandardMinutes] = useState('')
   const [addCustomerHybridMinutes, setAddCustomerHybridMinutes] = useState('')
@@ -713,13 +705,7 @@ function App() {
     if (!customerSearch.trim()) return []
     const query = customerSearch.toLowerCase()
     const customerOptions = customers
-      .filter((customer) => {
-        const searchable = [customer.name, customer.first_name, customer.last_name, customer.phone, customer.email]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-        return searchable.includes(query)
-      })
+      .filter((customer) => customer.name?.toLowerCase().includes(query))
       .map((customer) => ({ kind: 'customer', id: customer.id, label: isShopTestCustomer(customer) ? 'Shop Test — Internal' : customer.name, record: customer }))
 
     const staffOptions = staff
@@ -2964,26 +2950,10 @@ function App() {
     return customers.find((customer) => customer.id === Number(selectedManagerCustomerId))
   }
 
-  function splitCustomerName(customer) {
-    const nameParts = String(customer?.name || '').trim().split(/\s+/).filter(Boolean)
-    const fallbackFirst = nameParts[0] || ''
-    const fallbackLast = nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''
-    return {
-      firstName: customer?.first_name || fallbackFirst,
-      lastName: customer?.last_name || fallbackLast
-    }
-  }
-
   function getFilteredManagerCustomers() {
     if (!customerManagerSearch.trim()) return []
     const query = customerManagerSearch.toLowerCase()
-    return customers.filter((customer) => {
-      const searchable = [customer.name, customer.first_name, customer.last_name, customer.phone, customer.email, customer.postcode]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return searchable.includes(query)
-    })
+    return customers.filter((customer) => customer.name?.toLowerCase().includes(query) || customer.phone?.toLowerCase().includes(query) || customer.email?.toLowerCase().includes(query))
   }
 
   async function createCustomerLog(customer, action, details) {
@@ -3004,18 +2974,12 @@ function App() {
   }
 
   function selectManagerCustomer(customer) {
-    const splitName = splitCustomerName(customer)
     setSelectedManagerCustomerId(String(customer.id))
     setCustomerManagerSearch(customer.name || '')
     setManagerName(customer.name || '')
-    setManagerFirstName(splitName.firstName)
-    setManagerLastName(splitName.lastName)
     setManagerPhone(customer.phone || '')
     setManagerEmail(customer.email || '')
     setManagerDateOfBirth(customer.date_of_birth || '')
-    setManagerAddress(customer.address || '')
-    setManagerPostcode(customer.postcode || '')
-    setManagerGender(customer.gender || '')
     setManagerNotes(customer.notes || '')
     setManagerStandardBalance(Number(customer.standard_minutes_balance || 0))
     setManagerHybridBalance(Number(customer.hybrid_minutes_balance || 0))
@@ -3030,14 +2994,9 @@ function App() {
     setSelectedManagerCustomerId('')
     setCustomerManagerSearch('')
     setManagerName('')
-    setManagerFirstName('')
-    setManagerLastName('')
     setManagerPhone('')
     setManagerEmail('')
     setManagerDateOfBirth('')
-    setManagerAddress('')
-    setManagerPostcode('')
-    setManagerGender('')
     setManagerNotes('')
     setManagerStandardBalance(0)
     setManagerHybridBalance(0)
@@ -3055,9 +3014,6 @@ function App() {
     setAddCustomerPhone('')
     setAddCustomerEmail('')
     setAddCustomerDateOfBirth('')
-    setAddCustomerAddress('')
-    setAddCustomerPostcode('')
-    setAddCustomerGender('')
     setAddCustomerNotes('')
     setAddCustomerStandardMinutes('')
     setAddCustomerHybridMinutes('')
@@ -3162,14 +3118,11 @@ function App() {
   }
 
   function mapCustomerImportRow(row, rowNumber) {
-    const firstName = String(getImportCell(row, ['First name', 'first_name', 'firstname', 'Forename']) || '').trim()
-    const lastName = String(getImportCell(row, ['Last name', 'last_name', 'lastname', 'Surname']) || '').trim()
-    const address = String(getImportCell(row, ['Address', 'address']) || '').trim()
-    const postcode = String(getImportCell(row, ['Postcode', 'postcode', 'post code']) || '').trim()
-    const gender = String(getImportCell(row, ['Gender', 'gender']) || '').trim()
-    const phone = String(getImportCell(row, ['Phone', 'phone number', 'mobile', 'MobileTel']) || '').trim()
-    const email = String(getImportCell(row, ['Email', 'email address', 'EmailAddress']) || '').trim().toLowerCase()
-    const dob = parseImportDate(getImportCell(row, ['DOB', 'Date of birth', 'date_of_birth', 'dob', 'DateOfBirth']))
+    const firstName = String(getImportCell(row, ['First name', 'first_name', 'firstname']) || '').trim()
+    const lastName = String(getImportCell(row, ['Last name', 'last_name', 'lastname']) || '').trim()
+    const phone = String(getImportCell(row, ['Phone', 'phone number', 'mobile']) || '').trim()
+    const email = String(getImportCell(row, ['Email', 'email address']) || '').trim().toLowerCase()
+    const dob = parseImportDate(getImportCell(row, ['DOB', 'Date of birth', 'date_of_birth', 'dob']))
     const standardBalance = parseImportNumber(getImportCell(row, ['Standard minutes balance', 'standard_minutes_balance', 'standard minutes']))
     const hybridBalance = parseImportNumber(getImportCell(row, ['Hybrid minutes balance', 'hybrid_minutes_balance', 'hybrid minutes']))
     const termsAccepted = parseImportBoolean(getImportCell(row, ['Salon terms accepted', 'terms_accepted', 'salon_terms_accepted']), false)
@@ -3192,14 +3145,9 @@ function App() {
       action: invalidReasons.length > 0 ? 'skip' : 'insert',
       payload: {
         name: name || phone,
-        first_name: firstName || null,
-        last_name: lastName || null,
         phone: phone || null,
         email: email || null,
         date_of_birth: dob,
-        address: address || null,
-        postcode: postcode || null,
-        gender: gender || null,
         notes: notes || null,
         minutes_balance: 0,
         standard_minutes_balance: standardBalance,
@@ -3347,9 +3295,6 @@ function App() {
 
     const firstName = addCustomerFirstName.trim()
     const lastName = addCustomerLastName.trim()
-    const address = addCustomerAddress.trim()
-    const postcode = addCustomerPostcode.trim()
-    const gender = addCustomerGender.trim()
     const phone = addCustomerPhone.trim()
     const email = addCustomerEmail.trim()
     const fullName = `${firstName} ${lastName}`.trim()
@@ -3395,14 +3340,9 @@ function App() {
     setAddCustomerSaving(true)
     const { data, error } = await supabase.from('Customers').insert({
       name: fullName || phone,
-      first_name: firstName || null,
-      last_name: lastName || null,
       phone: phone || null,
       email: email || null,
       date_of_birth: addCustomerDateOfBirth || null,
-      address: address || null,
-      postcode: postcode || null,
-      gender: gender || null,
       notes: notes || null,
       minutes_balance: 0,
       standard_minutes_balance: standardMinutes,
@@ -3525,10 +3465,7 @@ function App() {
       alert('Please select a customer first.')
       return
     }
-    const firstName = managerFirstName.trim()
-    const lastName = managerLastName.trim()
-    const fullName = `${firstName} ${lastName}`.trim() || managerName.trim()
-    if (!fullName) {
+    if (!managerName.trim()) {
       alert('Customer name cannot be blank.')
       return
     }
@@ -3547,15 +3484,10 @@ function App() {
     }
 
     const { error } = await supabase.from('Customers').update({
-      name: fullName,
-      first_name: firstName || null,
-      last_name: lastName || null,
+      name: managerName.trim(),
       phone: managerPhone || null,
       email: managerEmail || null,
       date_of_birth: managerDateOfBirth || null,
-      address: managerAddress || null,
-      postcode: managerPostcode || null,
-      gender: managerGender || null,
       notes: managerNotes || null,
       standard_minutes_balance: newStandard,
       hybrid_minutes_balance: newHybrid,
@@ -4200,9 +4132,6 @@ function App() {
               <input placeholder="Phone number" value={addCustomerPhone} onChange={(e) => setAddCustomerPhone(e.target.value)} style={{ padding: '10px' }} />
               <input placeholder="Email" value={addCustomerEmail} onChange={(e) => setAddCustomerEmail(e.target.value)} style={{ padding: '10px' }} />
               <input type="date" value={addCustomerDateOfBirth} onChange={(e) => setAddCustomerDateOfBirth(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Address" value={addCustomerAddress} onChange={(e) => setAddCustomerAddress(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Postcode" value={addCustomerPostcode} onChange={(e) => setAddCustomerPostcode(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Gender" value={addCustomerGender} onChange={(e) => setAddCustomerGender(e.target.value)} style={{ padding: '10px' }} />
               <input type="number" min="0" placeholder="Standard minutes balance" value={addCustomerStandardMinutes} onChange={(e) => setAddCustomerStandardMinutes(e.target.value)} style={{ padding: '10px' }} />
               <input type="number" min="0" placeholder="Hybrid minutes balance" value={addCustomerHybridMinutes} onChange={(e) => setAddCustomerHybridMinutes(e.target.value)} style={{ padding: '10px' }} />
             </div>
@@ -4235,14 +4164,10 @@ function App() {
         {selectedCustomer && (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '15px' }}>
-              <div><label>First name</label><input value={managerFirstName} onChange={(e) => setManagerFirstName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Last name</label><input value={managerLastName} onChange={(e) => setManagerLastName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
+              <div><label>Name</label><input value={managerName} onChange={(e) => setManagerName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Phone</label><input value={managerPhone} onChange={(e) => setManagerPhone(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Email</label><input value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Date of birth</label><input type="date" value={managerDateOfBirth} onChange={(e) => setManagerDateOfBirth(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Gender</label><input value={managerGender} onChange={(e) => setManagerGender(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Address</label><input value={managerAddress} onChange={(e) => setManagerAddress(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Postcode</label><input value={managerPostcode} onChange={(e) => setManagerPostcode(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             </div>
 
             <p style={{ color: managerDateOfBirth && calculateAge(managerDateOfBirth) < 18 ? '#ff7875' : '#aaa', fontWeight: managerDateOfBirth && calculateAge(managerDateOfBirth) < 18 ? 'bold' : 'normal' }}>

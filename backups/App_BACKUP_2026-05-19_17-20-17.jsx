@@ -10,12 +10,6 @@ const MANAGER_PIN = '3090'
 const WEEKLY_STAFF_FREE_MINUTES = 18
 const LOW_STOCK_THRESHOLD = 5
 
-// TODO Wix integration: fill this once the final Wix service names and bed rules are confirmed.
-// Example shape:
-// '10 minute sunbed bed 1': { bedId: 1, minutes: 10 }
-// Keep empty for now so Wix cannot silently guess the wrong bed/minutes.
-const WIX_SERVICE_BOOKING_MAP = {}
-
 const PRODUCT_CATEGORIES = [
   { value: 'sachets', label: 'Sachets' },
   { value: 'bottles', label: 'Bottles' },
@@ -91,14 +85,9 @@ function App() {
   const [customerManagerSearch, setCustomerManagerSearch] = useState('')
   const [selectedManagerCustomerId, setSelectedManagerCustomerId] = useState('')
   const [managerName, setManagerName] = useState('')
-  const [managerFirstName, setManagerFirstName] = useState('')
-  const [managerLastName, setManagerLastName] = useState('')
   const [managerPhone, setManagerPhone] = useState('')
   const [managerEmail, setManagerEmail] = useState('')
   const [managerDateOfBirth, setManagerDateOfBirth] = useState('')
-  const [managerAddress, setManagerAddress] = useState('')
-  const [managerPostcode, setManagerPostcode] = useState('')
-  const [managerGender, setManagerGender] = useState('')
   const [managerNotes, setManagerNotes] = useState('')
   const [managerStandardBalance, setManagerStandardBalance] = useState(0)
   const [managerHybridBalance, setManagerHybridBalance] = useState(0)
@@ -111,9 +100,6 @@ function App() {
   const [addCustomerPhone, setAddCustomerPhone] = useState('')
   const [addCustomerEmail, setAddCustomerEmail] = useState('')
   const [addCustomerDateOfBirth, setAddCustomerDateOfBirth] = useState('')
-  const [addCustomerAddress, setAddCustomerAddress] = useState('')
-  const [addCustomerPostcode, setAddCustomerPostcode] = useState('')
-  const [addCustomerGender, setAddCustomerGender] = useState('')
   const [addCustomerNotes, setAddCustomerNotes] = useState('')
   const [addCustomerStandardMinutes, setAddCustomerStandardMinutes] = useState('')
   const [addCustomerHybridMinutes, setAddCustomerHybridMinutes] = useState('')
@@ -423,12 +409,11 @@ function App() {
         notes: 'Internal shop test customer. Free/internal use only.',
         minutes_balance: 0,
         standard_minutes_balance: 0,
-      hybrid_minutes_balance: 0,
-      terms_accepted: true,
-      id_checked: true,
-      is_active: true,
-      customer_source: 'dashboard'
-    })
+        hybrid_minutes_balance: 0,
+        terms_accepted: true,
+        id_checked: true,
+        is_active: true
+      })
       .select()
       .single()
 
@@ -676,18 +661,6 @@ function App() {
     return booking?.source === 'shop_test'
   }
 
-  function getBookingSource(booking) {
-    if (!booking) return 'dashboard'
-    if (booking.booking_source) return booking.booking_source
-    if (booking.wix_booking_id) return 'wix'
-    if (booking.source === 'wix') return 'wix'
-    return 'dashboard'
-  }
-
-  function isWixBooking(booking) {
-    return getBookingSource(booking) === 'wix'
-  }
-
   function isShopTestCustomer(customer) {
     return Boolean(customer?.is_internal) || String(customer?.name || '').trim().toLowerCase() === 'shop test'
   }
@@ -713,13 +686,7 @@ function App() {
     if (!customerSearch.trim()) return []
     const query = customerSearch.toLowerCase()
     const customerOptions = customers
-      .filter((customer) => {
-        const searchable = [customer.name, customer.first_name, customer.last_name, customer.phone, customer.email]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-        return searchable.includes(query)
-      })
+      .filter((customer) => customer.name?.toLowerCase().includes(query))
       .map((customer) => ({ kind: 'customer', id: customer.id, label: isShopTestCustomer(customer) ? 'Shop Test — Internal' : customer.name, record: customer }))
 
     const staffOptions = staff
@@ -1584,8 +1551,7 @@ function App() {
       id_checked: newCustomerIdChecked,
       id_checked_at: newCustomerIdChecked ? now : null,
       id_checked_by_staff: newCustomerIdChecked ? staffUser?.name || null : null,
-      is_active: true,
-      customer_source: 'dashboard'
+      is_active: true
     }).select().single()
 
     if (error) {
@@ -1926,123 +1892,6 @@ function App() {
     })
   }
 
-  function getWixServiceBookingMapping(serviceName) {
-    const key = String(serviceName || '').trim().toLowerCase()
-    return WIX_SERVICE_BOOKING_MAP[key] || null
-  }
-
-  async function findOrCreateWixCustomer(wixBookingPayload) {
-    const wixCustomerName = wixBookingPayload.customer_name || wixBookingPayload.wix_customer_name || wixBookingPayload.name || 'Wix Customer'
-    const wixCustomerEmail = wixBookingPayload.customer_email || wixBookingPayload.wix_customer_email || wixBookingPayload.email || null
-    const wixCustomerPhone = wixBookingPayload.customer_phone || wixBookingPayload.wix_customer_phone || wixBookingPayload.phone || null
-    const wixContactId = wixBookingPayload.wix_contact_id || wixBookingPayload.contact_id || null
-    const duplicateFilters = []
-
-    if (wixContactId) duplicateFilters.push(`wix_contact_id.eq.${wixContactId}`)
-    if (wixCustomerPhone) duplicateFilters.push(`phone.eq.${wixCustomerPhone}`)
-    if (wixCustomerEmail) duplicateFilters.push(`email.eq.${wixCustomerEmail}`)
-
-    if (duplicateFilters.length > 0) {
-      const { data: existingCustomers, error } = await supabase
-        .from('Customers')
-        .select('*')
-        .or(duplicateFilters.join(','))
-        .limit(1)
-
-      if (error) throw error
-      if (existingCustomers && existingCustomers.length > 0) return existingCustomers[0]
-    }
-
-    const { data: newCustomer, error: createError } = await supabase
-      .from('Customers')
-      .insert({
-        name: wixCustomerName,
-        phone: wixCustomerPhone,
-        email: wixCustomerEmail,
-        wix_contact_id: wixContactId,
-        customer_source: 'wix',
-        minutes_balance: 0,
-        standard_minutes_balance: 0,
-        hybrid_minutes_balance: 0,
-        is_active: true
-      })
-      .select()
-      .single()
-
-    if (createError) throw createError
-    return newCustomer
-  }
-
-  async function upsertWixBooking(wixBookingPayload) {
-    // Future Vercel webhook/API route should call this helper after verifying the Wix request.
-    // Keep this helper dormant in the client until the server route is added.
-    if (!wixBookingPayload?.wix_booking_id) {
-      throw new Error('Wix booking payload must include wix_booking_id.')
-    }
-
-    const serviceName = wixBookingPayload.service_name || wixBookingPayload.wix_service_name || ''
-    const serviceMapping = getWixServiceBookingMapping(serviceName)
-    const appointmentTime = wixBookingPayload.appointment_time || wixBookingPayload.start_time || wixBookingPayload.startDate
-    const bedId = wixBookingPayload.bed_id || serviceMapping?.bedId
-    const minutes = Number(wixBookingPayload.minutes || serviceMapping?.minutes || 0)
-
-    if (!appointmentTime || !bedId || minutes <= 0) {
-      throw new Error('Wix booking could not be mapped yet. Add the service to WIX_SERVICE_BOOKING_MAP with bedId and minutes.')
-    }
-
-    const customer = await findOrCreateWixCustomer(wixBookingPayload)
-    const bookingPayload = {
-      customer_id: customer?.id || null,
-      customer_name: customer?.name || wixBookingPayload.wix_customer_name || wixBookingPayload.customer_name || 'Wix Customer',
-      customer_phone: customer?.phone || wixBookingPayload.wix_customer_phone || wixBookingPayload.customer_phone || null,
-      customer_email: customer?.email || wixBookingPayload.wix_customer_email || wixBookingPayload.customer_email || null,
-      bed_id: Number(bedId),
-      minutes,
-      appointment_time: new Date(appointmentTime).toISOString(),
-      status: wixBookingPayload.status || 'booked',
-      source: 'wix',
-      booking_source: 'wix',
-      wix_booking_id: wixBookingPayload.wix_booking_id,
-      wix_status: wixBookingPayload.wix_status || wixBookingPayload.status || null,
-      wix_service_name: serviceName || null,
-      wix_customer_name: wixBookingPayload.wix_customer_name || wixBookingPayload.customer_name || customer?.name || null,
-      wix_customer_email: wixBookingPayload.wix_customer_email || wixBookingPayload.customer_email || customer?.email || null,
-      wix_customer_phone: wixBookingPayload.wix_customer_phone || wixBookingPayload.customer_phone || customer?.phone || null,
-      last_wix_sync_at: new Date().toISOString()
-    }
-
-    const { data: existingBooking, error: lookupError } = await supabase
-      .from('Bookings')
-      .select('id,booking_source')
-      .eq('wix_booking_id', wixBookingPayload.wix_booking_id)
-      .maybeSingle()
-
-    if (lookupError) throw lookupError
-
-    if (existingBooking) {
-      if (existingBooking.booking_source && existingBooking.booking_source !== 'wix') {
-        throw new Error('Matched booking is not a Wix booking. Refusing to update dashboard-created booking.')
-      }
-      const { data, error } = await supabase
-        .from('Bookings')
-        .update(bookingPayload)
-        .eq('id', existingBooking.id)
-        .select()
-        .single()
-      if (error) throw error
-      return data
-    }
-
-    const { data, error } = await supabase
-      .from('Bookings')
-      .insert(bookingPayload)
-      .select()
-      .single()
-
-    if (error) throw error
-    return data
-  }
-
   async function createShopTestBookingFromModal() {
     if (!requireStaffSignIn()) return
 
@@ -2087,8 +1936,7 @@ function App() {
       minutes_deducted: true,
       appointment_time: appointmentDateTime.toISOString(),
       status: 'booked',
-      source: 'shop_test',
-      booking_source: 'dashboard'
+      source: 'shop_test'
     })
 
     if (error) {
@@ -2175,8 +2023,7 @@ function App() {
       minutes_deducted: isInternalShopTest,
       appointment_time: appointmentDateTime.toISOString(),
       status: 'booked',
-      source: isInternalShopTest ? 'shop_test' : 'calendar',
-      booking_source: 'dashboard'
+      source: isInternalShopTest ? 'shop_test' : 'calendar'
     })
     setBookingSaving(false)
 
@@ -2231,8 +2078,7 @@ function App() {
       minutes_deducted: false,
       appointment_time: appointmentDateTime.toISOString(),
       status: 'booked',
-      source: `staff_free:${member.id}`,
-      booking_source: 'dashboard'
+      source: `staff_free:${member.id}`
     })
 
     if (error) {
@@ -2320,7 +2166,6 @@ function App() {
       minutes: Number(selectedMinutes),
       appointment_time: appointmentDateTime.toISOString(),
       source: isInternalShopTest ? 'shop_test' : modalBooking.source || 'calendar',
-      booking_source: modalBooking.booking_source || 'dashboard',
       minutes_deducted: isInternalShopTest ? true : modalBooking.minutes_deducted
     }).eq('id', modalBooking.id)
     setBookingSaving(false)
@@ -2964,26 +2809,10 @@ function App() {
     return customers.find((customer) => customer.id === Number(selectedManagerCustomerId))
   }
 
-  function splitCustomerName(customer) {
-    const nameParts = String(customer?.name || '').trim().split(/\s+/).filter(Boolean)
-    const fallbackFirst = nameParts[0] || ''
-    const fallbackLast = nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''
-    return {
-      firstName: customer?.first_name || fallbackFirst,
-      lastName: customer?.last_name || fallbackLast
-    }
-  }
-
   function getFilteredManagerCustomers() {
     if (!customerManagerSearch.trim()) return []
     const query = customerManagerSearch.toLowerCase()
-    return customers.filter((customer) => {
-      const searchable = [customer.name, customer.first_name, customer.last_name, customer.phone, customer.email, customer.postcode]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return searchable.includes(query)
-    })
+    return customers.filter((customer) => customer.name?.toLowerCase().includes(query) || customer.phone?.toLowerCase().includes(query) || customer.email?.toLowerCase().includes(query))
   }
 
   async function createCustomerLog(customer, action, details) {
@@ -3004,18 +2833,12 @@ function App() {
   }
 
   function selectManagerCustomer(customer) {
-    const splitName = splitCustomerName(customer)
     setSelectedManagerCustomerId(String(customer.id))
     setCustomerManagerSearch(customer.name || '')
     setManagerName(customer.name || '')
-    setManagerFirstName(splitName.firstName)
-    setManagerLastName(splitName.lastName)
     setManagerPhone(customer.phone || '')
     setManagerEmail(customer.email || '')
     setManagerDateOfBirth(customer.date_of_birth || '')
-    setManagerAddress(customer.address || '')
-    setManagerPostcode(customer.postcode || '')
-    setManagerGender(customer.gender || '')
     setManagerNotes(customer.notes || '')
     setManagerStandardBalance(Number(customer.standard_minutes_balance || 0))
     setManagerHybridBalance(Number(customer.hybrid_minutes_balance || 0))
@@ -3030,14 +2853,9 @@ function App() {
     setSelectedManagerCustomerId('')
     setCustomerManagerSearch('')
     setManagerName('')
-    setManagerFirstName('')
-    setManagerLastName('')
     setManagerPhone('')
     setManagerEmail('')
     setManagerDateOfBirth('')
-    setManagerAddress('')
-    setManagerPostcode('')
-    setManagerGender('')
     setManagerNotes('')
     setManagerStandardBalance(0)
     setManagerHybridBalance(0)
@@ -3055,9 +2873,6 @@ function App() {
     setAddCustomerPhone('')
     setAddCustomerEmail('')
     setAddCustomerDateOfBirth('')
-    setAddCustomerAddress('')
-    setAddCustomerPostcode('')
-    setAddCustomerGender('')
     setAddCustomerNotes('')
     setAddCustomerStandardMinutes('')
     setAddCustomerHybridMinutes('')
@@ -3162,14 +2977,11 @@ function App() {
   }
 
   function mapCustomerImportRow(row, rowNumber) {
-    const firstName = String(getImportCell(row, ['First name', 'first_name', 'firstname', 'Forename']) || '').trim()
-    const lastName = String(getImportCell(row, ['Last name', 'last_name', 'lastname', 'Surname']) || '').trim()
-    const address = String(getImportCell(row, ['Address', 'address']) || '').trim()
-    const postcode = String(getImportCell(row, ['Postcode', 'postcode', 'post code']) || '').trim()
-    const gender = String(getImportCell(row, ['Gender', 'gender']) || '').trim()
-    const phone = String(getImportCell(row, ['Phone', 'phone number', 'mobile', 'MobileTel']) || '').trim()
-    const email = String(getImportCell(row, ['Email', 'email address', 'EmailAddress']) || '').trim().toLowerCase()
-    const dob = parseImportDate(getImportCell(row, ['DOB', 'Date of birth', 'date_of_birth', 'dob', 'DateOfBirth']))
+    const firstName = String(getImportCell(row, ['First name', 'first_name', 'firstname']) || '').trim()
+    const lastName = String(getImportCell(row, ['Last name', 'last_name', 'lastname']) || '').trim()
+    const phone = String(getImportCell(row, ['Phone', 'phone number', 'mobile']) || '').trim()
+    const email = String(getImportCell(row, ['Email', 'email address']) || '').trim().toLowerCase()
+    const dob = parseImportDate(getImportCell(row, ['DOB', 'Date of birth', 'date_of_birth', 'dob']))
     const standardBalance = parseImportNumber(getImportCell(row, ['Standard minutes balance', 'standard_minutes_balance', 'standard minutes']))
     const hybridBalance = parseImportNumber(getImportCell(row, ['Hybrid minutes balance', 'hybrid_minutes_balance', 'hybrid minutes']))
     const termsAccepted = parseImportBoolean(getImportCell(row, ['Salon terms accepted', 'terms_accepted', 'salon_terms_accepted']), false)
@@ -3192,22 +3004,16 @@ function App() {
       action: invalidReasons.length > 0 ? 'skip' : 'insert',
       payload: {
         name: name || phone,
-        first_name: firstName || null,
-        last_name: lastName || null,
         phone: phone || null,
         email: email || null,
         date_of_birth: dob,
-        address: address || null,
-        postcode: postcode || null,
-        gender: gender || null,
         notes: notes || null,
         minutes_balance: 0,
         standard_minutes_balance: standardBalance,
         hybrid_minutes_balance: hybridBalance,
         terms_accepted: termsAccepted,
         id_checked: idChecked,
-        is_active: active,
-        customer_source: 'dashboard'
+        is_active: active
       }
     }
   }
@@ -3347,9 +3153,6 @@ function App() {
 
     const firstName = addCustomerFirstName.trim()
     const lastName = addCustomerLastName.trim()
-    const address = addCustomerAddress.trim()
-    const postcode = addCustomerPostcode.trim()
-    const gender = addCustomerGender.trim()
     const phone = addCustomerPhone.trim()
     const email = addCustomerEmail.trim()
     const fullName = `${firstName} ${lastName}`.trim()
@@ -3395,20 +3198,14 @@ function App() {
     setAddCustomerSaving(true)
     const { data, error } = await supabase.from('Customers').insert({
       name: fullName || phone,
-      first_name: firstName || null,
-      last_name: lastName || null,
       phone: phone || null,
       email: email || null,
       date_of_birth: addCustomerDateOfBirth || null,
-      address: address || null,
-      postcode: postcode || null,
-      gender: gender || null,
       notes: notes || null,
       minutes_balance: 0,
       standard_minutes_balance: standardMinutes,
       hybrid_minutes_balance: hybridMinutes,
-      is_active: addCustomerActive,
-      customer_source: 'dashboard'
+      is_active: addCustomerActive
     }).select().single()
     setAddCustomerSaving(false)
 
@@ -3525,10 +3322,7 @@ function App() {
       alert('Please select a customer first.')
       return
     }
-    const firstName = managerFirstName.trim()
-    const lastName = managerLastName.trim()
-    const fullName = `${firstName} ${lastName}`.trim() || managerName.trim()
-    if (!fullName) {
+    if (!managerName.trim()) {
       alert('Customer name cannot be blank.')
       return
     }
@@ -3547,15 +3341,10 @@ function App() {
     }
 
     const { error } = await supabase.from('Customers').update({
-      name: fullName,
-      first_name: firstName || null,
-      last_name: lastName || null,
+      name: managerName.trim(),
       phone: managerPhone || null,
       email: managerEmail || null,
       date_of_birth: managerDateOfBirth || null,
-      address: managerAddress || null,
-      postcode: managerPostcode || null,
-      gender: managerGender || null,
       notes: managerNotes || null,
       standard_minutes_balance: newStandard,
       hybrid_minutes_balance: newHybrid,
@@ -4200,9 +3989,6 @@ function App() {
               <input placeholder="Phone number" value={addCustomerPhone} onChange={(e) => setAddCustomerPhone(e.target.value)} style={{ padding: '10px' }} />
               <input placeholder="Email" value={addCustomerEmail} onChange={(e) => setAddCustomerEmail(e.target.value)} style={{ padding: '10px' }} />
               <input type="date" value={addCustomerDateOfBirth} onChange={(e) => setAddCustomerDateOfBirth(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Address" value={addCustomerAddress} onChange={(e) => setAddCustomerAddress(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Postcode" value={addCustomerPostcode} onChange={(e) => setAddCustomerPostcode(e.target.value)} style={{ padding: '10px' }} />
-              <input placeholder="Gender" value={addCustomerGender} onChange={(e) => setAddCustomerGender(e.target.value)} style={{ padding: '10px' }} />
               <input type="number" min="0" placeholder="Standard minutes balance" value={addCustomerStandardMinutes} onChange={(e) => setAddCustomerStandardMinutes(e.target.value)} style={{ padding: '10px' }} />
               <input type="number" min="0" placeholder="Hybrid minutes balance" value={addCustomerHybridMinutes} onChange={(e) => setAddCustomerHybridMinutes(e.target.value)} style={{ padding: '10px' }} />
             </div>
@@ -4235,14 +4021,10 @@ function App() {
         {selectedCustomer && (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '15px' }}>
-              <div><label>First name</label><input value={managerFirstName} onChange={(e) => setManagerFirstName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Last name</label><input value={managerLastName} onChange={(e) => setManagerLastName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
+              <div><label>Name</label><input value={managerName} onChange={(e) => setManagerName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Phone</label><input value={managerPhone} onChange={(e) => setManagerPhone(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Email</label><input value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Date of birth</label><input type="date" value={managerDateOfBirth} onChange={(e) => setManagerDateOfBirth(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Gender</label><input value={managerGender} onChange={(e) => setManagerGender(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Address</label><input value={managerAddress} onChange={(e) => setManagerAddress(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Postcode</label><input value={managerPostcode} onChange={(e) => setManagerPostcode(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             </div>
 
             <p style={{ color: managerDateOfBirth && calculateAge(managerDateOfBirth) < 18 ? '#ff7875' : '#aaa', fontWeight: managerDateOfBirth && calculateAge(managerDateOfBirth) < 18 ? 'bold' : 'normal' }}>
@@ -4980,7 +4762,7 @@ function App() {
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
               {upcomingBookings.map((booking) => (
                 <button key={booking.id} onClick={() => openBooking(booking)} style={{ background: getCalendarBookingColour(booking), color: 'white' }}>
-                  {isWixBooking(booking) ? 'Wix ' : ''}{new Date(booking.appointment_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} {booking.customer_name}
+                  {new Date(booking.appointment_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} {booking.customer_name}
                 </button>
               ))}
             </div>
@@ -5110,7 +4892,6 @@ function App() {
                         {booking ? (
                           <div>
                             <strong>{booking.customer_name}</strong><br />
-                            {isWixBooking(booking) && <><span style={{ display: 'inline-block', color: '#050505', background: '#d4a853', borderRadius: '6px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold', margin: '3px 0' }}>Wix</span><br /></>}
                             {booking.minutes} mins<br />
                             Blocked: {getTotalBlockMinutes(booking)} mins<br />
                             <span style={getStatusChipStyle(getPhase(booking))}>{getPhase(booking)}</span>
@@ -5184,10 +4965,6 @@ function App() {
                 <p>{getBedName(modalBooking.bed_id)}</p>
                 <p>Appointment: {new Date(modalBooking.appointment_time).toLocaleString('en-GB')}</p>
                 <p>Minutes: {modalBooking.minutes}</p>
-                <p>Booking source: <strong>{isWixBooking(modalBooking) ? 'Wix' : 'Dashboard'}</strong></p>
-                {modalBooking.wix_booking_id && <p>Wix booking ID: <strong>{modalBooking.wix_booking_id}</strong></p>}
-                {modalBooking.wix_status && <p>Wix status: <strong>{formatStatus(modalBooking.wix_status)}</strong></p>}
-                {modalBooking.wix_service_name && <p>Wix service: <strong>{modalBooking.wix_service_name}</strong></p>}
                 {isStaffFreeBooking(modalBooking) ? (
                   <p>Staff free booking</p>
                 ) : isShopTestBooking(modalBooking) ? (
