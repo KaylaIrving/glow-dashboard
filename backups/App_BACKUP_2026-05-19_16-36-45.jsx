@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { supabase } from './supabase'
 import './App.css'
 
@@ -65,7 +64,6 @@ function App() {
   const [paymentNotes, setPaymentNotes] = useState('')
   const [cashReceived, setCashReceived] = useState('')
   const [selectedMinutes, setSelectedMinutes] = useState(12)
-  const [shopTestFreeUse, setShopTestFreeUse] = useState(true)
   const [editTime, setEditTime] = useState('')
   const [editBedId, setEditBedId] = useState('')
   const [showBookingTopUp, setShowBookingTopUp] = useState(false)
@@ -106,13 +104,6 @@ function App() {
   const [addCustomerActive, setAddCustomerActive] = useState(true)
   const [addCustomerSaving, setAddCustomerSaving] = useState(false)
   const [addCustomerSuccess, setAddCustomerSuccess] = useState('')
-  const [showCustomerImport, setShowCustomerImport] = useState(false)
-  const [customerImportRows, setCustomerImportRows] = useState([])
-  const [customerImportSummary, setCustomerImportSummary] = useState(null)
-  const [customerImportLoading, setCustomerImportLoading] = useState(false)
-  const [customerImportSaving, setCustomerImportSaving] = useState(false)
-  const [customerImportProgress, setCustomerImportProgress] = useState('')
-  const [customerImportError, setCustomerImportError] = useState('')
   const [customerPayments, setCustomerPayments] = useState([])
   const [customerLogs, setCustomerLogs] = useState([])
 
@@ -350,80 +341,8 @@ function App() {
       showDataLoadWarning('Customers could not be loaded. Search and booking may be incomplete.', error)
       return
     }
-
-    const shopTestCustomer = (data || []).find((customer) => isShopTestCustomer(customer))
-    if (!shopTestCustomer) {
-      const ensuredShopTestCustomer = await ensureShopTestCustomer()
-      if (ensuredShopTestCustomer) {
-        const customersWithShopTest = [...(data || []), ensuredShopTestCustomer].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-        clearDataLoadWarning()
-        setCustomers(customersWithShopTest)
-        return
-      }
-    }
-
     clearDataLoadWarning()
     setCustomers(data || [])
-  }
-
-  async function ensureShopTestCustomer() {
-    const { data: existing, error: loadError } = await supabase
-      .from('Customers')
-      .select('*')
-      .ilike('name', 'Shop Test')
-      .limit(1)
-
-    if (loadError) {
-      showDataLoadWarning('Shop Test customer could not be checked. Please check the connection.', loadError)
-      console.log(loadError)
-      return null
-    }
-
-    if (existing && existing.length > 0) {
-      const customer = existing[0]
-      if (customer.is_active === false) {
-        const { data: updatedCustomer, error: updateError } = await supabase
-          .from('Customers')
-          .update({ is_active: true })
-          .eq('id', customer.id)
-          .select()
-          .single()
-
-        if (updateError) {
-          showDataLoadWarning('Shop Test customer exists but could not be activated.', updateError)
-          console.log(updateError)
-          return customer
-        }
-        return updatedCustomer
-      }
-      return customer
-    }
-
-    const { data: createdCustomer, error: createError } = await supabase
-      .from('Customers')
-      .insert({
-        name: 'Shop Test',
-        phone: null,
-        email: null,
-        date_of_birth: null,
-        notes: 'Internal shop test customer. Free/internal use only.',
-        minutes_balance: 0,
-        standard_minutes_balance: 0,
-        hybrid_minutes_balance: 0,
-        terms_accepted: true,
-        id_checked: true,
-        is_active: true
-      })
-      .select()
-      .single()
-
-    if (createError) {
-      showDataLoadWarning('Shop Test customer could not be created automatically.', createError)
-      console.log(createError)
-      return null
-    }
-
-    return createdCustomer
   }
 
   function getWeekStartDateString(date = new Date()) {
@@ -662,18 +581,14 @@ function App() {
   }
 
   function isShopTestCustomer(customer) {
-    return Boolean(customer?.is_internal) || String(customer?.name || '').trim().toLowerCase() === 'shop test'
-  }
-
-  function isInternalFreeUseSelected() {
-    return shopTestFreeUse && isShopTestCustomer(getSelectedCustomer())
+    return String(customer?.name || '').trim().toLowerCase() === 'shop test'
   }
 
   function getMinuteOptionsForBooking() {
     const customer = getSelectedCustomer()
     const includeShopTestMinutes = isShopTestCustomer(customer) || isShopTestBooking(modalBooking)
-    const start = includeShopTestMinutes ? 1 : 3
-    const end = includeShopTestMinutes ? 60 : 20
+    const start = includeShopTestMinutes ? 2 : 3
+    const end = 20
     return Array.from({ length: end - start + 1 }, (_, index) => index + start)
   }
 
@@ -704,7 +619,6 @@ function App() {
   }
 
   function customerHasEnoughMinutes(customer, minutes, bedId = null) {
-    if (isShopTestCustomer(customer)) return true
     return getUsableMinutesForBed(customer, bedId) >= Number(minutes || 0)
   }
 
@@ -2853,275 +2767,6 @@ function App() {
     setAddCustomerActive(true)
   }
 
-  function resetCustomerImport() {
-    setCustomerImportRows([])
-    setCustomerImportSummary(null)
-    setCustomerImportError('')
-    setCustomerImportProgress('')
-  }
-
-  function normalizeImportHeader(header) {
-    return String(header || '')
-      .trim()
-      .toLowerCase()
-      .replaceAll('_', ' ')
-      .replaceAll('-', ' ')
-      .replace(/\s+/g, ' ')
-  }
-
-  function getImportCell(row, aliases) {
-    const normalizedAliases = aliases.map(normalizeImportHeader)
-    const key = Object.keys(row || {}).find((header) => normalizedAliases.includes(normalizeImportHeader(header)))
-    return key ? row[key] : ''
-  }
-
-  function parseImportBoolean(value, defaultValue = false) {
-    if (typeof value === 'boolean') return value
-    const text = String(value ?? '').trim().toLowerCase()
-    if (!text) return defaultValue
-    if (['yes', 'y', 'true', '1', 'accepted', 'checked', 'active'].includes(text)) return true
-    if (['no', 'n', 'false', '0', 'not accepted', 'unchecked', 'inactive'].includes(text)) return false
-    return defaultValue
-  }
-
-  function parseImportDate(value) {
-    if (!value) return null
-    if (value instanceof Date && !Number.isNaN(value.getTime())) return formatLocalDate(value)
-    if (typeof value === 'number') {
-      const parsed = XLSX.SSF.parse_date_code(value)
-      if (!parsed) return null
-      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`
-    }
-
-    const text = String(value).trim()
-    if (!text) return null
-    const slashDate = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/)
-    if (slashDate) {
-      const day = slashDate[1].padStart(2, '0')
-      const month = slashDate[2].padStart(2, '0')
-      const year = slashDate[3].length === 2 ? `20${slashDate[3]}` : slashDate[3]
-      return `${year}-${month}-${day}`
-    }
-    const parsed = new Date(text)
-    if (Number.isNaN(parsed.getTime())) return null
-    return formatLocalDate(parsed)
-  }
-
-  function parseImportNumber(value) {
-    if (value === '' || value === null || value === undefined) return 0
-    const parsed = Number(String(value).replace(/[^\d.-]/g, ''))
-    return Number.isNaN(parsed) || parsed < 0 ? 0 : parsed
-  }
-
-  function parseCsvText(text) {
-    const rows = []
-    let row = []
-    let cell = ''
-    let quoted = false
-
-    for (let index = 0; index < text.length; index += 1) {
-      const char = text[index]
-      const nextChar = text[index + 1]
-      if (char === '"' && quoted && nextChar === '"') {
-        cell += '"'
-        index += 1
-      } else if (char === '"') {
-        quoted = !quoted
-      } else if (char === ',' && !quoted) {
-        row.push(cell)
-        cell = ''
-      } else if ((char === '\n' || char === '\r') && !quoted) {
-        if (char === '\r' && nextChar === '\n') index += 1
-        row.push(cell)
-        if (row.some((value) => String(value).trim() !== '')) rows.push(row)
-        row = []
-        cell = ''
-      } else {
-        cell += char
-      }
-    }
-
-    row.push(cell)
-    if (row.some((value) => String(value).trim() !== '')) rows.push(row)
-    const [headers = [], ...dataRows] = rows
-    return dataRows.map((dataRow) => headers.reduce((record, header, index) => {
-      record[header] = dataRow[index] ?? ''
-      return record
-    }, {}))
-  }
-
-  function mapCustomerImportRow(row, rowNumber) {
-    const firstName = String(getImportCell(row, ['First name', 'first_name', 'firstname']) || '').trim()
-    const lastName = String(getImportCell(row, ['Last name', 'last_name', 'lastname']) || '').trim()
-    const phone = String(getImportCell(row, ['Phone', 'phone number', 'mobile']) || '').trim()
-    const email = String(getImportCell(row, ['Email', 'email address']) || '').trim().toLowerCase()
-    const dob = parseImportDate(getImportCell(row, ['DOB', 'Date of birth', 'date_of_birth', 'dob']))
-    const standardBalance = parseImportNumber(getImportCell(row, ['Standard minutes balance', 'standard_minutes_balance', 'standard minutes']))
-    const hybridBalance = parseImportNumber(getImportCell(row, ['Hybrid minutes balance', 'hybrid_minutes_balance', 'hybrid minutes']))
-    const termsAccepted = parseImportBoolean(getImportCell(row, ['Salon terms accepted', 'terms_accepted', 'salon_terms_accepted']), false)
-    const idChecked = parseImportBoolean(getImportCell(row, ['ID checked', 'id_checked', 'id check']), false)
-    const notes = String(getImportCell(row, ['Notes', 'note']) || '').trim()
-    const active = parseImportBoolean(getImportCell(row, ['Active/inactive', 'active', 'is_active']), true)
-    const name = `${firstName} ${lastName}`.trim()
-    const invalidReasons = []
-
-    if (!firstName && !phone) invalidReasons.push('First name or phone is required')
-    if (standardBalance < 0 || hybridBalance < 0) invalidReasons.push('Minute balances cannot be negative')
-
-    return {
-      rowNumber,
-      firstName,
-      lastName,
-      duplicate: null,
-      duplicateReasons: [],
-      invalidReasons,
-      action: invalidReasons.length > 0 ? 'skip' : 'insert',
-      payload: {
-        name: name || phone,
-        phone: phone || null,
-        email: email || null,
-        date_of_birth: dob,
-        notes: notes || null,
-        minutes_balance: 0,
-        standard_minutes_balance: standardBalance,
-        hybrid_minutes_balance: hybridBalance,
-        terms_accepted: termsAccepted,
-        id_checked: idChecked,
-        is_active: active
-      }
-    }
-  }
-
-  async function handleCustomerImportFile(event) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    if (!requireStaffSignIn()) return
-
-    setCustomerImportLoading(true)
-    resetCustomerImport()
-    setCustomerImportProgress('Reading spreadsheet...')
-
-    try {
-      const extension = file.name.split('.').pop()?.toLowerCase()
-      let rawRows = []
-
-      if (extension === 'csv') {
-        rawRows = parseCsvText(await file.text())
-      } else if (['xlsx', 'xls'].includes(extension)) {
-        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-        rawRows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' })
-      } else {
-        throw new Error('Please upload a CSV or XLSX file.')
-      }
-
-      setCustomerImportProgress('Checking duplicates...')
-      const { data: existingCustomers, error } = await supabase
-        .from('Customers')
-        .select('id,name,phone,email,standard_minutes_balance,hybrid_minutes_balance,is_active')
-
-      if (error) throw error
-
-      const existingByPhone = new Map()
-      const existingByEmail = new Map()
-      ;(existingCustomers || []).forEach((customer) => {
-        if (customer.phone) existingByPhone.set(String(customer.phone).trim(), customer)
-        if (customer.email) existingByEmail.set(String(customer.email).trim().toLowerCase(), customer)
-      })
-
-      const mappedRows = rawRows.map((row, index) => mapCustomerImportRow(row, index + 2)).map((row) => {
-        const duplicateReasons = []
-        const phoneDuplicate = row.payload.phone ? existingByPhone.get(row.payload.phone) : null
-        const emailDuplicate = row.payload.email ? existingByEmail.get(row.payload.email) : null
-        const duplicate = phoneDuplicate || emailDuplicate || null
-        if (phoneDuplicate) duplicateReasons.push('phone')
-        if (emailDuplicate && emailDuplicate.id !== phoneDuplicate?.id) duplicateReasons.push('email')
-        if (duplicate) {
-          return {
-            ...row,
-            duplicate,
-            duplicateReasons,
-            action: row.invalidReasons.length > 0 ? 'skip' : 'skip'
-          }
-        }
-        return row
-      })
-
-      const summary = {
-        total: mappedRows.length,
-        newCount: mappedRows.filter((row) => !row.duplicate && row.invalidReasons.length === 0).length,
-        duplicateCount: mappedRows.filter((row) => row.duplicate).length,
-        invalidCount: mappedRows.filter((row) => row.invalidReasons.length > 0).length
-      }
-
-      setCustomerImportRows(mappedRows)
-      setCustomerImportSummary(summary)
-      setCustomerImportProgress('')
-    } catch (error) {
-      setCustomerImportError(error.message || 'Customer import failed to read the file.')
-      console.log(error)
-    } finally {
-      setCustomerImportLoading(false)
-    }
-  }
-
-  function updateCustomerImportAction(rowNumber, action) {
-    setCustomerImportRows((rows) => rows.map((row) => row.rowNumber === rowNumber ? { ...row, action } : row))
-  }
-
-  async function saveCustomerImport() {
-    if (!requireStaffSignIn()) return
-    if (customerImportSaving) return
-
-    const rowsToSave = customerImportRows.filter((row) => row.invalidReasons.length === 0 && row.action !== 'skip')
-    if (rowsToSave.length === 0) {
-      alert('No import rows selected to save.')
-      return
-    }
-
-    const confirmed = window.confirm(`Import ${rowsToSave.length} customer row(s)? Existing customers will only be changed where you selected "Update existing customer".`)
-    if (!confirmed) return
-
-    setCustomerImportSaving(true)
-    setCustomerImportProgress('Saving customers...')
-
-    try {
-      const newRows = rowsToSave.filter((row) => row.action === 'insert' || row.action === 'new').map((row) => row.payload)
-      const updateRows = rowsToSave.filter((row) => row.action === 'update' && row.duplicate?.id)
-      const batchSize = 100
-
-      for (let index = 0; index < newRows.length; index += batchSize) {
-        const batch = newRows.slice(index, index + batchSize)
-        setCustomerImportProgress(`Inserting ${Math.min(index + batch.length, newRows.length)} of ${newRows.length} new customers...`)
-        const { error } = await supabase.from('Customers').insert(batch)
-        if (error) throw error
-      }
-
-      for (let index = 0; index < updateRows.length; index += batchSize) {
-        const batch = updateRows.slice(index, index + batchSize)
-        setCustomerImportProgress(`Updating ${Math.min(index + batch.length, updateRows.length)} of ${updateRows.length} existing customers...`)
-        const results = await Promise.all(batch.map((row) => {
-          const { minutes_balance: _minutesBalance, ...updatePayload } = row.payload
-          return supabase.from('Customers').update(updatePayload).eq('id', row.duplicate.id)
-        }))
-        const failed = results.find((result) => result.error)
-        if (failed?.error) throw failed.error
-      }
-
-      await getCustomers()
-      setCustomerImportProgress('')
-      setCustomerImportSummary((summary) => summary ? { ...summary, savedCount: rowsToSave.length } : null)
-      alert('Customer import complete.')
-    } catch (error) {
-      setCustomerImportError(error.message || 'Customer import failed to save.')
-      showDataLoadWarning('Customer import failed to save. Please check the connection.', error)
-      console.log(error)
-    } finally {
-      setCustomerImportSaving(false)
-    }
-  }
-
   async function saveNewManagedCustomer() {
     if (!requireStaffSignIn()) return
 
@@ -3801,94 +3446,6 @@ function App() {
     )
   }
 
-  function renderCustomerImportPanel() {
-    if (!showCustomerImport) return null
-
-    return (
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '14px', marginBottom: '15px' }}>
-        <h3 style={{ marginTop: 0 }}>Import Customers</h3>
-        <p style={{ color: '#aaa', marginTop: 0 }}>
-          Upload CSV or XLSX with First name, Last name, Phone, Email, DOB, Standard minutes balance, Hybrid minutes balance, Salon terms accepted, ID checked, Notes, and Active/inactive.
-        </p>
-
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px' }}>
-          <input
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            onChange={handleCustomerImportFile}
-            disabled={customerImportLoading || customerImportSaving}
-            style={{ color: '#ddd' }}
-          />
-          <button type="button" onClick={resetCustomerImport} disabled={customerImportLoading || customerImportSaving}>Clear Import</button>
-        </div>
-
-        {customerImportLoading && <p style={{ color: '#d4a853', fontWeight: 'bold' }}>Reading import...</p>}
-        {customerImportProgress && <p style={{ color: '#d4a853', fontWeight: 'bold' }}>{customerImportProgress}</p>}
-        {customerImportError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{customerImportError}</p>}
-
-        {customerImportSummary && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-            <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px' }}><span>Total customers found</span><h3>{customerImportSummary.total}</h3></div>
-            <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px' }}><span>New customers</span><h3>{customerImportSummary.newCount}</h3></div>
-            <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px' }}><span>Duplicate customers</span><h3>{customerImportSummary.duplicateCount}</h3></div>
-            <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px' }}><span>Invalid rows</span><h3>{customerImportSummary.invalidCount}</h3></div>
-          </div>
-        )}
-
-        {customerImportRows.length > 0 && (
-          <>
-            <div style={{ maxHeight: '360px', overflowY: 'auto', border: '1px solid #333', borderRadius: '10px', marginBottom: '12px' }}>
-              {customerImportRows.map((row) => (
-                <div key={row.rowNumber} style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) minmax(160px, 240px)', gap: '10px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222', background: row.invalidReasons.length ? '#1f1010' : row.duplicate ? '#1f1a10' : '#111' }}>
-                  <div>
-                    <strong>{row.payload.name || 'Unnamed customer'}</strong>
-                    <br />
-                    <span style={{ color: '#aaa' }}>
-                      Row {row.rowNumber} — {row.payload.phone || 'No phone'} — {row.payload.email || 'No email'} — Standard {row.payload.standard_minutes_balance} / Hybrid {row.payload.hybrid_minutes_balance}
-                    </span>
-                    {row.duplicate && (
-                      <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>
-                        Customer already exists: {row.duplicate.name} ({row.duplicateReasons.join(', ')})
-                      </p>
-                    )}
-                    {row.invalidReasons.length > 0 && (
-                      <p style={{ color: '#ff7875', margin: '6px 0 0', fontWeight: 'bold' }}>
-                        Invalid: {row.invalidReasons.join(', ')}
-                      </p>
-                    )}
-                  </div>
-                  <select
-                    value={row.action}
-                    disabled={row.invalidReasons.length > 0 || customerImportSaving}
-                    onChange={(event) => updateCustomerImportAction(row.rowNumber, event.target.value)}
-                    style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-                  >
-                    {row.duplicate ? (
-                      <>
-                        <option value="skip">Skip</option>
-                        <option value="update">Update existing customer</option>
-                        <option value="new">Import as new</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="insert">Import as new</option>
-                        <option value="skip">Skip</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-              ))}
-            </div>
-
-            <button type="button" onClick={saveCustomerImport} disabled={customerImportSaving || customerImportLoading}>
-              {customerImportSaving ? 'Saving Import...' : 'Confirm Import'}
-            </button>
-          </>
-        )}
-      </div>
-    )
-  }
-
   function renderCustomerManagementPanel() {
     const selectedCustomer = getSelectedManagerCustomer()
     const filteredCustomers = getFilteredManagerCustomers()
@@ -3899,7 +3456,6 @@ function App() {
           <h2 style={{ margin: 0 }}>Customer Management</h2>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <button onClick={() => { setAddCustomerSuccess(''); setShowAddCustomerForm(!showAddCustomerForm) }}>{showAddCustomerForm ? 'Hide Add Customer' : 'Add New Customer'}</button>
-            <button onClick={() => setShowCustomerImport(!showCustomerImport)}>{showCustomerImport ? 'Hide Import' : 'Import Customers'}</button>
             {selectedCustomer && <button onClick={clearCustomerManager}>Clear</button>}
           </div>
         </div>
@@ -3932,8 +3488,6 @@ function App() {
             </div>
           </div>
         )}
-
-        {renderCustomerImportPanel()}
 
         <input placeholder="Search customer by name, phone or email..." value={customerManagerSearch} onChange={(e) => { setCustomerManagerSearch(e.target.value); setSelectedManagerCustomerId('') }} style={{ width: '100%', padding: '12px', marginBottom: '10px' }} />
 

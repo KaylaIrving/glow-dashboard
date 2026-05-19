@@ -65,7 +65,6 @@ function App() {
   const [paymentNotes, setPaymentNotes] = useState('')
   const [cashReceived, setCashReceived] = useState('')
   const [selectedMinutes, setSelectedMinutes] = useState(12)
-  const [shopTestFreeUse, setShopTestFreeUse] = useState(true)
   const [editTime, setEditTime] = useState('')
   const [editBedId, setEditBedId] = useState('')
   const [showBookingTopUp, setShowBookingTopUp] = useState(false)
@@ -350,80 +349,8 @@ function App() {
       showDataLoadWarning('Customers could not be loaded. Search and booking may be incomplete.', error)
       return
     }
-
-    const shopTestCustomer = (data || []).find((customer) => isShopTestCustomer(customer))
-    if (!shopTestCustomer) {
-      const ensuredShopTestCustomer = await ensureShopTestCustomer()
-      if (ensuredShopTestCustomer) {
-        const customersWithShopTest = [...(data || []), ensuredShopTestCustomer].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-        clearDataLoadWarning()
-        setCustomers(customersWithShopTest)
-        return
-      }
-    }
-
     clearDataLoadWarning()
     setCustomers(data || [])
-  }
-
-  async function ensureShopTestCustomer() {
-    const { data: existing, error: loadError } = await supabase
-      .from('Customers')
-      .select('*')
-      .ilike('name', 'Shop Test')
-      .limit(1)
-
-    if (loadError) {
-      showDataLoadWarning('Shop Test customer could not be checked. Please check the connection.', loadError)
-      console.log(loadError)
-      return null
-    }
-
-    if (existing && existing.length > 0) {
-      const customer = existing[0]
-      if (customer.is_active === false) {
-        const { data: updatedCustomer, error: updateError } = await supabase
-          .from('Customers')
-          .update({ is_active: true })
-          .eq('id', customer.id)
-          .select()
-          .single()
-
-        if (updateError) {
-          showDataLoadWarning('Shop Test customer exists but could not be activated.', updateError)
-          console.log(updateError)
-          return customer
-        }
-        return updatedCustomer
-      }
-      return customer
-    }
-
-    const { data: createdCustomer, error: createError } = await supabase
-      .from('Customers')
-      .insert({
-        name: 'Shop Test',
-        phone: null,
-        email: null,
-        date_of_birth: null,
-        notes: 'Internal shop test customer. Free/internal use only.',
-        minutes_balance: 0,
-        standard_minutes_balance: 0,
-        hybrid_minutes_balance: 0,
-        terms_accepted: true,
-        id_checked: true,
-        is_active: true
-      })
-      .select()
-      .single()
-
-    if (createError) {
-      showDataLoadWarning('Shop Test customer could not be created automatically.', createError)
-      console.log(createError)
-      return null
-    }
-
-    return createdCustomer
   }
 
   function getWeekStartDateString(date = new Date()) {
@@ -662,18 +589,14 @@ function App() {
   }
 
   function isShopTestCustomer(customer) {
-    return Boolean(customer?.is_internal) || String(customer?.name || '').trim().toLowerCase() === 'shop test'
-  }
-
-  function isInternalFreeUseSelected() {
-    return shopTestFreeUse && isShopTestCustomer(getSelectedCustomer())
+    return String(customer?.name || '').trim().toLowerCase() === 'shop test'
   }
 
   function getMinuteOptionsForBooking() {
     const customer = getSelectedCustomer()
     const includeShopTestMinutes = isShopTestCustomer(customer) || isShopTestBooking(modalBooking)
-    const start = includeShopTestMinutes ? 1 : 3
-    const end = includeShopTestMinutes ? 60 : 20
+    const start = includeShopTestMinutes ? 2 : 3
+    const end = 20
     return Array.from({ length: end - start + 1 }, (_, index) => index + start)
   }
 
@@ -704,7 +627,6 @@ function App() {
   }
 
   function customerHasEnoughMinutes(customer, minutes, bedId = null) {
-    if (isShopTestCustomer(customer)) return true
     return getUsableMinutesForBed(customer, bedId) >= Number(minutes || 0)
   }
 
