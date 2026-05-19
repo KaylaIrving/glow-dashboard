@@ -16,39 +16,6 @@ const LOW_STOCK_THRESHOLD = 5
 // Keep empty for now so Wix cannot silently guess the wrong bed/minutes.
 const WIX_SERVICE_BOOKING_MAP = {}
 
-const SPRAY_TAN_SERVICES = [
-  { name: 'Full Body', price: 30 },
-  { name: 'Express Tan', price: 35 },
-  { name: 'Face & Neck', price: 8 },
-  { name: 'Legs Only', price: 18 },
-  { name: 'Upper Body & Face', price: 22 }
-]
-
-const SPRAY_TAN_STATUSES = [
-  'Pending Approval',
-  'Approved',
-  'Deposit Pending',
-  'Deposit Paid',
-  'Completed',
-  'Cancelled'
-]
-
-const STAFF_SCHEDULE_TYPES = [
-  { value: 'shift', label: 'Shift' },
-  { value: 'spray_tan_available', label: 'Spray Tan Available' },
-  { value: 'holiday', label: 'Holiday' },
-  { value: 'time_off', label: 'Time Off' },
-  { value: 'shop_closed', label: 'Shop Closed' },
-  { value: 'training', label: 'Training' },
-  { value: 'other', label: 'Other' }
-]
-
-const STAFF_SERVICE_TYPES = [
-  { value: 'general', label: 'General' },
-  { value: 'sunbeds', label: 'Sunbeds' },
-  { value: 'spraytan', label: 'Spray Tan' }
-]
-
 const PRODUCT_CATEGORIES = [
   { value: 'sachets', label: 'Sachets' },
   { value: 'bottles', label: 'Bottles' },
@@ -87,7 +54,6 @@ function App() {
   const [products, setProducts] = useState([])
   const [currentTime, setCurrentTime] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()))
-  const [dashboardView, setDashboardView] = useState('sunbeds')
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalBooking, setModalBooking] = useState(null)
@@ -116,7 +82,6 @@ function App() {
   const [showManagerView, setShowManagerView] = useState(false)
   const [managerUnlocked, setManagerUnlocked] = useState(false)
   const [collapseStaffManagement, setCollapseStaffManagement] = useState(true)
-  const [collapseStaffCalendar, setCollapseStaffCalendar] = useState(true)
   const [collapseMaintenance, setCollapseMaintenance] = useState(true)
   const [collapseProducts, setCollapseProducts] = useState(true)
   const [collapseExports, setCollapseExports] = useState(true)
@@ -134,8 +99,6 @@ function App() {
   const [managerAddress, setManagerAddress] = useState('')
   const [managerPostcode, setManagerPostcode] = useState('')
   const [managerGender, setManagerGender] = useState('')
-  const [managerSprayTanNotes, setManagerSprayTanNotes] = useState('')
-  const [managerLastPatchTestDate, setManagerLastPatchTestDate] = useState('')
   const [managerNotes, setManagerNotes] = useState('')
   const [managerStandardBalance, setManagerStandardBalance] = useState(0)
   const [managerHybridBalance, setManagerHybridBalance] = useState(0)
@@ -209,21 +172,6 @@ function App() {
   const [staffAdjustmentId, setStaffAdjustmentId] = useState('')
   const [staffAdjustmentAmount, setStaffAdjustmentAmount] = useState('')
   const [staffAdjustmentReason, setStaffAdjustmentReason] = useState('')
-  const [staffSchedule, setStaffSchedule] = useState([])
-  const [staffScheduleLoadError, setStaffScheduleLoadError] = useState('')
-  const [staffScheduleSaving, setStaffScheduleSaving] = useState(false)
-  const [staffScheduleEditingId, setStaffScheduleEditingId] = useState('')
-  const [staffScheduleStaffId, setStaffScheduleStaffId] = useState('')
-  const [staffScheduleDate, setStaffScheduleDate] = useState(formatLocalDate(new Date()))
-  const [staffScheduleStartTime, setStaffScheduleStartTime] = useState('09:00')
-  const [staffScheduleEndTime, setStaffScheduleEndTime] = useState('17:00')
-  const [staffScheduleType, setStaffScheduleType] = useState('shift')
-  const [staffScheduleServiceType, setStaffScheduleServiceType] = useState('general')
-  const [staffScheduleNotes, setStaffScheduleNotes] = useState('')
-  const [staffScheduleAvailable, setStaffScheduleAvailable] = useState(true)
-  const [staffScheduleFilterStaffId, setStaffScheduleFilterStaffId] = useState('')
-  const [staffScheduleFilterType, setStaffScheduleFilterType] = useState('')
-  const [staffScheduleFilterServiceType, setStaffScheduleFilterServiceType] = useState('')
 
   const [productLoadError, setProductLoadError] = useState('')
   const [productCart, setProductCart] = useState([])
@@ -254,7 +202,6 @@ function App() {
     getCustomers()
     getStaff()
     getProducts()
-    getStaffSchedule()
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
@@ -267,7 +214,6 @@ function App() {
     getDailyTakings()
     getCashUpForSelectedDate()
     getFloatMovements()
-    getStaffSchedule()
   }, [selectedDate])
 
   const dailyTakingsSummary = useMemo(() => {
@@ -337,26 +283,6 @@ function App() {
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
-  }
-
-  function getWeekDates(dateString = selectedDate) {
-    const start = new Date(`${dateString}T00:00:00`)
-    const day = start.getDay()
-    const diff = day === 0 ? -6 : 1 - day
-    start.setDate(start.getDate() + diff)
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(start)
-      date.setDate(start.getDate() + index)
-      return formatLocalDate(date)
-    })
-  }
-
-  function getStaffScheduleTypeLabel(type) {
-    return STAFF_SCHEDULE_TYPES.find((item) => item.value === type)?.label || formatStatus(type)
-  }
-
-  function getStaffServiceTypeLabel(type) {
-    return STAFF_SERVICE_TYPES.find((item) => item.value === type)?.label || formatStatus(type)
   }
 
   function formatStatus(text) {
@@ -573,148 +499,9 @@ function App() {
     setStaff(resetStaff)
   }
 
-  async function getStaffSchedule() {
-    const weekDates = getWeekDates(selectedDate)
-    const { data, error } = await supabase
-      .from('StaffSchedule')
-      .select('*')
-      .gte('schedule_date', weekDates[0])
-      .lte('schedule_date', weekDates[6])
-      .order('schedule_date', { ascending: true })
-      .order('start_time', { ascending: true })
-
-    if (error) {
-      setStaffScheduleLoadError(error.message || 'Could not load StaffSchedule table.')
-      setStaffSchedule([])
-      showDataLoadWarning('Staff Calendar could not be loaded. Check the StaffSchedule table.', error)
-      return
-    }
-
-    setStaffScheduleLoadError('')
-    setStaffSchedule(data || [])
-  }
-
   async function createStaffLog(member, action, details) {
     if (!member || String(member.id).startsWith('default-')) return
     await supabase.from('StaffLogs').insert({ staff_id: member.id, staff_name: member.name, action, details })
-  }
-
-  function clearStaffScheduleForm() {
-    setStaffScheduleEditingId('')
-    setStaffScheduleStaffId('')
-    setStaffScheduleDate(selectedDate)
-    setStaffScheduleStartTime('09:00')
-    setStaffScheduleEndTime('17:00')
-    setStaffScheduleType('shift')
-    setStaffScheduleServiceType('general')
-    setStaffScheduleNotes('')
-    setStaffScheduleAvailable(true)
-  }
-
-  function editStaffScheduleEntry(entry) {
-    setStaffScheduleEditingId(String(entry.id))
-    setStaffScheduleStaffId(entry.staff_id ? String(entry.staff_id) : '')
-    setStaffScheduleDate(entry.schedule_date || selectedDate)
-    setStaffScheduleStartTime(entry.start_time || '09:00')
-    setStaffScheduleEndTime(entry.end_time || '17:00')
-    setStaffScheduleType(entry.schedule_type || 'shift')
-    setStaffScheduleServiceType(entry.service_type || 'general')
-    setStaffScheduleNotes(entry.notes || '')
-    setStaffScheduleAvailable(entry.is_available !== false)
-  }
-
-  function getFilteredStaffSchedule() {
-    return staffSchedule.filter((entry) => {
-      if (staffScheduleFilterStaffId && String(entry.staff_id) !== String(staffScheduleFilterStaffId)) return false
-      if (staffScheduleFilterType && entry.schedule_type !== staffScheduleFilterType) return false
-      if (staffScheduleFilterServiceType && entry.service_type !== staffScheduleFilterServiceType) return false
-      return true
-    })
-  }
-
-  function getShopClosuresForSelectedDate() {
-    return staffSchedule.filter((entry) => entry.schedule_date === selectedDate && entry.schedule_type === 'shop_closed')
-  }
-
-  function getCurrentStaffScheduleForSelectedDate() {
-    const currentStaff = getCurrentStaffUser()
-    if (!currentStaff) return []
-    return staffSchedule.filter((entry) => String(entry.staff_id) === String(currentStaff.id) && entry.schedule_date === selectedDate)
-  }
-
-  function getAvailableSprayTanArtists(date, time) {
-    // TODO Spray tan approvals: use this helper when assigning/approving spray tan bookings.
-    return staffSchedule.filter((entry) => {
-      if (entry.schedule_date !== date) return false
-      if (entry.service_type !== 'spraytan') return false
-      if (!['spray_tan_available', 'shift'].includes(entry.schedule_type)) return false
-      if (entry.is_available === false) return false
-      if (time && entry.start_time && entry.end_time) return entry.start_time <= time && entry.end_time >= time
-      return true
-    })
-  }
-
-  async function saveStaffScheduleEntry() {
-    if (!requireStaffSignIn()) return
-    if (!showManagerView && !requireManagerAccess('Manager PIN required to edit Staff Calendar:')) return
-
-    if (!staffScheduleDate) {
-      alert('Choose a schedule date.')
-      return
-    }
-
-    if (staffScheduleType !== 'shop_closed' && !staffScheduleStaffId) {
-      alert('Choose a staff member for this schedule entry.')
-      return
-    }
-
-    const selectedMember = staff.find((member) => String(member.id) === String(staffScheduleStaffId))
-    const payload = {
-      staff_id: staffScheduleType === 'shop_closed' ? null : Number(staffScheduleStaffId),
-      staff_name: staffScheduleType === 'shop_closed' ? 'Shop Closed' : selectedMember?.name || '',
-      schedule_date: staffScheduleDate,
-      start_time: staffScheduleStartTime || null,
-      end_time: staffScheduleEndTime || null,
-      schedule_type: staffScheduleType,
-      service_type: staffScheduleServiceType,
-      notes: staffScheduleNotes || null,
-      is_available: staffScheduleAvailable
-    }
-
-    setStaffScheduleSaving(true)
-    const query = staffScheduleEditingId
-      ? supabase.from('StaffSchedule').update(payload).eq('id', staffScheduleEditingId)
-      : supabase.from('StaffSchedule').insert(payload)
-    const { error } = await query
-    setStaffScheduleSaving(false)
-
-    if (error) {
-      alert('Staff Calendar entry was not saved. Please check the connection and StaffSchedule table.')
-      showDataLoadWarning('Staff Calendar entry failed to save.', error)
-      console.log(error)
-      return
-    }
-
-    clearStaffScheduleForm()
-    await getStaffSchedule()
-  }
-
-  async function deleteStaffScheduleEntry(entry) {
-    if (!requireStaffSignIn()) return
-    if (!showManagerView && !requireManagerAccess('Manager PIN required to delete Staff Calendar entries:')) return
-    const confirmed = window.confirm(`Delete schedule entry for ${entry.staff_name || 'the shop'} on ${entry.schedule_date}?`)
-    if (!confirmed) return
-
-    const { error } = await supabase.from('StaffSchedule').delete().eq('id', entry.id)
-    if (error) {
-      alert('Staff Calendar entry was not deleted. Please check the connection.')
-      showDataLoadWarning('Staff Calendar delete failed.', error)
-      console.log(error)
-      return
-    }
-
-    if (String(staffScheduleEditingId) === String(entry.id)) clearStaffScheduleForm()
-    await getStaffSchedule()
   }
 
   async function getProducts() {
@@ -1761,7 +1548,6 @@ function App() {
     const now = currentTime
     const soon = new Date(now.getTime() + 20 * 60000)
     return bookings.filter((booking) => {
-      if (!isSunbedBooking(booking)) return false
       if (!booking.appointment_time) return false
       if (['completed', 'no_show', 'force_stopped'].includes(booking.status)) return false
       const appointmentTime = new Date(booking.appointment_time)
@@ -1978,55 +1764,8 @@ function App() {
     return new Date(`${selectedDate}T${time}`)
   }
 
-  function isSprayTanBooking(booking) {
-    return String(booking?.booking_type || 'sunbed').toLowerCase() === 'spraytan'
-  }
-
-  function isSunbedBooking(booking) {
-    return !isSprayTanBooking(booking)
-  }
-
   function getBookingsForSelectedDate() {
-    return bookings.filter((booking) => isSunbedBooking(booking) && booking.appointment_time && formatLocalDate(new Date(booking.appointment_time)) === selectedDate)
-  }
-
-  function getSprayTanBookingsForSelectedDate() {
-    return bookings.filter((booking) => isSprayTanBooking(booking) && booking.appointment_time && formatLocalDate(new Date(booking.appointment_time)) === selectedDate)
-  }
-
-  function getSprayTanServicePrice(serviceName) {
-    return SPRAY_TAN_SERVICES.find((service) => service.name === serviceName)?.price || 0
-  }
-
-  function getSprayTanStatusLabel(booking) {
-    const status = getBookingStatusKey(booking)
-    if (status === 'completed') return 'Completed'
-    if (status === 'cancelled' || status === 'canceled') return 'Cancelled'
-    if (String(booking?.approval_status || '').toLowerCase() === 'pending') return 'Pending Approval'
-    if (String(booking?.deposit_status || '').toLowerCase() === 'paid') return 'Deposit Paid'
-    if (Number(booking?.deposit_required || 0) > Number(booking?.deposit_paid || 0)) return 'Deposit Pending'
-    return 'Approved'
-  }
-
-  function getSprayTanStatusStyle(label) {
-    const colours = {
-      'Pending Approval': '#8a6420',
-      Approved: '#2f7a4b',
-      'Deposit Pending': '#b56a22',
-      'Deposit Paid': '#5a2f7d',
-      Completed: '#2f7a4b',
-      Cancelled: '#7a1f2a'
-    }
-    return {
-      display: 'inline-block',
-      background: colours[label] || '#2f2f2f',
-      color: 'white',
-      border: '1px solid rgba(255,255,255,0.16)',
-      borderRadius: '8px',
-      padding: '4px 9px',
-      fontWeight: 'bold',
-      fontSize: '12px'
-    }
+    return bookings.filter((booking) => booking.appointment_time && formatLocalDate(new Date(booking.appointment_time)) === selectedDate)
   }
 
   function getBookingStatusKey(booking) {
@@ -2045,7 +1784,6 @@ function App() {
     const liveStatuses = ['undressing', 'running', 'cooldown', 'time_sent', 'sent', 'active', 'customer_started', 'waiting_to_start', 'in_use']
 
     return (rows || []).find((booking) => {
-      if (!isSunbedBooking(booking)) return false
       if (booking.id === excludeBookingId) return false
       if (Number(booking.bed_id) !== Number(bedId)) return false
       if (isFinishedBookingStatus(booking)) return false
@@ -2144,7 +1882,6 @@ function App() {
 
   function doesBedOverlapBlockedTime(bedId, newStart, newEnd, ignoreBookingId = null, activeOnly = false) {
     return bookings.some((booking) => {
-      if (!isSunbedBooking(booking)) return false
       if (booking.id === ignoreBookingId) return false
       if (Number(booking.bed_id) !== Number(bedId)) return false
       if (activeOnly ? !isBedLocked(booking) : !isBlockingBookingStatus(booking)) return false
@@ -2181,7 +1918,6 @@ function App() {
     const now = new Date()
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000)
     return bookings.some((booking) => {
-      if (!isSunbedBooking(booking)) return false
       if (booking.id === ignoreBookingId) return false
       if (booking.customer_id !== Number(customerId)) return false
       if (booking.status === 'no_show') return false
@@ -2925,7 +2661,6 @@ function App() {
 
   async function autoCompleteFinishedSessions() {
     for (const booking of bookings) {
-      if (!isSunbedBooking(booking)) continue
       if (booking.booking_end && new Date(booking.booking_end) <= currentTime && !['completed', 'force_stopped', 'no_show'].includes(booking.status)) {
         const runtimeUpdated = await addRuntimeHoursForBooking(booking)
         if (!runtimeUpdated) return
@@ -2946,11 +2681,10 @@ function App() {
 
   function getBookingForBed(bedId) {
     const now = currentTime
-    const lockedBooking = bookings.find((booking) => isSunbedBooking(booking) && Number(booking.bed_id) === Number(bedId) && isBedLocked(booking))
+    const lockedBooking = bookings.find((booking) => Number(booking.bed_id) === Number(bedId) && isBedLocked(booking))
     if (lockedBooking) return lockedBooking
 
     return bookings.find((booking) => {
-      if (!isSunbedBooking(booking)) return false
       if (booking.bed_id !== bedId) return false
       if (isFinishedBookingStatus(booking)) return false
 
@@ -3282,8 +3016,6 @@ function App() {
     setManagerAddress(customer.address || '')
     setManagerPostcode(customer.postcode || '')
     setManagerGender(customer.gender || '')
-    setManagerSprayTanNotes(customer.spraytan_notes || '')
-    setManagerLastPatchTestDate(customer.last_patch_test_date ? formatLocalDate(new Date(customer.last_patch_test_date)) : '')
     setManagerNotes(customer.notes || '')
     setManagerStandardBalance(Number(customer.standard_minutes_balance || 0))
     setManagerHybridBalance(Number(customer.hybrid_minutes_balance || 0))
@@ -3306,8 +3038,6 @@ function App() {
     setManagerAddress('')
     setManagerPostcode('')
     setManagerGender('')
-    setManagerSprayTanNotes('')
-    setManagerLastPatchTestDate('')
     setManagerNotes('')
     setManagerStandardBalance(0)
     setManagerHybridBalance(0)
@@ -3826,8 +3556,6 @@ function App() {
       address: managerAddress || null,
       postcode: managerPostcode || null,
       gender: managerGender || null,
-      spraytan_notes: managerSprayTanNotes || null,
-      last_patch_test_date: managerLastPatchTestDate || null,
       notes: managerNotes || null,
       standard_minutes_balance: newStandard,
       hybrid_minutes_balance: newHybrid,
@@ -4515,7 +4243,6 @@ function App() {
               <div><label>Gender</label><input value={managerGender} onChange={(e) => setManagerGender(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Address</label><input value={managerAddress} onChange={(e) => setManagerAddress(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Postcode</label><input value={managerPostcode} onChange={(e) => setManagerPostcode(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-              <div><label>Last patch test date</label><input type="date" value={managerLastPatchTestDate} onChange={(e) => setManagerLastPatchTestDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             </div>
 
             <p style={{ color: managerDateOfBirth && calculateAge(managerDateOfBirth) < 18 ? '#ff7875' : '#aaa', fontWeight: managerDateOfBirth && calculateAge(managerDateOfBirth) < 18 ? 'bold' : 'normal' }}>
@@ -4547,11 +4274,6 @@ function App() {
             <div style={{ marginBottom: '15px' }}>
               <label>Notes</label>
               <textarea value={managerNotes} onChange={(e) => setManagerNotes(e.target.value)} style={{ width: '100%', minHeight: '80px', padding: '10px', marginTop: '5px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '12px', fontFamily: 'inherit' }} />
-            </div>
-
-            <div style={{ marginBottom: '15px' }}>
-              <label>Spray tan notes</label>
-              <textarea value={managerSprayTanNotes} onChange={(e) => setManagerSprayTanNotes(e.target.value)} style={{ width: '100%', minHeight: '80px', padding: '10px', marginTop: '5px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '12px', fontFamily: 'inherit' }} />
             </div>
 
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
@@ -5020,138 +4742,6 @@ function App() {
     )
   }
 
-  function renderStaffScheduleEntry(entry, showActions = false) {
-    return (
-      <div key={entry.id} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '10px', marginBottom: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <strong>{entry.staff_name || 'Shop'}</strong>
-          <span style={{ color: entry.is_available === false ? '#ff7875' : '#d4a853', fontWeight: 'bold' }}>
-            {entry.is_available === false ? 'Unavailable' : 'Available'}
-          </span>
-        </div>
-        <p style={{ margin: '6px 0', color: '#ddd' }}>
-          {entry.start_time || '--:--'} - {entry.end_time || '--:--'} · {getStaffScheduleTypeLabel(entry.schedule_type)} · {getStaffServiceTypeLabel(entry.service_type)}
-        </p>
-        {entry.notes && <p style={{ margin: '6px 0 0', color: '#aaa' }}>{entry.notes}</p>}
-        {showActions && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
-            <button onClick={() => editStaffScheduleEntry(entry)}>Edit</button>
-            <button onClick={() => deleteStaffScheduleEntry(entry)}>Delete</button>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  function renderStaffOwnSchedulePanel() {
-    const currentStaff = getCurrentStaffUser()
-    if (!currentStaff || showManagerView) return null
-    const entries = getCurrentStaffScheduleForSelectedDate()
-    if (entries.length === 0 && !staffScheduleLoadError) return null
-
-    return (
-      <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '14px', padding: '14px', marginBottom: '18px' }}>
-        <h3 style={{ marginTop: 0 }}>My Schedule Today</h3>
-        {staffScheduleLoadError ? (
-          <p style={{ color: '#ffcc66', marginBottom: 0 }}>Staff Calendar is not available yet.</p>
-        ) : entries.map((entry) => renderStaffScheduleEntry(entry, false))}
-      </div>
-    )
-  }
-
-  function renderStaffCalendarPanel() {
-    if (!showManagerView) return null
-
-    const weekDates = getWeekDates(selectedDate)
-    const filteredEntries = getFilteredStaffSchedule()
-    const sprayTanArtistCount = getAvailableSprayTanArtists(selectedDate).length
-
-    return renderCollapsibleSection(
-      'Staff Calendar',
-      collapseStaffCalendar,
-      setCollapseStaffCalendar,
-      <div>
-        {staffScheduleLoadError && <p style={{ color: '#ff7875' }}>{staffScheduleLoadError}</p>}
-
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '14px' }}>
-          <h3 style={{ marginTop: 0 }}>{staffScheduleEditingId ? 'Edit Schedule Entry' : 'Add Schedule Entry'}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-            <select value={staffScheduleStaffId} onChange={(e) => setStaffScheduleStaffId(e.target.value)} disabled={staffScheduleType === 'shop_closed'} style={{ padding: '10px' }}>
-              <option value="">Staff member</option>
-              {staff.filter((member) => member.is_active !== false).map((member) => (
-                <option key={member.id} value={member.id}>{member.name}</option>
-              ))}
-            </select>
-            <input type="date" value={staffScheduleDate} onChange={(e) => setStaffScheduleDate(e.target.value)} style={{ padding: '10px' }} />
-            <input type="time" value={staffScheduleStartTime} onChange={(e) => setStaffScheduleStartTime(e.target.value)} style={{ padding: '10px' }} />
-            <input type="time" value={staffScheduleEndTime} onChange={(e) => setStaffScheduleEndTime(e.target.value)} style={{ padding: '10px' }} />
-            <select value={staffScheduleType} onChange={(e) => setStaffScheduleType(e.target.value)} style={{ padding: '10px' }}>
-              {STAFF_SCHEDULE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-            <select value={staffScheduleServiceType} onChange={(e) => setStaffScheduleServiceType(e.target.value)} style={{ padding: '10px' }}>
-              {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-          </div>
-          <textarea
-            placeholder="Notes for this staff member/day"
-            value={staffScheduleNotes}
-            onChange={(e) => setStaffScheduleNotes(e.target.value)}
-            style={{ width: '100%', minHeight: '70px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box', fontFamily: 'inherit' }}
-          />
-          <label style={{ display: 'block', marginTop: '10px' }}>
-            <input type="checkbox" checked={staffScheduleAvailable} onChange={(e) => setStaffScheduleAvailable(e.target.checked)} style={{ marginRight: '8px' }} />
-            Available for this entry
-          </label>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
-            <button onClick={saveStaffScheduleEntry} disabled={staffScheduleSaving}>{staffScheduleSaving ? 'Saving...' : staffScheduleEditingId ? 'Save Entry' : 'Add Entry'}</button>
-            {staffScheduleEditingId && <button onClick={clearStaffScheduleForm}>Cancel Edit</button>}
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          <select value={staffScheduleFilterStaffId} onChange={(e) => setStaffScheduleFilterStaffId(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All staff</option>
-            {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-          </select>
-          <select value={staffScheduleFilterType} onChange={(e) => setStaffScheduleFilterType(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All schedule types</option>
-            {STAFF_SCHEDULE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-          </select>
-          <select value={staffScheduleFilterServiceType} onChange={(e) => setStaffScheduleFilterServiceType(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All service types</option>
-            {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-          </select>
-        </div>
-
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '14px', color: '#aaa' }}>
-          Spray tan artists available on selected date: <strong style={{ color: '#d4a853' }}>{sprayTanArtistCount}</strong>
-        </div>
-
-        <div style={{ marginBottom: '16px' }}>
-          <h3>Daily View</h3>
-          {filteredEntries.filter((entry) => entry.schedule_date === selectedDate).length === 0 ? (
-            <p style={{ color: '#aaa' }}>No schedule entries for this date.</p>
-          ) : filteredEntries.filter((entry) => entry.schedule_date === selectedDate).map((entry) => renderStaffScheduleEntry(entry, true))}
-        </div>
-
-        <h3>Weekly View</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
-          {weekDates.map((date) => {
-            const dayEntries = filteredEntries.filter((entry) => entry.schedule_date === date)
-            return (
-              <div key={date} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px' }}>
-                <strong>{new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</strong>
-                <div style={{ marginTop: '10px' }}>
-                  {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, true))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
-  }
-
   function renderStaffManagementPanel() {
     if (!showManagerView) return null
 
@@ -5371,110 +4961,11 @@ function App() {
     )
   }
 
-  function renderSprayTanCalendarView() {
-    const sprayTanBookings = getSprayTanBookingsForSelectedDate()
-      .slice()
-      .sort((a, b) => new Date(a.appointment_time) - new Date(b.appointment_time))
-
-    const timelineSlots = generateTimeSlots('09:00', '20:00').filter((_, index) => index % 3 === 0)
-
-    return (
-      <div className="spraytan-view">
-        <div className="calendar-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <div>
-            <h2 style={{ marginBottom: '6px' }}>Spray Tans</h2>
-            <p style={{ color: '#aaa', margin: 0 }}>Phase 1 calendar foundation. Wix sync, automation and artist availability will be connected later.</p>
-          </div>
-          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '18px' }}>
-          {SPRAY_TAN_SERVICES.map((service) => (
-            <div key={service.name} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }}>
-              <strong>{service.name}</strong>
-              <p style={{ color: '#d4a853', margin: '6px 0 0', fontWeight: 'bold' }}>£{service.price.toFixed(2)}</p>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '18px' }}>
-          {SPRAY_TAN_STATUSES.map((status) => (
-            <span key={status} style={getSprayTanStatusStyle(status)}>{status}</span>
-          ))}
-        </div>
-
-        <div style={{ background: '#1e1e1e', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
-          <div style={{ minWidth: '760px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '12px', padding: '0 0 10px', color: '#d4a853', fontWeight: 'bold' }}>
-              <span>Time</span>
-              <span>Appointments</span>
-            </div>
-
-            {timelineSlots.map((time) => {
-              const slotAppointments = sprayTanBookings.filter((booking) => getBookingStartTimeString(booking) === time)
-              return (
-                <div key={time} style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '12px', borderTop: '1px solid #333', padding: '10px 0', minHeight: '58px' }}>
-                  <strong>{time}</strong>
-                  <div style={{ display: 'grid', gap: '8px' }}>
-                    {slotAppointments.length === 0 ? (
-                      <span style={{ color: '#666' }}>No spray tan appointment</span>
-                    ) : slotAppointments.map((booking) => {
-                      const customer = getCustomerForBooking(booking)
-                      const serviceName = booking.spraytan_service || 'Spray tan service'
-                      const servicePrice = getSprayTanServicePrice(serviceName)
-                      const depositRequired = Number(booking.deposit_required || 0)
-                      const depositPaid = Number(booking.deposit_paid || 0)
-                      const remainingBalance = Math.max(0, depositRequired - depositPaid)
-                      const statusLabel = getSprayTanStatusLabel(booking)
-                      const lastPatchTestDate = customer?.last_patch_test_date || booking.patch_test_date
-
-                      return (
-                        <div key={booking.id} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                            <div>
-                              <strong>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
-                              <p style={{ margin: '6px 0', color: '#aaa' }}>
-                                {serviceName}{servicePrice ? ` - £${servicePrice.toFixed(2)}` : ''} · Artist: {booking.spraytan_artist || 'To assign'}
-                              </p>
-                            </div>
-                            <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', marginTop: '8px', color: '#ddd' }}>
-                            <span>Deposit required: <strong>£{depositRequired.toFixed(2)}</strong></span>
-                            <span>Deposit paid: <strong>£{depositPaid.toFixed(2)}</strong></span>
-                            <span>Remaining: <strong>£{remainingBalance.toFixed(2)}</strong></span>
-                          </div>
-                          <label style={{ display: 'block', marginTop: '10px', color: booking.patch_test_completed ? '#9ccfae' : '#ffcc66' }}>
-                            <input type="checkbox" checked={Boolean(booking.patch_test_completed)} readOnly style={{ marginRight: '8px' }} />
-                            Patch test completed
-                          </label>
-                          {!booking.patch_test_completed && <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>Patch test not completed.</p>}
-                          <p style={{ color: '#aaa', margin: '6px 0 0' }}>
-                            Last patch test: {lastPatchTestDate ? new Date(lastPatchTestDate).toLocaleDateString('en-GB') : 'Not recorded'}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '12px', padding: '12px', marginTop: '14px', color: '#aaa' }}>
-          Artist availability support placeholder. This phase only prepares the structure and display fields.
-        </div>
-      </div>
-    )
-  }
-
   const upcomingBookings = getUpcomingBookingsWithin20Minutes()
   const currentStaffUser = getCurrentStaffUser()
   const modalCustomer = modalBooking ? getCustomerForBooking(modalBooking) : null
   const modalPhase = modalBooking ? getPhase(modalBooking) : ''
   const modalStartBlocked = modalBooking ? isStartBlockedByLiveSession(modalBooking) : false
-  const selectedDateShopClosures = getShopClosuresForSelectedDate()
 
   return (
     <div className="glow-app-shell" style={{ padding: '24px', background: '#050505', minHeight: '100vh', color: 'white' }}>
@@ -5537,16 +5028,8 @@ function App() {
         </div>
       )}
 
-      {selectedDateShopClosures.length > 0 && (
-        <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,204,102,0.65)', borderRadius: '14px', padding: '12px 16px', color: '#ffcc66', fontWeight: 'bold', marginBottom: '18px' }}>
-          Shop closure note for {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}: {selectedDateShopClosures.map((entry) => entry.notes || 'Shop closed').join(' | ')}
-        </div>
-      )}
-
-      {renderStaffOwnSchedulePanel()}
       {showCustomerManagement && renderCustomerManagementPanel()}
       {!collapseCashUp && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
-      {showManagerView && renderStaffCalendarPanel()}
       {showManagerView && renderStaffManagementPanel()}
       {showManagerView && renderMaintenancePanel()}
       {showManagerView && renderProductsManagementPanel()}
@@ -5554,13 +5037,6 @@ function App() {
       {showManagerView && renderExportsPanel()}
       {showManagerView && renderDailyTakingsPanel()}
 
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '18px' }}>
-        <button onClick={() => setDashboardView('sunbeds')} style={{ background: dashboardView === 'sunbeds' ? '#d4a853' : '#111', color: dashboardView === 'sunbeds' ? '#050505' : 'white' }}>Sunbeds</button>
-        <button onClick={() => setDashboardView('spraytan')} style={{ background: dashboardView === 'spraytan' ? '#d4a853' : '#111', color: dashboardView === 'spraytan' ? '#050505' : 'white' }}>Spray Tans</button>
-      </div>
-
-      {dashboardView === 'sunbeds' && (
-        <>
       <h2 style={{ textAlign: 'center' }}>Sunbeds</h2>
 
       <div className="sunbeds-grid premium-sunbeds-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
@@ -5660,10 +5136,6 @@ function App() {
           </tbody>
         </table>
       </div>
-        </>
-      )}
-
-      {dashboardView === 'spraytan' && renderSprayTanCalendarView()}
 
       {modalOpen && (
         <div className="booking-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>

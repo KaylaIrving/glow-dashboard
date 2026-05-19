@@ -33,22 +33,6 @@ const SPRAY_TAN_STATUSES = [
   'Cancelled'
 ]
 
-const STAFF_SCHEDULE_TYPES = [
-  { value: 'shift', label: 'Shift' },
-  { value: 'spray_tan_available', label: 'Spray Tan Available' },
-  { value: 'holiday', label: 'Holiday' },
-  { value: 'time_off', label: 'Time Off' },
-  { value: 'shop_closed', label: 'Shop Closed' },
-  { value: 'training', label: 'Training' },
-  { value: 'other', label: 'Other' }
-]
-
-const STAFF_SERVICE_TYPES = [
-  { value: 'general', label: 'General' },
-  { value: 'sunbeds', label: 'Sunbeds' },
-  { value: 'spraytan', label: 'Spray Tan' }
-]
-
 const PRODUCT_CATEGORIES = [
   { value: 'sachets', label: 'Sachets' },
   { value: 'bottles', label: 'Bottles' },
@@ -116,7 +100,6 @@ function App() {
   const [showManagerView, setShowManagerView] = useState(false)
   const [managerUnlocked, setManagerUnlocked] = useState(false)
   const [collapseStaffManagement, setCollapseStaffManagement] = useState(true)
-  const [collapseStaffCalendar, setCollapseStaffCalendar] = useState(true)
   const [collapseMaintenance, setCollapseMaintenance] = useState(true)
   const [collapseProducts, setCollapseProducts] = useState(true)
   const [collapseExports, setCollapseExports] = useState(true)
@@ -209,21 +192,6 @@ function App() {
   const [staffAdjustmentId, setStaffAdjustmentId] = useState('')
   const [staffAdjustmentAmount, setStaffAdjustmentAmount] = useState('')
   const [staffAdjustmentReason, setStaffAdjustmentReason] = useState('')
-  const [staffSchedule, setStaffSchedule] = useState([])
-  const [staffScheduleLoadError, setStaffScheduleLoadError] = useState('')
-  const [staffScheduleSaving, setStaffScheduleSaving] = useState(false)
-  const [staffScheduleEditingId, setStaffScheduleEditingId] = useState('')
-  const [staffScheduleStaffId, setStaffScheduleStaffId] = useState('')
-  const [staffScheduleDate, setStaffScheduleDate] = useState(formatLocalDate(new Date()))
-  const [staffScheduleStartTime, setStaffScheduleStartTime] = useState('09:00')
-  const [staffScheduleEndTime, setStaffScheduleEndTime] = useState('17:00')
-  const [staffScheduleType, setStaffScheduleType] = useState('shift')
-  const [staffScheduleServiceType, setStaffScheduleServiceType] = useState('general')
-  const [staffScheduleNotes, setStaffScheduleNotes] = useState('')
-  const [staffScheduleAvailable, setStaffScheduleAvailable] = useState(true)
-  const [staffScheduleFilterStaffId, setStaffScheduleFilterStaffId] = useState('')
-  const [staffScheduleFilterType, setStaffScheduleFilterType] = useState('')
-  const [staffScheduleFilterServiceType, setStaffScheduleFilterServiceType] = useState('')
 
   const [productLoadError, setProductLoadError] = useState('')
   const [productCart, setProductCart] = useState([])
@@ -254,7 +222,6 @@ function App() {
     getCustomers()
     getStaff()
     getProducts()
-    getStaffSchedule()
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
@@ -267,7 +234,6 @@ function App() {
     getDailyTakings()
     getCashUpForSelectedDate()
     getFloatMovements()
-    getStaffSchedule()
   }, [selectedDate])
 
   const dailyTakingsSummary = useMemo(() => {
@@ -337,26 +303,6 @@ function App() {
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
-  }
-
-  function getWeekDates(dateString = selectedDate) {
-    const start = new Date(`${dateString}T00:00:00`)
-    const day = start.getDay()
-    const diff = day === 0 ? -6 : 1 - day
-    start.setDate(start.getDate() + diff)
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(start)
-      date.setDate(start.getDate() + index)
-      return formatLocalDate(date)
-    })
-  }
-
-  function getStaffScheduleTypeLabel(type) {
-    return STAFF_SCHEDULE_TYPES.find((item) => item.value === type)?.label || formatStatus(type)
-  }
-
-  function getStaffServiceTypeLabel(type) {
-    return STAFF_SERVICE_TYPES.find((item) => item.value === type)?.label || formatStatus(type)
   }
 
   function formatStatus(text) {
@@ -573,148 +519,9 @@ function App() {
     setStaff(resetStaff)
   }
 
-  async function getStaffSchedule() {
-    const weekDates = getWeekDates(selectedDate)
-    const { data, error } = await supabase
-      .from('StaffSchedule')
-      .select('*')
-      .gte('schedule_date', weekDates[0])
-      .lte('schedule_date', weekDates[6])
-      .order('schedule_date', { ascending: true })
-      .order('start_time', { ascending: true })
-
-    if (error) {
-      setStaffScheduleLoadError(error.message || 'Could not load StaffSchedule table.')
-      setStaffSchedule([])
-      showDataLoadWarning('Staff Calendar could not be loaded. Check the StaffSchedule table.', error)
-      return
-    }
-
-    setStaffScheduleLoadError('')
-    setStaffSchedule(data || [])
-  }
-
   async function createStaffLog(member, action, details) {
     if (!member || String(member.id).startsWith('default-')) return
     await supabase.from('StaffLogs').insert({ staff_id: member.id, staff_name: member.name, action, details })
-  }
-
-  function clearStaffScheduleForm() {
-    setStaffScheduleEditingId('')
-    setStaffScheduleStaffId('')
-    setStaffScheduleDate(selectedDate)
-    setStaffScheduleStartTime('09:00')
-    setStaffScheduleEndTime('17:00')
-    setStaffScheduleType('shift')
-    setStaffScheduleServiceType('general')
-    setStaffScheduleNotes('')
-    setStaffScheduleAvailable(true)
-  }
-
-  function editStaffScheduleEntry(entry) {
-    setStaffScheduleEditingId(String(entry.id))
-    setStaffScheduleStaffId(entry.staff_id ? String(entry.staff_id) : '')
-    setStaffScheduleDate(entry.schedule_date || selectedDate)
-    setStaffScheduleStartTime(entry.start_time || '09:00')
-    setStaffScheduleEndTime(entry.end_time || '17:00')
-    setStaffScheduleType(entry.schedule_type || 'shift')
-    setStaffScheduleServiceType(entry.service_type || 'general')
-    setStaffScheduleNotes(entry.notes || '')
-    setStaffScheduleAvailable(entry.is_available !== false)
-  }
-
-  function getFilteredStaffSchedule() {
-    return staffSchedule.filter((entry) => {
-      if (staffScheduleFilterStaffId && String(entry.staff_id) !== String(staffScheduleFilterStaffId)) return false
-      if (staffScheduleFilterType && entry.schedule_type !== staffScheduleFilterType) return false
-      if (staffScheduleFilterServiceType && entry.service_type !== staffScheduleFilterServiceType) return false
-      return true
-    })
-  }
-
-  function getShopClosuresForSelectedDate() {
-    return staffSchedule.filter((entry) => entry.schedule_date === selectedDate && entry.schedule_type === 'shop_closed')
-  }
-
-  function getCurrentStaffScheduleForSelectedDate() {
-    const currentStaff = getCurrentStaffUser()
-    if (!currentStaff) return []
-    return staffSchedule.filter((entry) => String(entry.staff_id) === String(currentStaff.id) && entry.schedule_date === selectedDate)
-  }
-
-  function getAvailableSprayTanArtists(date, time) {
-    // TODO Spray tan approvals: use this helper when assigning/approving spray tan bookings.
-    return staffSchedule.filter((entry) => {
-      if (entry.schedule_date !== date) return false
-      if (entry.service_type !== 'spraytan') return false
-      if (!['spray_tan_available', 'shift'].includes(entry.schedule_type)) return false
-      if (entry.is_available === false) return false
-      if (time && entry.start_time && entry.end_time) return entry.start_time <= time && entry.end_time >= time
-      return true
-    })
-  }
-
-  async function saveStaffScheduleEntry() {
-    if (!requireStaffSignIn()) return
-    if (!showManagerView && !requireManagerAccess('Manager PIN required to edit Staff Calendar:')) return
-
-    if (!staffScheduleDate) {
-      alert('Choose a schedule date.')
-      return
-    }
-
-    if (staffScheduleType !== 'shop_closed' && !staffScheduleStaffId) {
-      alert('Choose a staff member for this schedule entry.')
-      return
-    }
-
-    const selectedMember = staff.find((member) => String(member.id) === String(staffScheduleStaffId))
-    const payload = {
-      staff_id: staffScheduleType === 'shop_closed' ? null : Number(staffScheduleStaffId),
-      staff_name: staffScheduleType === 'shop_closed' ? 'Shop Closed' : selectedMember?.name || '',
-      schedule_date: staffScheduleDate,
-      start_time: staffScheduleStartTime || null,
-      end_time: staffScheduleEndTime || null,
-      schedule_type: staffScheduleType,
-      service_type: staffScheduleServiceType,
-      notes: staffScheduleNotes || null,
-      is_available: staffScheduleAvailable
-    }
-
-    setStaffScheduleSaving(true)
-    const query = staffScheduleEditingId
-      ? supabase.from('StaffSchedule').update(payload).eq('id', staffScheduleEditingId)
-      : supabase.from('StaffSchedule').insert(payload)
-    const { error } = await query
-    setStaffScheduleSaving(false)
-
-    if (error) {
-      alert('Staff Calendar entry was not saved. Please check the connection and StaffSchedule table.')
-      showDataLoadWarning('Staff Calendar entry failed to save.', error)
-      console.log(error)
-      return
-    }
-
-    clearStaffScheduleForm()
-    await getStaffSchedule()
-  }
-
-  async function deleteStaffScheduleEntry(entry) {
-    if (!requireStaffSignIn()) return
-    if (!showManagerView && !requireManagerAccess('Manager PIN required to delete Staff Calendar entries:')) return
-    const confirmed = window.confirm(`Delete schedule entry for ${entry.staff_name || 'the shop'} on ${entry.schedule_date}?`)
-    if (!confirmed) return
-
-    const { error } = await supabase.from('StaffSchedule').delete().eq('id', entry.id)
-    if (error) {
-      alert('Staff Calendar entry was not deleted. Please check the connection.')
-      showDataLoadWarning('Staff Calendar delete failed.', error)
-      console.log(error)
-      return
-    }
-
-    if (String(staffScheduleEditingId) === String(entry.id)) clearStaffScheduleForm()
-    await getStaffSchedule()
   }
 
   async function getProducts() {
@@ -5020,138 +4827,6 @@ function App() {
     )
   }
 
-  function renderStaffScheduleEntry(entry, showActions = false) {
-    return (
-      <div key={entry.id} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '10px', marginBottom: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <strong>{entry.staff_name || 'Shop'}</strong>
-          <span style={{ color: entry.is_available === false ? '#ff7875' : '#d4a853', fontWeight: 'bold' }}>
-            {entry.is_available === false ? 'Unavailable' : 'Available'}
-          </span>
-        </div>
-        <p style={{ margin: '6px 0', color: '#ddd' }}>
-          {entry.start_time || '--:--'} - {entry.end_time || '--:--'} · {getStaffScheduleTypeLabel(entry.schedule_type)} · {getStaffServiceTypeLabel(entry.service_type)}
-        </p>
-        {entry.notes && <p style={{ margin: '6px 0 0', color: '#aaa' }}>{entry.notes}</p>}
-        {showActions && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
-            <button onClick={() => editStaffScheduleEntry(entry)}>Edit</button>
-            <button onClick={() => deleteStaffScheduleEntry(entry)}>Delete</button>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  function renderStaffOwnSchedulePanel() {
-    const currentStaff = getCurrentStaffUser()
-    if (!currentStaff || showManagerView) return null
-    const entries = getCurrentStaffScheduleForSelectedDate()
-    if (entries.length === 0 && !staffScheduleLoadError) return null
-
-    return (
-      <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '14px', padding: '14px', marginBottom: '18px' }}>
-        <h3 style={{ marginTop: 0 }}>My Schedule Today</h3>
-        {staffScheduleLoadError ? (
-          <p style={{ color: '#ffcc66', marginBottom: 0 }}>Staff Calendar is not available yet.</p>
-        ) : entries.map((entry) => renderStaffScheduleEntry(entry, false))}
-      </div>
-    )
-  }
-
-  function renderStaffCalendarPanel() {
-    if (!showManagerView) return null
-
-    const weekDates = getWeekDates(selectedDate)
-    const filteredEntries = getFilteredStaffSchedule()
-    const sprayTanArtistCount = getAvailableSprayTanArtists(selectedDate).length
-
-    return renderCollapsibleSection(
-      'Staff Calendar',
-      collapseStaffCalendar,
-      setCollapseStaffCalendar,
-      <div>
-        {staffScheduleLoadError && <p style={{ color: '#ff7875' }}>{staffScheduleLoadError}</p>}
-
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '14px' }}>
-          <h3 style={{ marginTop: 0 }}>{staffScheduleEditingId ? 'Edit Schedule Entry' : 'Add Schedule Entry'}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-            <select value={staffScheduleStaffId} onChange={(e) => setStaffScheduleStaffId(e.target.value)} disabled={staffScheduleType === 'shop_closed'} style={{ padding: '10px' }}>
-              <option value="">Staff member</option>
-              {staff.filter((member) => member.is_active !== false).map((member) => (
-                <option key={member.id} value={member.id}>{member.name}</option>
-              ))}
-            </select>
-            <input type="date" value={staffScheduleDate} onChange={(e) => setStaffScheduleDate(e.target.value)} style={{ padding: '10px' }} />
-            <input type="time" value={staffScheduleStartTime} onChange={(e) => setStaffScheduleStartTime(e.target.value)} style={{ padding: '10px' }} />
-            <input type="time" value={staffScheduleEndTime} onChange={(e) => setStaffScheduleEndTime(e.target.value)} style={{ padding: '10px' }} />
-            <select value={staffScheduleType} onChange={(e) => setStaffScheduleType(e.target.value)} style={{ padding: '10px' }}>
-              {STAFF_SCHEDULE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-            <select value={staffScheduleServiceType} onChange={(e) => setStaffScheduleServiceType(e.target.value)} style={{ padding: '10px' }}>
-              {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-          </div>
-          <textarea
-            placeholder="Notes for this staff member/day"
-            value={staffScheduleNotes}
-            onChange={(e) => setStaffScheduleNotes(e.target.value)}
-            style={{ width: '100%', minHeight: '70px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box', fontFamily: 'inherit' }}
-          />
-          <label style={{ display: 'block', marginTop: '10px' }}>
-            <input type="checkbox" checked={staffScheduleAvailable} onChange={(e) => setStaffScheduleAvailable(e.target.checked)} style={{ marginRight: '8px' }} />
-            Available for this entry
-          </label>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
-            <button onClick={saveStaffScheduleEntry} disabled={staffScheduleSaving}>{staffScheduleSaving ? 'Saving...' : staffScheduleEditingId ? 'Save Entry' : 'Add Entry'}</button>
-            {staffScheduleEditingId && <button onClick={clearStaffScheduleForm}>Cancel Edit</button>}
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          <select value={staffScheduleFilterStaffId} onChange={(e) => setStaffScheduleFilterStaffId(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All staff</option>
-            {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-          </select>
-          <select value={staffScheduleFilterType} onChange={(e) => setStaffScheduleFilterType(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All schedule types</option>
-            {STAFF_SCHEDULE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-          </select>
-          <select value={staffScheduleFilterServiceType} onChange={(e) => setStaffScheduleFilterServiceType(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All service types</option>
-            {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-          </select>
-        </div>
-
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '14px', color: '#aaa' }}>
-          Spray tan artists available on selected date: <strong style={{ color: '#d4a853' }}>{sprayTanArtistCount}</strong>
-        </div>
-
-        <div style={{ marginBottom: '16px' }}>
-          <h3>Daily View</h3>
-          {filteredEntries.filter((entry) => entry.schedule_date === selectedDate).length === 0 ? (
-            <p style={{ color: '#aaa' }}>No schedule entries for this date.</p>
-          ) : filteredEntries.filter((entry) => entry.schedule_date === selectedDate).map((entry) => renderStaffScheduleEntry(entry, true))}
-        </div>
-
-        <h3>Weekly View</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
-          {weekDates.map((date) => {
-            const dayEntries = filteredEntries.filter((entry) => entry.schedule_date === date)
-            return (
-              <div key={date} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px' }}>
-                <strong>{new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</strong>
-                <div style={{ marginTop: '10px' }}>
-                  {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, true))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
-  }
-
   function renderStaffManagementPanel() {
     if (!showManagerView) return null
 
@@ -5474,7 +5149,6 @@ function App() {
   const modalCustomer = modalBooking ? getCustomerForBooking(modalBooking) : null
   const modalPhase = modalBooking ? getPhase(modalBooking) : ''
   const modalStartBlocked = modalBooking ? isStartBlockedByLiveSession(modalBooking) : false
-  const selectedDateShopClosures = getShopClosuresForSelectedDate()
 
   return (
     <div className="glow-app-shell" style={{ padding: '24px', background: '#050505', minHeight: '100vh', color: 'white' }}>
@@ -5537,16 +5211,8 @@ function App() {
         </div>
       )}
 
-      {selectedDateShopClosures.length > 0 && (
-        <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,204,102,0.65)', borderRadius: '14px', padding: '12px 16px', color: '#ffcc66', fontWeight: 'bold', marginBottom: '18px' }}>
-          Shop closure note for {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}: {selectedDateShopClosures.map((entry) => entry.notes || 'Shop closed').join(' | ')}
-        </div>
-      )}
-
-      {renderStaffOwnSchedulePanel()}
       {showCustomerManagement && renderCustomerManagementPanel()}
       {!collapseCashUp && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
-      {showManagerView && renderStaffCalendarPanel()}
       {showManagerView && renderStaffManagementPanel()}
       {showManagerView && renderMaintenancePanel()}
       {showManagerView && renderProductsManagementPanel()}
