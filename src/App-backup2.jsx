@@ -5413,6 +5413,33 @@ function App() {
     )
   }
 
+  function renderBookingCheckoutActionRow() {
+    const selectedCustomer = getSelectedCustomer()
+    const selectedStaff = getSelectedStaffAsCustomer()
+
+    if (!selectedCustomer || selectedStaff || isShopTestCustomer(selectedCustomer)) return null
+
+    return (
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '15px', marginBottom: '12px' }}>
+        <button
+          type="button"
+          onClick={() => setShowBookingTopUp(!showBookingTopUp)}
+          style={{ flex: '1 1 170px' }}
+        >
+          {showBookingTopUp ? 'Hide Top Up Minutes' : 'Add / Top Up Minutes'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { if (requireStaffSignIn()) setShowBookingProducts(!showBookingProducts) }}
+          style={{ flex: '1 1 170px' }}
+        >
+          {showBookingProducts ? 'Hide Products' : 'Add Products'}
+        </button>
+      </div>
+    )
+  }
+
   function renderTopUpSection() {
     const selectedCustomer = getSelectedCustomer()
     const selectedStaff = getSelectedStaffAsCustomer()
@@ -5420,38 +5447,29 @@ function App() {
     const isCustom = purchase.isCustom
 
     if (!selectedCustomer || selectedStaff || isShopTestCustomer(selectedCustomer)) return null
+    if (!showBookingTopUp) return null
 
     return (
-      <>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '15px', marginBottom: '12px' }}>
-        <button type="button" onClick={() => setShowBookingTopUp(!showBookingTopUp)}>
-          {showBookingTopUp ? 'Hide Top Up Minutes' : 'Add / Top Up Minutes'}
-        </button>
-      </div>
-      {showBookingTopUp && (
-        <div style={{ background: '#111', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid #333' }}>
+      <div style={{ background: '#111', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid #333' }}>
         <h3 style={{ marginTop: 0 }}>Top up minutes</h3>
         <select value={purchaseOption} onChange={(e) => { setPurchaseOption(e.target.value); setTopUpMinutes(0) }} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
           {Object.entries(PURCHASE_OPTIONS).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
         </select>
         {isCustom ? (
-          <>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Enter custom minutes to add"
-              value={topUpMinutes}
-              onChange={(e) => setTopUpMinutes(e.target.value)}
-              style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}
-            />          </>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Enter custom minutes to add"
+            value={topUpMinutes}
+            onChange={(e) => setTopUpMinutes(e.target.value)}
+            style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}
+          />
         ) : (
           <p style={{ margin: '8px 0' }}>Minutes to add: <strong>{purchase.minutes} mins</strong></p>
         )}
         <p style={{ margin: '8px 0 0' }}>Top-up cost: <strong>£{Number((Number(purchase.minutes || 0) > 0 ? purchase.total : 0) || 0).toFixed(2)}</strong></p>
-        </div>
-      )}
-      </>
+      </div>
     )
   }
 
@@ -5460,17 +5478,9 @@ function App() {
     const selectedStaff = getSelectedStaffAsCustomer()
 
     if (!selectedCustomer || selectedStaff || isShopTestCustomer(selectedCustomer)) return null
+    if (!showBookingProducts) return null
 
-    return (
-      <>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '0', marginBottom: '12px' }}>
-          <button type="button" onClick={() => { if (requireStaffSignIn()) setShowBookingProducts(!showBookingProducts) }}>
-            {showBookingProducts ? 'Hide Products' : 'Add Products'}
-          </button>
-        </div>
-        {showBookingProducts && renderProductPicker()}
-      </>
-    )
+    return renderProductPicker()
   }
 
   function renderSunbedCheckoutSummary() {
@@ -7285,6 +7295,7 @@ function App() {
                 {renderCustomerSearchBox()}
                 {renderBookingMinutesControl()}
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
+                {renderBookingCheckoutActionRow()}
                 {renderTopUpSection()}
                 {renderBookingProductsSection()}
                 {renderSunbedCheckoutSummary()}
@@ -7309,6 +7320,7 @@ function App() {
                 </select>
                 {renderBookingMinutesControl()}
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
+                {renderBookingCheckoutActionRow()}
                 {renderTopUpSection()}
                 {renderBookingProductsSection()}
                 {renderSunbedCheckoutSummary()}
