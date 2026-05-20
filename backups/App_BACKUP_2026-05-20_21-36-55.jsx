@@ -149,7 +149,6 @@ function App() {
   const [collapseReceipts, setCollapseReceipts] = useState(true)
   const [collapseCashUp, setCollapseCashUp] = useState(true)
   const [collapseDailyTakings, setCollapseDailyTakings] = useState(true)
-  const [collapseReports, setCollapseReports] = useState(true)
   const [selectedProductManagementId, setSelectedProductManagementId] = useState('')
   const [customerManagerSearch, setCustomerManagerSearch] = useState('')
   const [showAllCustomersList, setShowAllCustomersList] = useState(false)
@@ -221,9 +220,6 @@ function App() {
 
   const [dailyTakings, setDailyTakings] = useState([])
   const [dailyProductSales, setDailyProductSales] = useState([])
-  const [dailyReportDate, setDailyReportDate] = useState(formatLocalDate(new Date()))
-  const [dailyReportReceipts, setDailyReportReceipts] = useState([])
-  const [dailyReportLoading, setDailyReportLoading] = useState(false)
   const [cashUpActualCash, setCashUpActualCash] = useState('')
   const [cashUpVarianceNotes, setCashUpVarianceNotes] = useState('')
   const [cashUpManagerName, setCashUpManagerName] = useState('')
@@ -302,12 +298,6 @@ function App() {
   const [receiptSearchPaymentMethod, setReceiptSearchPaymentMethod] = useState('')
   const [receiptSearchLoading, setReceiptSearchLoading] = useState(false)
   const [receiptSearchError, setReceiptSearchError] = useState('')
-  const [reportsStartDate, setReportsStartDate] = useState(formatLocalDate(new Date()))
-  const [reportsEndDate, setReportsEndDate] = useState(formatLocalDate(new Date()))
-  const [reportsCommissionPercent, setReportsCommissionPercent] = useState('10')
-  const [managerReportsData, setManagerReportsData] = useState(null)
-  const [managerReportsLoading, setManagerReportsLoading] = useState(false)
-  const [managerReportsError, setManagerReportsError] = useState('')
 
   useEffect(() => {
     getBeds()
@@ -970,9 +960,9 @@ function App() {
     setProducts(data || [])
   }
 
-  async function getDailyTakings(dateOverride = selectedDate) {
-    const dayStart = new Date(`${dateOverride}T00:00:00`)
-    const dayEnd = new Date(`${dateOverride}T23:59:59.999`)
+  async function getDailyTakings() {
+    const dayStart = new Date(`${selectedDate}T00:00:00`)
+    const dayEnd = new Date(`${selectedDate}T23:59:59.999`)
     const { data, error } = await supabase.from('Payments').select('*').gte('created_at', dayStart.toISOString()).lte('created_at', dayEnd.toISOString()).order('created_at', { ascending: false })
     if (error) {
       showDataLoadWarning('Daily payment totals could not be loaded. Manager totals may be out of date.', error)
@@ -988,11 +978,11 @@ function App() {
     setDailyProductSales(productSalesData || [])
   }
 
-  async function getCashUpForSelectedDate(dateOverride = selectedDate) {
+  async function getCashUpForSelectedDate() {
     const { data, error } = await supabase
       .from('CashUps')
       .select('*')
-      .eq('cashup_date', dateOverride)
+      .eq('cashup_date', selectedDate)
       .order('created_at', { ascending: false })
       .limit(1)
 
@@ -1012,11 +1002,11 @@ function App() {
     setCashUpManagerName(record?.cash_up_completed_by_staff || '')
   }
 
-  async function getFloatMovements(dateOverride = selectedDate) {
+  async function getFloatMovements() {
     const { data, error } = await supabase
       .from('FloatMovements')
       .select('*')
-      .eq('date', dateOverride)
+      .eq('date', selectedDate)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -1033,231 +1023,6 @@ function App() {
     return dailyTakingsSummary
   }
 
-  async function generateDailyTakingsReport() {
-    setDailyReportLoading(true)
-    setSelectedDate(dailyReportDate)
-    await getDailyTakings(dailyReportDate)
-    await getCashUpForSelectedDate(dailyReportDate)
-    await getFloatMovements(dailyReportDate)
-
-    const dayStart = new Date(`${dailyReportDate}T00:00:00`)
-    const dayEnd = new Date(`${dailyReportDate}T23:59:59.999`)
-    const { data, error } = await supabase
-      .from('Receipts')
-      .select('*')
-      .gte('created_at', dayStart.toISOString())
-      .lte('created_at', dayEnd.toISOString())
-      .order('created_at', { ascending: false })
-    setDailyReportLoading(false)
-
-    if (error) {
-      setDailyReportReceipts([])
-      showDataLoadWarning('Daily receipt report data could not be loaded.', error)
-      return
-    }
-    setDailyReportReceipts(data || [])
-  }
-
-  function getDailySprayTanReceiptTotal() {
-    return dailyReportReceipts.reduce((total, receipt) => {
-      const type = String(receipt.receipt_type || '').toLowerCase()
-      if (!type.includes('spray')) return total
-      return total + Number(receipt.total || 0)
-    }, 0)
-  }
-
-  function copyDailyTakingsReport() {
-    const summary = getDailyTakingsSummary()
-    const lines = [
-      `Glow Daily Takings - ${dailyReportDate}`,
-      `Total revenue: GBP ${summary.totalRevenue.toFixed(2)}`,
-      `Cash: GBP ${summary.cashTotal.toFixed(2)}`,
-      `Card: GBP ${summary.cardTotal.toFixed(2)}`,
-      `Bank transfer: GBP ${summary.bankTransferTotal.toFixed(2)}`,
-      `Other: GBP ${summary.otherTotal.toFixed(2)}`,
-      `Product sales: GBP ${summary.productRevenue.toFixed(2)}`,
-      `Minutes sales: GBP ${summary.minutesRevenue.toFixed(2)}`,
-      `Spray tan receipts: GBP ${getDailySprayTanReceiptTotal().toFixed(2)}`,
-      `Payments/transactions: ${summary.paymentCount}`,
-      `Cash-up completed by: ${cashUpExistingRecord?.cash_up_completed_by_staff || cashUpExistingRecord?.manager_name || 'Not recorded'}`
-    ]
-    navigator.clipboard?.writeText(lines.join('\n'))
-    alert('Daily takings report copied.')
-  }
-
-  function exportDailyTakingsReport() {
-    const summary = getDailyTakingsSummary()
-    downloadCsv(`glow_daily_takings_${dailyReportDate}.csv`, [{
-      date: dailyReportDate,
-      total_revenue: summary.totalRevenue.toFixed(2),
-      cash_total: summary.cashTotal.toFixed(2),
-      card_total: summary.cardTotal.toFixed(2),
-      bank_transfer_total: summary.bankTransferTotal.toFixed(2),
-      other_total: summary.otherTotal.toFixed(2),
-      product_sales_total: summary.productRevenue.toFixed(2),
-      minutes_sales_total: summary.minutesRevenue.toFixed(2),
-      spray_tan_receipts_total: getDailySprayTanReceiptTotal().toFixed(2),
-      transactions: summary.paymentCount,
-      cash_up_completed_by: cashUpExistingRecord?.cash_up_completed_by_staff || cashUpExistingRecord?.manager_name || ''
-    }])
-  }
-
-  function getDateRangeBounds(startDate, endDate) {
-    return {
-      start: new Date(`${startDate}T00:00:00`).toISOString(),
-      end: new Date(`${endDate}T23:59:59.999`).toISOString()
-    }
-  }
-
-  function addGroupedAmount(map, key, amount, extra = {}) {
-    if (!map.has(key)) map.set(key, { ...extra, quantity: 0, total: 0, count: 0 })
-    const row = map.get(key)
-    row.quantity += Number(extra.quantity || 0)
-    row.total += Number(amount || 0)
-    row.count += 1
-    map.set(key, row)
-  }
-
-  async function generateManagerReports() {
-    if (!requireStaffSignIn()) return
-    if (!showManagerView && !requireManagerAccess('Manager PIN required for reports:')) return
-    const { start, end } = getDateRangeBounds(reportsStartDate, reportsEndDate)
-    setManagerReportsLoading(true)
-    setManagerReportsError('')
-
-    const [productSalesResult, paymentsResult, receiptsResult, cashUpsResult, bookingsResult, correctionsResult] = await Promise.all([
-      supabase.from('ProductSales').select('*').gte('created_at', start).lte('created_at', end),
-      supabase.from('Payments').select('*').gte('created_at', start).lte('created_at', end),
-      supabase.from('Receipts').select('*').gte('created_at', start).lte('created_at', end),
-      supabase.from('CashUps').select('*').gte('created_at', start).lte('created_at', end),
-      supabase.from('Bookings').select('*').gte('appointment_time', start).lte('appointment_time', end),
-      supabase.from('CorrectionLogs').select('*').gte('created_at', start).lte('created_at', end)
-    ])
-
-    setManagerReportsLoading(false)
-    const requiredError = productSalesResult.error || paymentsResult.error || receiptsResult.error || cashUpsResult.error || bookingsResult.error
-    if (requiredError) {
-      setManagerReportsError(requiredError.message || 'Could not load one or more reports.')
-      showDataLoadWarning('Manager reports could not be loaded.', requiredError)
-      return
-    }
-
-    const productSales = productSalesResult.data || []
-    const payments = paymentsResult.data || []
-    const receipts = receiptsResult.data || []
-    const cashUps = cashUpsResult.data || []
-    const reportBookings = bookingsResult.data || []
-    const corrections = correctionsResult.error ? [] : correctionsResult.data || []
-
-    const productSalesByStaffMap = new Map()
-    const productSummaryMap = new Map()
-    for (const sale of productSales) {
-      const staffName = sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
-      const productName = sale.product_name || 'Unknown product'
-      const category = sale.category || 'Uncategorised'
-      const quantity = Number(sale.quantity || 0)
-      const amount = Number(sale.total_amount || 0)
-      addGroupedAmount(productSalesByStaffMap, `${staffName}__${productName}__${category}`, amount, { staff_name: staffName, product_name: productName, category, quantity })
-      addGroupedAmount(productSummaryMap, `${productName}__${category}`, amount, { product_name: productName, category, quantity })
-    }
-
-    const productTotalsByStaff = new Map()
-    for (const sale of productSales) {
-      const staffName = sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
-      productTotalsByStaff.set(staffName, (productTotalsByStaff.get(staffName) || 0) + Number(sale.total_amount || 0))
-    }
-
-    const customerSpendMap = new Map()
-    for (const payment of payments) {
-      const customerName = payment.customer_name || 'Walk-in'
-      if (!customerSpendMap.has(customerName)) customerSpendMap.set(customerName, { customer_name: customerName, minutes_topups: 0, product_purchases: 0, spray_tan_payments: 0, total: 0 })
-      const row = customerSpendMap.get(customerName)
-      row.minutes_topups += Number(payment.total_amount || 0)
-      row.total += Number(payment.total_amount || 0)
-    }
-    for (const receipt of receipts) {
-      const customerName = receipt.customer_name || 'Walk-in'
-      if (!customerSpendMap.has(customerName)) customerSpendMap.set(customerName, { customer_name: customerName, minutes_topups: 0, product_purchases: 0, spray_tan_payments: 0, total: 0 })
-      const row = customerSpendMap.get(customerName)
-      const type = String(receipt.receipt_type || '').toLowerCase()
-      if (type.includes('product')) row.product_purchases += Number(receipt.total || 0)
-      if (type.includes('spray')) row.spray_tan_payments += Number(receipt.total || 0)
-      row.total += Number(receipt.total || 0)
-    }
-
-    const minutesSales = payments.reduce((totals, payment) => {
-      const minutes = Number(payment.minutes_added || 0)
-      const amount = Number(payment.total_amount || 0)
-      const label = String(payment.package_name || payment.bed_type || '').toLowerCase().includes('hybrid') ? 'hybrid' : 'standard'
-      totals[label].minutes += minutes
-      totals[label].revenue += amount
-      return totals
-    }, { standard: { minutes: 0, revenue: 0 }, hybrid: { minutes: 0, revenue: 0 } })
-
-    const sprayTanMap = new Map()
-    for (const booking of reportBookings.filter((booking) => booking.booking_type === 'spraytan')) {
-      const service = booking.spraytan_service || 'Unknown service'
-      if (!sprayTanMap.has(service)) sprayTanMap.set(service, { service, count: 0, pending: 0, completed: 0, cancelled: 0, deposits_paid: 0, balances_due: 0, artists: new Set() })
-      const row = sprayTanMap.get(service)
-      row.count += 1
-      if (String(booking.approval_status || '').toLowerCase() === 'pending') row.pending += 1
-      if (String(booking.approval_status || booking.status || '').toLowerCase() === 'completed') row.completed += 1
-      if (String(booking.approval_status || booking.status || '').toLowerCase() === 'cancelled') row.cancelled += 1
-      row.deposits_paid += Number(booking.deposit_paid || 0)
-      row.balances_due += Number(booking.spraytan_balance_due || 0)
-      if (booking.spraytan_artist) row.artists.add(booking.spraytan_artist)
-    }
-
-    const staffActivityMap = new Map()
-    for (const booking of reportBookings) {
-      const staffName = booking.staff_name || booking.created_by || 'Unknown staff'
-      if (!staffActivityMap.has(staffName)) staffActivityMap.set(staffName, { staff_name: staffName, bookings: 0, product_sales: 0, cash_ups: 0, corrections: 0 })
-      staffActivityMap.get(staffName).bookings += 1
-    }
-    for (const sale of productSales) {
-      const staffName = sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
-      if (!staffActivityMap.has(staffName)) staffActivityMap.set(staffName, { staff_name: staffName, bookings: 0, product_sales: 0, cash_ups: 0, corrections: 0 })
-      staffActivityMap.get(staffName).product_sales += Number(sale.total_amount || 0)
-    }
-    for (const cashUp of cashUps) {
-      const staffName = cashUp.cash_up_completed_by_staff || cashUp.float_entered_by_staff || cashUp.manager_name || 'Unknown staff'
-      if (!staffActivityMap.has(staffName)) staffActivityMap.set(staffName, { staff_name: staffName, bookings: 0, product_sales: 0, cash_ups: 0, corrections: 0 })
-      staffActivityMap.get(staffName).cash_ups += 1
-    }
-    for (const correction of corrections) {
-      const staffName = correction.staff_name || correction.created_by || 'Unknown staff'
-      if (!staffActivityMap.has(staffName)) staffActivityMap.set(staffName, { staff_name: staffName, bookings: 0, product_sales: 0, cash_ups: 0, corrections: 0 })
-      staffActivityMap.get(staffName).corrections += 1
-    }
-
-    setManagerReportsData({
-      productSalesByStaff: Array.from(productSalesByStaffMap.values()).sort((a, b) => b.total - a.total),
-      staffCommission: Array.from(productTotalsByStaff.entries()).map(([staffName, total]) => ({ staff_name: staffName, product_sales_total: total, commission_percent: Number(reportsCommissionPercent || 0), commission_due: total * Number(reportsCommissionPercent || 0) / 100 })).sort((a, b) => b.product_sales_total - a.product_sales_total),
-      productSummary: Array.from(productSummaryMap.values()).sort((a, b) => b.quantity - a.quantity),
-      customerSpend: Array.from(customerSpendMap.values()).sort((a, b) => b.total - a.total).slice(0, 20),
-      minutesSales,
-      sprayTan: Array.from(sprayTanMap.values()).map((row) => ({ ...row, artists: Array.from(row.artists).join(', ') || 'Unassigned' })),
-      staffActivity: Array.from(staffActivityMap.values()).sort((a, b) => (b.bookings + b.cash_ups) - (a.bookings + a.cash_ups)),
-      stockMovement: products.map((product) => ({ name: product.name, category: product.category || 'Uncategorised', current_stock: getProductStockQuantity(product), status: getProductStockStatus(product) }))
-    })
-  }
-
-  function exportManagerReports() {
-    if (!managerReportsData) {
-      alert('Generate reports first.')
-      return
-    }
-    downloadCsv(`glow_manager_reports_${reportsStartDate}_to_${reportsEndDate}.csv`, [
-      ...managerReportsData.productSalesByStaff.map((row) => ({ report: 'Product Sales by Staff', ...row })),
-      ...managerReportsData.staffCommission.map((row) => ({ report: 'Staff Commission', ...row })),
-      ...managerReportsData.productSummary.map((row) => ({ report: 'Product Sales Summary', ...row })),
-      ...managerReportsData.customerSpend.map((row) => ({ report: 'Customer Spend', ...row })),
-      ...managerReportsData.sprayTan.map((row) => ({ report: 'Spray Tan', ...row })),
-      ...managerReportsData.staffActivity.map((row) => ({ report: 'Staff Activity', ...row })),
-      ...managerReportsData.stockMovement.map((row) => ({ report: 'Stock Movement', ...row }))
-    ])
-  }
-
   function openManagerView() {
     if (!requireStaffSignIn()) return
 
@@ -1268,32 +1033,6 @@ function App() {
   function lockManagerView() {
     setManagerUnlocked(false)
     setShowManagerView(false)
-  }
-
-  function closeAllManagerSections() {
-    setCollapseStaffManagement(true)
-    setCollapseMaintenance(true)
-    setCollapseProducts(true)
-    setCollapseCorrections(true)
-    setCollapseWixSync(true)
-    setCollapseReceipts(true)
-    setCollapseExports(true)
-    setCollapseDailyTakings(true)
-    setCollapseReports(true)
-  }
-
-  function openManagerSection(sectionName, currentlyOpen) {
-    closeAllManagerSections()
-    if (currentlyOpen) return
-    if (sectionName === 'staff') setCollapseStaffManagement(false)
-    if (sectionName === 'maintenance') setCollapseMaintenance(false)
-    if (sectionName === 'products') setCollapseProducts(false)
-    if (sectionName === 'corrections') setCollapseCorrections(false)
-    if (sectionName === 'wix') setCollapseWixSync(false)
-    if (sectionName === 'receipts') setCollapseReceipts(false)
-    if (sectionName === 'exports') setCollapseExports(false)
-    if (sectionName === 'daily') setCollapseDailyTakings(false)
-    if (sectionName === 'reports') setCollapseReports(false)
   }
 
   function scrollToTop() {
@@ -1312,14 +1051,6 @@ function App() {
     setSelectedDate(formatLocalDate(new Date()))
     setTimeout(() => {
       const nowRow = document.querySelector('[data-current-time-row="true"]')
-      if (nowRow) nowRow.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 150)
-  }
-
-  function jumpToSprayTanNow() {
-    setSelectedDate(formatLocalDate(new Date()))
-    setTimeout(() => {
-      const nowRow = document.querySelector('[data-spraytan-current-time-row="true"]')
       if (nowRow) nowRow.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 150)
   }
@@ -2359,13 +2090,6 @@ function App() {
     if (selectedDate !== formatLocalDate(currentTime)) return false
     const slotStart = getSlotDateTime(time)
     const slotEnd = new Date(slotStart.getTime() + SLOT_MINUTES * 60000)
-    return currentTime >= slotStart && currentTime < slotEnd
-  }
-
-  function isCurrentTimelineSlot(time, slotMinutes = 15) {
-    if (selectedDate !== formatLocalDate(currentTime)) return false
-    const slotStart = getSlotDateTime(time)
-    const slotEnd = new Date(slotStart.getTime() + slotMinutes * 60000)
     return currentTime >= slotStart && currentTime < slotEnd
   }
 
@@ -6429,116 +6153,8 @@ function App() {
     )
   }
 
-  function renderReportTable(title, rows, columns) {
-    return (
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '12px', maxHeight: '320px', overflow: 'auto' }}>
-        <h3 style={{ marginTop: 0 }}>{title}</h3>
-        {rows.length === 0 ? <p style={{ color: '#aaa' }}>No data found for this range.</p> : (
-          <div style={{ minWidth: '680px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(120px, 1fr))`, gap: '8px', color: '#d4a853', fontWeight: 'bold', borderBottom: '1px solid #333', paddingBottom: '8px' }}>
-              {columns.map((column) => <span key={column.key}>{column.label}</span>)}
-            </div>
-            {rows.map((row, index) => (
-              <div key={`${title}-${index}`} style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(120px, 1fr))`, gap: '8px', borderBottom: '1px solid #222', padding: '8px 0' }}>
-                {columns.map((column) => <span key={column.key}>{column.format ? column.format(row[column.key], row) : row[column.key] ?? '-'}</span>)}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  function renderManagerReportsPanel() {
-    if (!showManagerView) return null
-    const money = (value) => `GBP ${Number(value || 0).toFixed(2)}`
-    const percent = Number(reportsCommissionPercent || 0)
-
-    return renderCollapsibleSection(
-      'Reports',
-      collapseReports,
-      setCollapseReports,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <input type="date" value={reportsStartDate} onChange={(e) => setReportsStartDate(e.target.value)} style={{ padding: '10px' }} />
-          <input type="date" value={reportsEndDate} onChange={(e) => setReportsEndDate(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="0.1" placeholder="Commission %" value={reportsCommissionPercent} onChange={(e) => setReportsCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
-          <button onClick={generateManagerReports} disabled={managerReportsLoading}>{managerReportsLoading ? 'Generating...' : 'Generate Reports'}</button>
-          <button onClick={exportManagerReports}>Export Reports CSV</button>
-        </div>
-        {managerReportsError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{managerReportsError}</p>}
-        {!managerReportsData ? (
-          <p style={{ color: '#aaa' }}>Choose a date range and generate reports. Older rows with missing staff fields will show as Unknown staff.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {renderReportTable('Product Sales by Staff', managerReportsData.productSalesByStaff, [
-              { key: 'staff_name', label: 'Staff' },
-              { key: 'product_name', label: 'Product' },
-              { key: 'category', label: 'Category' },
-              { key: 'quantity', label: 'Qty' },
-              { key: 'total', label: 'Sales', format: money }
-            ])}
-            {renderReportTable('Staff Commission Report', managerReportsData.staffCommission, [
-              { key: 'staff_name', label: 'Staff' },
-              { key: 'product_sales_total', label: 'Product sales', format: money },
-              { key: 'commission_percent', label: 'Commission %', format: () => `${percent}%` },
-              { key: 'commission_due', label: 'Commission due', format: money }
-            ])}
-            {renderReportTable('Product Sales Summary', managerReportsData.productSummary, [
-              { key: 'product_name', label: 'Product' },
-              { key: 'category', label: 'Category' },
-              { key: 'quantity', label: 'Qty sold' },
-              { key: 'total', label: 'Revenue', format: money }
-            ])}
-            {renderReportTable('Customer Spend Report', managerReportsData.customerSpend, [
-              { key: 'customer_name', label: 'Customer' },
-              { key: 'minutes_topups', label: 'Minutes', format: money },
-              { key: 'product_purchases', label: 'Products', format: money },
-              { key: 'spray_tan_payments', label: 'Spray tans', format: money },
-              { key: 'total', label: 'Total', format: money }
-            ])}
-            {renderReportTable('Minutes Sales Report', [
-              { minute_type: 'Standard', ...managerReportsData.minutesSales.standard, average_value: managerReportsData.minutesSales.standard.minutes ? managerReportsData.minutesSales.standard.revenue / managerReportsData.minutesSales.standard.minutes : 0 },
-              { minute_type: 'Hybrid', ...managerReportsData.minutesSales.hybrid, average_value: managerReportsData.minutesSales.hybrid.minutes ? managerReportsData.minutesSales.hybrid.revenue / managerReportsData.minutesSales.hybrid.minutes : 0 }
-            ], [
-              { key: 'minute_type', label: 'Type' },
-              { key: 'minutes', label: 'Minutes sold' },
-              { key: 'revenue', label: 'Revenue', format: money },
-              { key: 'average_value', label: 'Avg value/min', format: money }
-            ])}
-            {renderReportTable('Spray Tan Report', managerReportsData.sprayTan, [
-              { key: 'service', label: 'Service' },
-              { key: 'count', label: 'Bookings' },
-              { key: 'pending', label: 'Pending' },
-              { key: 'deposits_paid', label: 'Deposits', format: money },
-              { key: 'balances_due', label: 'Balances due', format: money },
-              { key: 'completed', label: 'Completed' },
-              { key: 'cancelled', label: 'Cancelled' },
-              { key: 'artists', label: 'Artists' }
-            ])}
-            {renderReportTable('Staff Activity Report', managerReportsData.staffActivity, [
-              { key: 'staff_name', label: 'Staff' },
-              { key: 'bookings', label: 'Bookings' },
-              { key: 'product_sales', label: 'Product sales', format: money },
-              { key: 'cash_ups', label: 'Cash-ups' },
-              { key: 'corrections', label: 'Corrections/voids' }
-            ])}
-            {renderReportTable('Stock Movement Report', managerReportsData.stockMovement, [
-              { key: 'name', label: 'Product' },
-              { key: 'category', label: 'Category' },
-              { key: 'current_stock', label: 'Current stock' },
-              { key: 'status', label: 'Status' }
-            ])}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   function renderDailyTakingsPanel() {
     const summary = getDailyTakingsSummary()
-    const sprayTanReceiptsTotal = getDailySprayTanReceiptTotal()
-    const cashUpStaff = cashUpExistingRecord?.cash_up_completed_by_staff || cashUpExistingRecord?.manager_name || 'Not recorded'
     const itemStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }
 
     return renderCollapsibleSection(
@@ -6546,16 +6162,7 @@ function App() {
       collapseDailyTakings,
       setCollapseDailyTakings,
       <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px' }}>
-          <h3 style={{ margin: 0 }}>Daily Takings Report - {new Date(`${dailyReportDate}T00:00:00`).toLocaleDateString('en-GB')}</h3>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <input type="date" value={dailyReportDate} onChange={(e) => setDailyReportDate(e.target.value)} style={{ padding: '10px' }} />
-            <button onClick={generateDailyTakingsReport} disabled={dailyReportLoading}>{dailyReportLoading ? 'Generating...' : 'Generate Daily Takings Report'}</button>
-            <button onClick={() => window.print()}>Print</button>
-            <button onClick={copyDailyTakingsReport}>Copy</button>
-            <button onClick={exportDailyTakingsReport}>Export CSV</button>
-          </div>
-        </div>
+        <h3>Daily Takings — {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
           <div style={itemStyle}><span>Total revenue</span><h2>£{summary.totalRevenue.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Card</span><h2>£{summary.cardTotal.toFixed(2)}</h2></div>
@@ -6564,10 +6171,7 @@ function App() {
           <div style={itemStyle}><span>Other</span><h2>£{summary.otherTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Minutes sold</span><h2>{summary.totalMinutes}</h2></div>
           <div style={itemStyle}><span>Product sales</span><h2>£{summary.productRevenue.toFixed(2)}</h2></div>
-          <div style={itemStyle}><span>Minutes sales</span><h2>GBP {summary.minutesRevenue.toFixed(2)}</h2></div>
-          <div style={itemStyle}><span>Spray tan receipts</span><h2>GBP {sprayTanReceiptsTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Payment count</span><h2>{summary.paymentCount}</h2></div>
-          <div style={itemStyle}><span>Cash-up completed by</span><h2 style={{ fontSize: '20px' }}>{cashUpStaff}</h2></div>
         </div>
       </>
     )
@@ -6684,7 +6288,7 @@ function App() {
           <div style={itemStyle}><span>Bank transfer</span><h2>£{summary.bankTransferTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Other total</span><h2>£{summary.otherTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Product sales</span><h2>£{summary.productRevenue.toFixed(2)}</h2></div>
-          <div style={itemStyle}><span>Minutes sales</span><h2>GBP {summary.minutesRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Minutes sales</span><h2>£{summary.minutesRevenue.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Total revenue</span><h2>£{summary.totalRevenue.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Expected cash in till</span><h2>£{expectedCash.toFixed(2)}</h2></div>
         </div>
@@ -6857,15 +6461,14 @@ function App() {
     if (!showManagerView) return null
 
     const sectionButtons = [
-      { key: 'staff', label: 'Staff Management', isOpen: !collapseStaffManagement },
-      { key: 'maintenance', label: 'Maintenance', isOpen: !collapseMaintenance },
-      { key: 'products', label: 'Products', isOpen: !collapseProducts },
-      { key: 'corrections', label: 'Booking / Payment Corrections', isOpen: !collapseCorrections },
-      { key: 'wix', label: 'Wix Booking Sync', isOpen: !collapseWixSync },
-      { key: 'receipts', label: 'Receipt History', isOpen: !collapseReceipts },
-      { key: 'exports', label: 'Exports / Backups', isOpen: !collapseExports },
-      { key: 'daily', label: 'Daily Takings', isOpen: !collapseDailyTakings },
-      { key: 'reports', label: 'Reports', isOpen: !collapseReports }
+      { label: 'Staff Management', isOpen: !collapseStaffManagement, toggle: () => setCollapseStaffManagement(!collapseStaffManagement) },
+      { label: 'Maintenance', isOpen: !collapseMaintenance, toggle: () => setCollapseMaintenance(!collapseMaintenance) },
+      { label: 'Products', isOpen: !collapseProducts, toggle: () => setCollapseProducts(!collapseProducts) },
+      { label: 'Booking / Payment Corrections', isOpen: !collapseCorrections, toggle: () => setCollapseCorrections(!collapseCorrections) },
+      { label: 'Wix Booking Sync', isOpen: !collapseWixSync, toggle: () => setCollapseWixSync(!collapseWixSync) },
+      { label: 'Receipt History', isOpen: !collapseReceipts, toggle: () => setCollapseReceipts(!collapseReceipts) },
+      { label: 'Exports / Backups', isOpen: !collapseExports, toggle: () => setCollapseExports(!collapseExports) },
+      { label: 'Daily Takings', isOpen: !collapseDailyTakings, toggle: () => setCollapseDailyTakings(!collapseDailyTakings) }
     ]
 
     return (
@@ -6875,14 +6478,14 @@ function App() {
           {sectionButtons.map((item) => (
             <button
               key={item.label}
-              onClick={() => openManagerSection(item.key, item.isOpen)}
+              onClick={item.toggle}
               style={{
                 background: item.isOpen ? '#d4a853' : '#1e1e1e',
                 color: item.isOpen ? '#050505' : '#fff',
                 border: item.isOpen ? '1px solid #d4a853' : '1px solid rgba(212,168,83,0.35)'
               }}
             >
-              {item.label}
+              {item.isOpen ? `Hide ${item.label}` : item.label}
             </button>
           ))}
         </div>
@@ -7481,13 +7084,10 @@ function App() {
             <h2 style={{ marginBottom: '6px' }}>Spray Tans</h2>
             <p style={{ color: '#aaa', margin: 0 }}>Phase 1 calendar foundation. Wix sync, automation and artist availability will be connected later.</p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-            <button onClick={jumpToSprayTanNow}>Jump to Now</button>
-          </div>
+          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
         </div>
 
-        <div style={{ display: 'none', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '18px' }}>
           {SPRAY_TAN_SERVICES.map((service) => (
             <div key={service.name} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }}>
               <strong>{service.name}</strong>
@@ -7581,13 +7181,10 @@ function App() {
             <h2 style={{ marginBottom: '6px' }}>Spray Tans</h2>
             <p style={{ color: '#aaa', margin: 0 }}>Manual spray tan appointments are separate from the sunbed calendar.</p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-            <button onClick={jumpToSprayTanNow}>Jump to Now</button>
-          </div>
+          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
         </div>
 
-        <div style={{ display: 'none', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '18px' }}>
           {SPRAY_TAN_SERVICES.map((service) => (
             <div key={service.name} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }}>
               <strong>{service.name}</strong>
@@ -7609,11 +7206,9 @@ function App() {
               {SPRAY_TAN_COLUMNS.map((column) => <span key={column.value}>{column.label}</span>)}
             </div>
 
-            {timelineSlots.map((time) => {
-              const currentRow = isCurrentTimelineSlot(time, 15)
-              return (
-              <div key={time} data-spraytan-current-time-row={currentRow ? 'true' : undefined} style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '10px 0', minHeight: '82px' }}>
-                <strong>{time}{currentRow && <><br /><span style={{ fontSize: '12px', color: '#ffcc66' }}>NOW</span></>}</strong>
+            {timelineSlots.map((time) => (
+              <div key={time} style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', borderTop: '1px solid #333', padding: '10px 0', minHeight: '82px' }}>
+                <strong>{time}</strong>
                 {SPRAY_TAN_COLUMNS.map((column) => {
                   const slotAppointments = sprayTanBookings.filter((booking) => getBookingStartTimeString(booking) === time && (booking.spraytan_column || 'spray_tan') === column.value)
                   return (
@@ -7662,8 +7257,7 @@ function App() {
                   )
                 })}
               </div>
-              )
-            })}
+            ))}
           </div>
         </div>
       </div>
@@ -7880,7 +7474,6 @@ function App() {
       {showManagerView && renderReceiptHistoryPanel()}
       {showManagerView && renderExportsPanel()}
       {showManagerView && renderDailyTakingsPanel()}
-      {showManagerView && renderManagerReportsPanel()}
 
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '18px' }}>
         <button onClick={() => setDashboardView('sunbeds')} style={{ background: dashboardView === 'sunbeds' ? '#d4a853' : '#111', color: dashboardView === 'sunbeds' ? '#050505' : 'white' }}>Sunbeds</button>
