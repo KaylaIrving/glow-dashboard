@@ -6621,8 +6621,8 @@ function App() {
         : { background: '#7a1f2a', color: '#fff' }
 
     return (
-      <div key={entry.id} style={{ ...entryStyle, borderRadius: '8px', padding: '8px', marginBottom: '6px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
+      <div key={entry.id} style={{ ...entryStyle, borderRadius: '10px', padding: '10px', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
           <strong>{entry.staff_name || 'Shop'}</strong>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ ...approvalStyle, borderRadius: '8px', padding: '3px 7px', fontWeight: 'bold', fontSize: '12px' }}>
@@ -6633,16 +6633,16 @@ function App() {
             </span>
           </div>
         </div>
-        <p style={{ margin: '5px 0', color: '#ddd', fontSize: '13px' }}>
+        <p style={{ margin: '6px 0', color: '#ddd' }}>
           {entry.start_time || '--:--'} - {entry.end_time || '--:--'} - {getStaffScheduleTypeLabel(entry.schedule_type)} - {getStaffServiceTypeLabel(entry.service_type)}
         </p>
-        {entry.notes && <p style={{ margin: '5px 0 0', color: '#aaa', fontSize: '12px' }}>{entry.notes}</p>}
+        {entry.notes && <p style={{ margin: '6px 0 0', color: '#aaa' }}>{entry.notes}</p>}
         {showActions && (
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
-            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'approved')} style={{ padding: '6px 8px', fontSize: '12px' }}>Approve</button>}
-            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'rejected')} style={{ padding: '6px 8px', fontSize: '12px' }}>Deny</button>}
-            <button onClick={() => editStaffScheduleEntry(entry)} style={{ padding: '6px 8px', fontSize: '12px' }}>Move/Edit</button>
-            <button onClick={() => deleteStaffScheduleEntry(entry)} style={{ padding: '6px 8px', fontSize: '12px' }}>Delete</button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'approved')}>Approve</button>}
+            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'rejected')}>Reject</button>}
+            <button onClick={() => editStaffScheduleEntry(entry)}>Move/Edit</button>
+            <button onClick={() => deleteStaffScheduleEntry(entry)}>Delete</button>
           </div>
         )}
       </div>
@@ -6772,12 +6772,8 @@ function App() {
                   return (
                     <div key={`${member.id}-${date}`} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
                       {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
-                      <button
-                        onClick={() => startStaffScheduleEntryForCell(member, date)}
-                        title={`Add entry for ${member.name}`}
-                        style={{ width: '30px', height: '30px', minWidth: '30px', padding: 0, marginTop: '6px', borderRadius: '50%', fontSize: '18px', lineHeight: '28px' }}
-                      >
-                        +
+                      <button onClick={() => startStaffScheduleEntryForCell(member, date)} style={{ width: '100%', marginTop: '8px', padding: '7px 8px' }}>
+                        Add
                       </button>
                     </div>
                   )
