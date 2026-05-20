@@ -751,7 +751,6 @@ function App() {
   }
 
   function canCurrentStaffEditScheduleEntry(entry) {
-    if (!entry) return false
     if (showManagerView) return true
     const currentStaff = getCurrentStaffUser()
     if (!currentStaff) return false
@@ -918,7 +917,6 @@ function App() {
       return
     }
 
-    setStaffSchedule((current) => current.filter((scheduleEntry) => String(scheduleEntry.id) !== String(entry.id)))
     if (String(staffScheduleEditingId) === String(entry.id)) clearStaffScheduleForm()
     await getStaffSchedule()
   }
@@ -942,9 +940,6 @@ function App() {
       console.log(error)
       return
     }
-    setStaffSchedule((current) => current.map((scheduleEntry) => (
-      String(scheduleEntry.id) === String(entry.id) ? { ...scheduleEntry, ...updates } : scheduleEntry
-    )))
     await getStaffSchedule()
   }
 
@@ -6615,20 +6610,16 @@ function App() {
   }
   function getStaffScheduleEntryStyle(entry) {
     const approval = getStaffScheduleApprovalStatus(entry)
-    const type = entry.schedule_type
-    const style = (() => {
-      if (type === 'holiday') return { border: '1px solid rgba(128, 164, 118, 0.45)', background: 'linear-gradient(180deg, rgba(128, 164, 118, 0.18), rgba(11, 11, 11, 0.95))' }
-      if (type === 'shift') return { border: '1px solid rgba(122, 156, 190, 0.45)', background: 'linear-gradient(180deg, rgba(122, 156, 190, 0.18), rgba(11, 11, 11, 0.95))' }
-      if (type === 'spray_tan_available') return { border: '1px solid rgba(141, 116, 172, 0.48)', background: 'linear-gradient(180deg, rgba(141, 116, 172, 0.19), rgba(11, 11, 11, 0.95))' }
-      if (type === 'time_off') return { border: '1px solid rgba(184, 145, 80, 0.48)', background: 'linear-gradient(180deg, rgba(184, 145, 80, 0.19), rgba(11, 11, 11, 0.95))' }
-      if (type === 'shop_closed') return { border: '1px solid rgba(142, 137, 128, 0.44)', background: 'linear-gradient(180deg, rgba(142, 137, 128, 0.16), rgba(11, 11, 11, 0.95))' }
-      if (type === 'training') return { border: '1px solid rgba(92, 157, 151, 0.45)', background: 'linear-gradient(180deg, rgba(92, 157, 151, 0.18), rgba(11, 11, 11, 0.95))' }
-      return { border: '1px solid rgba(188, 164, 126, 0.38)', background: 'linear-gradient(180deg, rgba(188, 164, 126, 0.15), rgba(11, 11, 11, 0.95))' }
-    })()
+    if (approval === 'pending') return { border: '1px solid rgba(255,204,102,0.7)', background: '#1f1a10' }
+    if (approval === 'rejected') return { border: '1px solid rgba(255,120,117,0.65)', background: '#1f1010' }
 
-    if (approval === 'pending') return { ...style, boxShadow: 'inset 0 0 0 1px rgba(255, 204, 102, 0.28)' }
-    if (approval === 'rejected') return { ...style, boxShadow: 'inset 0 0 0 1px rgba(255, 120, 117, 0.3)' }
-    return style
+    const type = entry.schedule_type
+    if (type === 'shift') return { border: '1px solid rgba(90,168,214,0.45)', background: '#101821' }
+    if (type === 'holiday' || type === 'time_off') return { border: '1px solid rgba(255,120,117,0.45)', background: '#1d1215' }
+    if (type === 'spray_tan_available') return { border: '1px solid rgba(47,122,75,0.55)', background: '#101c16' }
+    if (type === 'training') return { border: '1px solid rgba(90,47,125,0.55)', background: '#17111e' }
+    if (type === 'shop_closed') return { border: '1px solid rgba(122,31,42,0.65)', background: '#1d1012' }
+    return { border: '1px solid #333', background: '#0b0b0b' }
   }
 
   function renderStaffScheduleEntry(entry, showActions = false) {
@@ -6747,7 +6738,7 @@ function App() {
       'Staff Calendar',
       collapseStaffCalendar,
       setCollapseStaffCalendar,
-      <div style={{ background: 'linear-gradient(180deg, rgba(221, 213, 195, 0.055), rgba(16, 15, 14, 0.2))', border: '1px solid rgba(221, 213, 195, 0.08)', borderRadius: '12px', padding: '12px' }}>
+      <div>
         {staffScheduleLoadError && <p style={{ color: '#ff7875' }}>{staffScheduleLoadError}</p>}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
@@ -6784,7 +6775,7 @@ function App() {
                 {weekDates.map((date) => {
                   const dayEntries = filteredEntries.filter((entry) => String(entry.staff_id) === String(member.id) && entry.schedule_date === date)
                   return (
-                    <div key={`${member.id}-${date}`} style={{ background: 'rgba(230, 224, 210, 0.035)', border: '1px solid rgba(221, 213, 195, 0.12)', borderRadius: '10px', padding: '8px', minHeight: '74px', display: 'flex', flexDirection: 'column', justifyContent: dayEntries.length === 0 ? 'center' : 'flex-start' }}>
+                    <div key={`${member.id}-${date}`} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', minHeight: '74px', display: 'flex', flexDirection: 'column', justifyContent: dayEntries.length === 0 ? 'center' : 'flex-start' }}>
                       {dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
                       <button
                         onClick={() => startStaffScheduleEntryForCell(member, date)}
@@ -6804,7 +6795,7 @@ function App() {
                 {weekDates.map((date) => {
                   const dayEntries = filteredEntries.filter((entry) => entry.schedule_type === 'shop_closed' && entry.schedule_date === date)
                   return (
-                    <div key={`shop-${date}`} style={{ background: 'rgba(230, 224, 210, 0.035)', border: '1px solid rgba(221, 213, 195, 0.12)', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
+                    <div key={`shop-${date}`} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
                       {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
                     </div>
                   )
@@ -7086,7 +7077,7 @@ function App() {
           ))}
         </div>
 
-        <div style={{ background: 'linear-gradient(180deg, rgba(205, 154, 143, 0.085), rgba(20, 16, 15, 0.96))', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
+        <div style={{ background: '#1e1e1e', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
           <div style={{ minWidth: '760px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '12px', padding: '0 0 10px', color: '#d4a853', fontWeight: 'bold' }}>
               <span>Time</span>
@@ -7183,7 +7174,7 @@ function App() {
           ))}
         </div>
 
-        <div style={{ background: 'linear-gradient(180deg, rgba(205, 154, 143, 0.085), rgba(20, 16, 15, 0.96))', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
+        <div style={{ background: '#1e1e1e', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
           <div style={{ minWidth: '980px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', padding: '0 0 10px', color: '#d4a853', fontWeight: 'bold' }}>
               <span>Time</span>
