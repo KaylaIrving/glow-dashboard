@@ -6616,17 +6616,17 @@ function App() {
     const approval = getStaffScheduleApprovalStatus(entry)
     const type = entry.schedule_type
     const style = (() => {
-      if (type === 'holiday') return { border: '1px solid rgba(54, 120, 73, 0.55)', background: 'linear-gradient(180deg, #2f7146, #1f4d31)', color: '#f7fff8' }
-      if (type === 'shift') return { border: '1px solid rgba(66, 115, 166, 0.58)', background: 'linear-gradient(180deg, #315f91, #203f63)', color: '#f5faff' }
-      if (type === 'spray_tan_available') return { border: '1px solid rgba(117, 82, 154, 0.6)', background: 'linear-gradient(180deg, #67448a, #442d5f)', color: '#fbf6ff' }
-      if (type === 'time_off') return { border: '1px solid rgba(184, 119, 37, 0.6)', background: 'linear-gradient(180deg, #a86f24, #704715)', color: '#fff8eb' }
-      if (type === 'shop_closed') return { border: '1px solid rgba(116, 112, 105, 0.58)', background: 'linear-gradient(180deg, #67625a, #45413c)', color: '#fbf7ef' }
-      if (type === 'training') return { border: '1px solid rgba(45, 133, 126, 0.6)', background: 'linear-gradient(180deg, #2b7c76, #1d5451)', color: '#f1fffd' }
-      return { border: '1px solid rgba(140, 101, 54, 0.56)', background: 'linear-gradient(180deg, #8a6336, #5f4224)', color: '#fff8ee' }
+      if (type === 'holiday') return { border: '1px solid rgba(128, 164, 118, 0.45)', background: 'linear-gradient(180deg, rgba(128, 164, 118, 0.18), rgba(11, 11, 11, 0.95))' }
+      if (type === 'shift') return { border: '1px solid rgba(122, 156, 190, 0.45)', background: 'linear-gradient(180deg, rgba(122, 156, 190, 0.18), rgba(11, 11, 11, 0.95))' }
+      if (type === 'spray_tan_available') return { border: '1px solid rgba(141, 116, 172, 0.48)', background: 'linear-gradient(180deg, rgba(141, 116, 172, 0.19), rgba(11, 11, 11, 0.95))' }
+      if (type === 'time_off') return { border: '1px solid rgba(184, 145, 80, 0.48)', background: 'linear-gradient(180deg, rgba(184, 145, 80, 0.19), rgba(11, 11, 11, 0.95))' }
+      if (type === 'shop_closed') return { border: '1px solid rgba(142, 137, 128, 0.44)', background: 'linear-gradient(180deg, rgba(142, 137, 128, 0.16), rgba(11, 11, 11, 0.95))' }
+      if (type === 'training') return { border: '1px solid rgba(92, 157, 151, 0.45)', background: 'linear-gradient(180deg, rgba(92, 157, 151, 0.18), rgba(11, 11, 11, 0.95))' }
+      return { border: '1px solid rgba(188, 164, 126, 0.38)', background: 'linear-gradient(180deg, rgba(188, 164, 126, 0.15), rgba(11, 11, 11, 0.95))' }
     })()
 
-    if (approval === 'pending') return { ...style, boxShadow: 'inset 0 0 0 2px rgba(255, 204, 102, 0.55)' }
-    if (approval === 'rejected') return { ...style, boxShadow: 'inset 0 0 0 2px rgba(122, 31, 42, 0.65)' }
+    if (approval === 'pending') return { ...style, boxShadow: 'inset 0 0 0 1px rgba(255, 204, 102, 0.28)' }
+    if (approval === 'rejected') return { ...style, boxShadow: 'inset 0 0 0 1px rgba(255, 120, 117, 0.3)' }
     return style
   }
 
@@ -6671,15 +6671,15 @@ function App() {
             <span style={{ ...approvalStyle, borderRadius: '7px', padding: '2px 6px', fontWeight: 'bold', fontSize: '11px' }}>
               {formatStatus(approval)}
             </span>
-            <span style={{ color: entry.is_available === false ? '#ffe1df' : '#fff3c4', fontWeight: 'bold', fontSize: '11px' }}>
+            <span style={{ color: entry.is_available === false ? '#ff7875' : '#d4a853', fontWeight: 'bold', fontSize: '11px' }}>
               {entry.is_available === false ? 'Unavailable' : 'Available'}
             </span>
           </div>
         </div>
-        <p style={{ margin: '4px 0', color: 'rgba(255,255,255,0.9)', fontSize: '12px' }}>
+        <p style={{ margin: '4px 0', color: '#ddd', fontSize: '12px' }}>
           {entry.start_time || '--:--'} - {entry.end_time || '--:--'} - {getStaffScheduleTypeLabel(entry.schedule_type)} - {getStaffServiceTypeLabel(entry.service_type)}
         </p>
-        {entry.notes && <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.76)', fontSize: '11px' }}>{entry.notes}</p>}
+        {entry.notes && <p style={{ margin: '4px 0 0', color: '#aaa', fontSize: '11px' }}>{entry.notes}</p>}
         {(approval === 'pending' || canEditEntry) && (
           <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '7px' }}>
             {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'approved')} style={{ padding: '5px 7px', fontSize: '11px' }}>Approve</button>}
@@ -6758,6 +6758,7 @@ function App() {
 
     const weekDates = getWeekDates(selectedDate)
     const filteredEntries = getFilteredStaffSchedule()
+    const sprayTanArtistCount = getAvailableSprayTanArtists(selectedDate).length
     const isManager = showManagerView
     const visibleStaff = staff
       .filter((member) => member.is_active !== false)
@@ -6767,7 +6768,7 @@ function App() {
       'Staff Calendar',
       collapseStaffCalendar,
       setCollapseStaffCalendar,
-      <div style={{ background: 'linear-gradient(180deg, #fff9ed, #f2eadb)', border: '1px solid rgba(122, 94, 45, 0.22)', borderRadius: '12px', padding: '12px', color: '#1c1710' }}>
+      <div style={{ background: 'linear-gradient(180deg, rgba(221, 213, 195, 0.055), rgba(16, 15, 14, 0.2))', border: '1px solid rgba(221, 213, 195, 0.08)', borderRadius: '12px', padding: '12px' }}>
         {staffScheduleLoadError && <p style={{ color: '#ff7875' }}>{staffScheduleLoadError}</p>}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
@@ -6785,22 +6786,26 @@ function App() {
           </select>
         </div>
 
-        <h3 style={{ color: '#1c1710' }}>Weekly View</h3>
+        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '14px', color: '#aaa' }}>
+          Spray tan artists available on selected date: <strong style={{ color: '#d4a853' }}>{sprayTanArtistCount}</strong>
+        </div>
+
+        <h3>Weekly View</h3>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ minWidth: '980px', display: 'grid', gridTemplateColumns: '160px repeat(7, minmax(120px, 1fr))', gap: '8px' }}>
-            <div style={{ color: '#6b4b17', fontWeight: 'bold' }}>Staff</div>
+            <div style={{ color: '#d4a853', fontWeight: 'bold' }}>Staff</div>
             {weekDates.map((date) => (
-              <div key={date} style={{ color: '#6b4b17', fontWeight: 'bold' }}>
+              <div key={date} style={{ color: '#d4a853', fontWeight: 'bold' }}>
                 {new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}
               </div>
             ))}
             {visibleStaff.map((member) => (
               <Fragment key={member.id}>
-                <div style={{ background: '#fffdf7', border: '1px solid rgba(122, 94, 45, 0.2)', borderRadius: '10px', padding: '10px', fontWeight: 'bold', color: '#1c1710' }}>{member.name}</div>
+                <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px', fontWeight: 'bold' }}>{member.name}</div>
                 {weekDates.map((date) => {
                   const dayEntries = filteredEntries.filter((entry) => String(entry.staff_id) === String(member.id) && entry.schedule_date === date)
                   return (
-                    <div key={`${member.id}-${date}`} style={{ background: '#fffdf8', border: '1px solid rgba(122, 94, 45, 0.16)', borderRadius: '10px', padding: '8px', minHeight: '74px', display: 'flex', flexDirection: 'column', justifyContent: dayEntries.length === 0 ? 'center' : 'flex-start' }}>
+                    <div key={`${member.id}-${date}`} style={{ background: 'rgba(230, 224, 210, 0.035)', border: '1px solid rgba(221, 213, 195, 0.12)', borderRadius: '10px', padding: '8px', minHeight: '74px', display: 'flex', flexDirection: 'column', justifyContent: dayEntries.length === 0 ? 'center' : 'flex-start' }}>
                       {dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
                       <button
                         onClick={() => startStaffScheduleEntryForCell(member, date)}
@@ -6816,11 +6821,11 @@ function App() {
             ))}
             {filteredEntries.filter((entry) => entry.schedule_type === 'shop_closed').length > 0 && (
               <>
-                <div style={{ background: '#fffdf7', border: '1px solid rgba(122, 94, 45, 0.2)', borderRadius: '10px', padding: '10px', fontWeight: 'bold', color: '#1c1710' }}>Shop</div>
+                <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px', fontWeight: 'bold' }}>Shop</div>
                 {weekDates.map((date) => {
                   const dayEntries = filteredEntries.filter((entry) => entry.schedule_type === 'shop_closed' && entry.schedule_date === date)
                   return (
-                    <div key={`shop-${date}`} style={{ background: '#fffdf8', border: '1px solid rgba(122, 94, 45, 0.16)', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
+                    <div key={`shop-${date}`} style={{ background: 'rgba(230, 224, 210, 0.035)', border: '1px solid rgba(221, 213, 195, 0.12)', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
                       {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
                     </div>
                   )
