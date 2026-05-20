@@ -610,66 +610,26 @@ function App() {
     return formatLocalDate(weekStart)
   }
 
-  function normalizeStaffName(name) {
-    return String(name || '').trim().toLowerCase()
-  }
-
-  function dedupeStaffByName(rows = []) {
-    const byName = new Map()
-
-    for (const member of rows) {
-      const key = normalizeStaffName(member.name)
-      if (!key) continue
-
-      const existing = byName.get(key)
-      if (!existing) {
-        byName.set(key, member)
-        continue
-      }
-
-      const memberActive = member.is_active !== false
-      const existingActive = existing.is_active !== false
-      if (memberActive && !existingActive) {
-        byName.set(key, member)
-        continue
-      }
-
-      if (memberActive === existingActive && Number(member.id || 0) < Number(existing.id || 0)) {
-        byName.set(key, member)
-      }
-    }
-
-    return Array.from(byName.values()).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-  }
-
   async function getStaff() {
     const { data, error } = await supabase.from('Staff').select('*').order('name', { ascending: true })
     if (error) {
       setStaffLoadError(error.message || 'Could not load Staff table.')
       showDataLoadWarning('Staff accounts could not be loaded. Staff sign-in may be limited.', error)
-      setStaff(dedupeStaffByName(DEFAULT_STAFF.map((member, index) => ({
+      setStaff(DEFAULT_STAFF.map((member, index) => ({
         id: `default-${index}`,
         ...member,
         is_active: true,
         weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES,
         last_weekly_reset_date: getWeekStartDateString()
-      }))))
+      })))
       return
     }
 
     setStaffLoadError('')
     clearDataLoadWarning()
 
-    const loadedStaff = data || []
-    const existingStaffNames = new Set(loadedStaff.map((member) => normalizeStaffName(member.name)).filter(Boolean))
-
-    if (loadedStaff.length === 0) {
-      const defaultStaffToInsert = DEFAULT_STAFF.filter((member) => !existingStaffNames.has(normalizeStaffName(member.name)))
-      if (defaultStaffToInsert.length === 0) {
-        setStaff([])
-        return
-      }
-      await supabase.from('Staff').insert(defaultStaffToInsert.map((member) => ({
+    if (data && data.length === 0) {
+      await supabase.from('Staff').insert(DEFAULT_STAFF.map((member) => ({
         ...member,
         is_active: true,
         weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES,
@@ -681,9 +641,8 @@ function App() {
 
     const weekStart = getWeekStartDateString()
     const resetStaff = []
-    const dedupedStaff = dedupeStaffByName(loadedStaff)
 
-    for (const member of dedupedStaff) {
+    for (const member of data || []) {
       if (member.is_active && member.last_weekly_reset_date !== weekStart) {
         const updatedMember = { ...member, weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES, last_weekly_reset_date: weekStart }
         resetStaff.push(updatedMember)
@@ -6397,7 +6356,7 @@ function App() {
 
   function renderStaffSelectorModal() {
     if (!staffSelectorOpen) return null
-    const activeStaff = dedupeStaffByName(staff).filter((member) => member.is_active !== false)
+    const activeStaff = staff.filter((member) => member.is_active !== false)
 
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
