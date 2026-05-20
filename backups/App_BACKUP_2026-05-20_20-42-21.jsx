@@ -758,26 +758,6 @@ function App() {
     setStaffScheduleAvailable(entry.is_available !== false)
   }
 
-  function startStaffScheduleEntryForCell(member, date) {
-    const currentStaff = getCurrentStaffUser()
-    if (!currentStaff) return
-    if (!showManagerView && String(member.id) !== String(currentStaff.id)) {
-      alert('Staff can only submit calendar requests for themselves.')
-      return
-    }
-
-    setStaffScheduleEditingId('')
-    setStaffScheduleStaffId(String(member.id))
-    setStaffScheduleDate(date)
-    setStaffScheduleStartTime('09:00')
-    setStaffScheduleEndTime('17:00')
-    setStaffScheduleType('shift')
-    setStaffScheduleServiceType('general')
-    setStaffScheduleNotes('')
-    setStaffScheduleAvailable(true)
-    setCollapseStaffCalendar(false)
-  }
-
   function getFilteredStaffSchedule() {
     return staffSchedule.filter((entry) => {
       if (staffScheduleFilterStaffId && String(entry.staff_id) !== String(staffScheduleFilterStaffId)) return false
@@ -6434,42 +6414,6 @@ function App() {
     )
   }
 
-  function renderManagerSectionNav() {
-    if (!showManagerView) return null
-
-    const sectionButtons = [
-      { label: 'Staff Management', isOpen: !collapseStaffManagement, toggle: () => setCollapseStaffManagement(!collapseStaffManagement) },
-      { label: 'Maintenance', isOpen: !collapseMaintenance, toggle: () => setCollapseMaintenance(!collapseMaintenance) },
-      { label: 'Products', isOpen: !collapseProducts, toggle: () => setCollapseProducts(!collapseProducts) },
-      { label: 'Booking / Payment Corrections', isOpen: !collapseCorrections, toggle: () => setCollapseCorrections(!collapseCorrections) },
-      { label: 'Wix Booking Sync', isOpen: !collapseWixSync, toggle: () => setCollapseWixSync(!collapseWixSync) },
-      { label: 'Receipt History', isOpen: !collapseReceipts, toggle: () => setCollapseReceipts(!collapseReceipts) },
-      { label: 'Exports / Backups', isOpen: !collapseExports, toggle: () => setCollapseExports(!collapseExports) },
-      { label: 'Daily Takings', isOpen: !collapseDailyTakings, toggle: () => setCollapseDailyTakings(!collapseDailyTakings) }
-    ]
-
-    return (
-      <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '12px', marginBottom: '18px' }}>
-        <strong style={{ display: 'block', marginBottom: '10px', color: '#d4a853' }}>Manager View</strong>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {sectionButtons.map((item) => (
-            <button
-              key={item.label}
-              onClick={item.toggle}
-              style={{
-                background: item.isOpen ? '#d4a853' : '#1e1e1e',
-                color: item.isOpen ? '#050505' : '#fff',
-                border: item.isOpen ? '1px solid #d4a853' : '1px solid rgba(212,168,83,0.35)'
-              }}
-            >
-              {item.isOpen ? `Hide ${item.label}` : item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
   function renderReceiptHistoryPanel() {
     if (!showManagerView) return null
 
@@ -6562,11 +6506,10 @@ function App() {
   }
 
   function renderCollapsibleSection(title, isCollapsed, setIsCollapsed, children) {
-    if (isCollapsed) return null
-
     return (
       <div style={{ marginBottom: '18px', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '18px', overflow: 'hidden', background: '#111' }}>
-        <div
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
           style={{
             width: '100%',
             borderRadius: 0,
@@ -6574,21 +6517,22 @@ function App() {
             justifyContent: 'space-between',
             alignItems: 'center',
             padding: '14px 18px',
-            fontSize: '16px',
-            background: '#0b0b0b',
-            borderBottom: '1px solid rgba(212,168,83,0.2)'
+            fontSize: '16px'
           }}
         >
           <span>{title}</span>
-          <button onClick={() => setIsCollapsed(true)}>Hide</button>
-        </div>
+          <span>{isCollapsed ? 'Open +' : 'Hide −'}</span>
+        </button>
 
-        <div style={{ padding: '16px' }}>
-          {children}
-        </div>
+        {!isCollapsed && (
+          <div style={{ padding: '16px' }}>
+            {children}
+          </div>
+        )}
       </div>
     )
   }
+
   function getStaffScheduleEntryStyle(entry) {
     const approval = getStaffScheduleApprovalStatus(entry)
     if (approval === 'pending') return { border: '1px solid rgba(255,204,102,0.7)', background: '#1f1a10' }
@@ -6749,11 +6693,6 @@ function App() {
                   return (
                     <div key={`${member.id}-${date}`} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
                       {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
-                      {(isManager || String(member.id) === String(currentStaff.id)) && (
-                        <button onClick={() => startStaffScheduleEntryForCell(member, date)} style={{ width: '100%', marginTop: '8px', padding: '7px 8px' }}>
-                          Add
-                        </button>
-                      )}
                     </div>
                   )
                 })}
@@ -7356,7 +7295,6 @@ function App() {
           <div className="top-action-buttons">
             <button onClick={() => setShowCustomerManagement(!showCustomerManagement)}>{showCustomerManagement ? 'Hide Customers' : 'Customers'}</button>
             <button onClick={collapseCashUp ? openCashUpPanel : () => setCollapseCashUp(true)}>{collapseCashUp ? 'Cash Up' : 'Hide Cash Up'}</button>
-            {currentStaffUser && <button onClick={() => setCollapseStaffCalendar(!collapseStaffCalendar)}>{collapseStaffCalendar ? 'Staff Calendar' : 'Hide Staff Calendar'}</button>}
             {showManagerView ? (
               <>
                 <button onClick={() => setShowManagerView(false)}>Hide Manager View</button>
@@ -7404,7 +7342,6 @@ function App() {
       {showCustomerManagement && renderCustomerManagementPanel()}
       {!collapseCashUp && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
       {renderStaffCalendarPanel()}
-      {renderManagerSectionNav()}
       {showManagerView && renderStaffManagementPanel()}
       {showManagerView && renderMaintenancePanel()}
       {showManagerView && renderProductsManagementPanel()}
