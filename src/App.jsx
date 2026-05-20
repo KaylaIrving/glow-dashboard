@@ -2486,8 +2486,17 @@ function App() {
     return String(booking?.status || '').toLowerCase()
   }
 
+  function isForceStoppedCooldownActive(booking) {
+    if (getBookingStatusKey(booking) !== 'force_stopped') return false
+    if (!booking?.booking_end) return false
+    const cooldownEnd = new Date(booking.booking_end)
+    if (Number.isNaN(cooldownEnd.getTime())) return false
+    return cooldownEnd > new Date()
+  }
+
   function isFinishedBookingStatus(booking) {
-    return ['completed', 'deleted', 'cancelled', 'canceled', 'no_show', 'force_stopped'].includes(getBookingStatusKey(booking))
+    if (getBookingStatusKey(booking) === 'force_stopped') return !isForceStoppedCooldownActive(booking)
+    return ['completed', 'deleted', 'cancelled', 'canceled', 'no_show'].includes(getBookingStatusKey(booking))
   }
 
   function getLiveBedSession(bedId, excludeBookingId = null) {
@@ -2515,6 +2524,7 @@ function App() {
     const now = new Date()
     const status = getBookingStatusKey(booking)
     if (status === 'cooldown') return 'cooldown'
+    if (status === 'force_stopped') return isForceStoppedCooldownActive(booking) ? 'cooldown' : 'force_stopped'
 
     const actualStartAt = booking?.customer_started_at
     if (actualStartAt) {
@@ -3563,17 +3573,117 @@ function App() {
 
   async function forceStop(booking) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to force stop a session:')) return
 
-    const { error } = await supabase.from('Bookings').update({ status: 'force_stopped', booking_end: new Date().toISOString(), tmax_status: 'force_stopped' }).eq('id', booking.id)
+    if (!booking?.id) {
+      alert('No booking selected to force stop.')
+      return
+    }
+
+    const confirmed = window.confirm(`Force stop session for ${booking.customer_name || 'this customer'}?\n\nThis will stop the timer, refund deducted minutes where possible, and keep the bed in a 3 minute cooldown.`)
+    if (!confirmed) return
+
+    const now = new Date()
+    const cooldownEnd = new Date(now.getTime() + COOLDOWN_SECONDS * 1000)
+    let refundedMinutes = false
+
+    if (booking.minutes_deducted && !isShopTestBooking(booking)) {
+      if (isStaffFreeBooking(booking)) {
+        const staffId = getStaffIdFromBooking(booking)
+        const member = staff.find((item) => String(item.id) === String(staffId))
+        if (member) {
+          const oldBalance = Number(member.weekly_free_minutes_balance || 0)
+          const newBalance = oldBalance + Number(booking.minutes || 0)
+          const { error: staffRefundError } = await supabase.from('Staff').update({ weekly_free_minutes_balance: newBalance }).eq('id', staffId)
+          if (staffRefundError) {
+            alert('Could not refund staff free minutes. Force stop was not saved.')
+            showDataLoadWarning('Staff free minutes refund failed.', staffRefundError)
+            console.log(staffRefundError)
+            return
+          }
+          await createStaffLog(member, 'Staff free booking force stopped', `Booking ${booking.id || ''}: ${booking.minutes || 0} free mins returned. Balance ${oldBalance} -> ${newBalance}.`)
+          refundedMinutes = true
+        }
+      } else if (booking.customer_id) {
+        const { data: customer, error: customerLoadError } = await supabase.from('Customers').select('*').eq('id', booking.customer_id).single()
+        if (customerLoadError) {
+          alert('Could not load the customer to refund minutes. Force stop was not saved.')
+          showDataLoadWarning('Customer load failed before force stop refund.', customerLoadError)
+          console.log(customerLoadError)
+          return
+        }
+
+        let standardRefund = 0
+        let hybridRefund = 0
+
+        const { data: usageTransactions, error: transactionLoadError } = await supabase
+          .from('CustomerMinuteTransactions')
+          .select('*')
+          .eq('customer_id', booking.customer_id)
+          .eq('transaction_type', 'used')
+          .ilike('notes', `%Booking ${booking.id}%`)
+
+        if (!transactionLoadError && usageTransactions && usageTransactions.length > 0) {
+          usageTransactions.forEach((transaction) => {
+            const amount = Math.abs(Number(transaction.minutes_changed || 0))
+            if (transaction.minute_type === 'standard') standardRefund += amount
+            if (transaction.minute_type === 'hybrid') hybridRefund += amount
+          })
+        } else {
+          if (transactionLoadError) console.log('Could not read minute transaction split, using fallback refund.', transactionLoadError)
+          if (Number(booking.bed_id) === 2) hybridRefund = Number(booking.minutes || 0)
+          else standardRefund = Number(booking.minutes || 0)
+        }
+
+        const oldStandard = Number(customer.standard_minutes_balance || 0)
+        const oldHybrid = Number(customer.hybrid_minutes_balance || 0)
+        const newStandard = oldStandard + standardRefund
+        const newHybrid = oldHybrid + hybridRefund
+
+        const { error: customerRefundError } = await supabase.from('Customers').update({
+          standard_minutes_balance: newStandard,
+          hybrid_minutes_balance: newHybrid
+        }).eq('id', customer.id)
+
+        if (customerRefundError) {
+          alert('Could not refund customer minutes. Force stop was not saved.')
+          showDataLoadWarning('Customer minute refund failed.', customerRefundError)
+          console.log(customerRefundError)
+          return
+        }
+
+        await createCustomerLog(customer, 'Booking force stopped', `Booking ${booking.id || ''} force stopped. Refunded Standard ${standardRefund} mins and Hybrid ${hybridRefund} mins. Bed cooldown until ${cooldownEnd.toLocaleTimeString('en-GB')}.`)
+        await logCustomerMinuteChanges(
+          customer,
+          oldStandard,
+          newStandard,
+          oldHybrid,
+          newHybrid,
+          'refunded',
+          `Booking ${booking.id || ''} force stopped. Minutes returned.`
+        )
+        refundedMinutes = true
+      }
+    }
+
+    const { error } = await supabase.from('Bookings').update({
+      status: 'force_stopped',
+      booking_end: cooldownEnd.toISOString(),
+      actual_tanning_end: now.toISOString(),
+      tmax_status: 'force_stopped',
+      minutes_deducted: refundedMinutes ? false : booking.minutes_deducted
+    }).eq('id', booking.id)
+
     if (error) {
       alert('Force stop was not saved. Please check the connection and try again.')
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
       console.log(error)
       return
     }
+
     closeModal()
-    getBookings()
+    await getBookings()
+    await getCustomers()
+    await getStaff()
   }
 
   async function autoCompleteFinishedSessions() {
@@ -3624,6 +3734,12 @@ function App() {
 
   function getPhase(booking) {
     if (isShopTestBooking(booking) && !booking?.booking_start) return 'Shop Test'
+
+    const bookingStatus = String(booking?.status || '').toLowerCase()
+
+    if (bookingStatus === 'force_stopped') {
+      return 'Force Stopped'
+    }
 
     if (!booking?.booking_start && !booking?.customer_started_at) {
       return formatStatus(booking?.status || 'booked')
@@ -3722,9 +3838,11 @@ function App() {
         ? '#5a2f7d'
         : phase === 'Cooldown'
           ? '#5aa8d6'
-          : phase === 'Completed'
-            ? '#2f7a4b'
-            : '#2f2f2f'
+          : phase === 'Force Stopped'
+            ? '#7a1f2a'
+            : phase === 'Completed'
+              ? '#2f7a4b'
+              : '#2f2f2f'
     return {
       display: 'inline-block',
       background,
