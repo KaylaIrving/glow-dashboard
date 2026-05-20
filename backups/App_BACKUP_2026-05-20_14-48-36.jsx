@@ -134,8 +134,8 @@ function App() {
   const [sprayTanDepositStatus, setSprayTanDepositStatus] = useState('pending')
   const [sprayTanPatchCompleted, setSprayTanPatchCompleted] = useState(false)
   const [sprayTanPatchTestDate, setSprayTanPatchTestDate] = useState('')
-  const [sprayTanApprovalStatus, setSprayTanApprovalStatus] = useState('pending')
-  const [sprayTanStatusControl, setSprayTanStatusControl] = useState('Pending Approval')
+  const [sprayTanApprovalStatus, setSprayTanApprovalStatus] = useState('approved')
+  const [sprayTanStatusControl, setSprayTanStatusControl] = useState('Approved')
   const [sprayTanSaving, setSprayTanSaving] = useState(false)
 
   const [showCustomerManagement, setShowCustomerManagement] = useState(false)
@@ -2109,7 +2109,7 @@ function App() {
     if (statusLabel === 'Deposit Paid') return { status: 'booked', approval_status: 'approved', deposit_status: 'paid' }
     if (statusLabel === 'Completed') return { status: 'completed', approval_status: 'approved', deposit_status: depositStatus || 'paid' }
     if (statusLabel === 'Cancelled') return { status: 'cancelled', approval_status: 'cancelled', deposit_status: depositStatus || 'pending' }
-    return { status: 'booked', approval_status: 'pending', deposit_status: depositStatus || 'pending' }
+    return { status: 'booked', approval_status: 'approved', deposit_status: depositStatus || 'pending' }
   }
 
   function getBookingStatusKey(booking) {
@@ -3488,8 +3488,8 @@ function App() {
     setSprayTanDepositStatus(column === 'patch_test' ? 'not_required' : 'pending')
     setSprayTanPatchCompleted(column === 'patch_test')
     setSprayTanPatchTestDate('')
-    setSprayTanApprovalStatus('pending')
-    setSprayTanStatusControl('Pending Approval')
+    setSprayTanApprovalStatus('approved')
+    setSprayTanStatusControl('Approved')
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')
     setCustomerSearch('')
@@ -3543,8 +3543,8 @@ function App() {
     setSprayTanDepositStatus('pending')
     setSprayTanPatchCompleted(false)
     setSprayTanPatchTestDate('')
-    setSprayTanApprovalStatus('pending')
-    setSprayTanStatusControl('Pending Approval')
+    setSprayTanApprovalStatus('approved')
+    setSprayTanStatusControl('Approved')
     setSprayTanSaving(false)
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')

@@ -119,9 +119,7 @@ function App() {
   const [showBookingProducts, setShowBookingProducts] = useState(false)
   const [bookingSaving, setBookingSaving] = useState(false)
   const [sprayTanModalOpen, setSprayTanModalOpen] = useState(false)
-  const [sprayTanEditingBooking, setSprayTanEditingBooking] = useState(null)
   const [sprayTanSlot, setSprayTanSlot] = useState(null)
-  const [sprayTanCustomerName, setSprayTanCustomerName] = useState('')
   const [sprayTanColumn, setSprayTanColumn] = useState('spray_tan')
   const [sprayTanService, setSprayTanService] = useState('Full Body')
   const [sprayTanDate, setSprayTanDate] = useState(formatLocalDate(new Date()))
@@ -131,11 +129,8 @@ function App() {
   const [sprayTanNotes, setSprayTanNotes] = useState('')
   const [sprayTanDepositRequired, setSprayTanDepositRequired] = useState(15)
   const [sprayTanDepositPaid, setSprayTanDepositPaid] = useState('')
-  const [sprayTanDepositStatus, setSprayTanDepositStatus] = useState('pending')
   const [sprayTanPatchCompleted, setSprayTanPatchCompleted] = useState(false)
-  const [sprayTanPatchTestDate, setSprayTanPatchTestDate] = useState('')
-  const [sprayTanApprovalStatus, setSprayTanApprovalStatus] = useState('pending')
-  const [sprayTanStatusControl, setSprayTanStatusControl] = useState('Pending Approval')
+  const [sprayTanApprovalStatus, setSprayTanApprovalStatus] = useState('approved')
   const [sprayTanSaving, setSprayTanSaving] = useState(false)
 
   const [showCustomerManagement, setShowCustomerManagement] = useState(false)
@@ -2102,16 +2097,6 @@ function App() {
     }
   }
 
-  function getSprayTanStatusFields(statusLabel, depositStatus = sprayTanDepositStatus) {
-    if (statusLabel === 'Pending Approval') return { status: 'booked', approval_status: 'pending', deposit_status: depositStatus || 'pending' }
-    if (statusLabel === 'Approved') return { status: 'booked', approval_status: 'approved', deposit_status: 'not_required' }
-    if (statusLabel === 'Deposit Pending') return { status: 'booked', approval_status: 'approved', deposit_status: 'pending' }
-    if (statusLabel === 'Deposit Paid') return { status: 'booked', approval_status: 'approved', deposit_status: 'paid' }
-    if (statusLabel === 'Completed') return { status: 'completed', approval_status: 'approved', deposit_status: depositStatus || 'paid' }
-    if (statusLabel === 'Cancelled') return { status: 'cancelled', approval_status: 'cancelled', deposit_status: depositStatus || 'pending' }
-    return { status: 'booked', approval_status: 'pending', deposit_status: depositStatus || 'pending' }
-  }
-
   function getBookingStatusKey(booking) {
     return String(booking?.status || '').toLowerCase()
   }
@@ -3455,9 +3440,7 @@ function App() {
 
   function setSprayTanServiceWithDefaults(serviceName) {
     setSprayTanService(serviceName)
-    const defaultDeposit = getDefaultSprayTanDeposit(serviceName)
-    setSprayTanDepositRequired(defaultDeposit)
-    setSprayTanDepositStatus(defaultDeposit > 0 ? 'pending' : 'not_required')
+    setSprayTanDepositRequired(getDefaultSprayTanDeposit(serviceName))
     if (serviceName === 'Patch Test') {
       setSprayTanColumn('patch_test')
       setSprayTanDuration(10)
@@ -3474,8 +3457,6 @@ function App() {
         ? 'Express Tan'
         : 'Full Body'
     setSprayTanSlot({ time, column })
-    setSprayTanEditingBooking(null)
-    setSprayTanCustomerName('')
     setSprayTanColumn(column)
     setSprayTanService(defaultService)
     setSprayTanDate(selectedDate)
@@ -3485,11 +3466,8 @@ function App() {
     setSprayTanNotes('')
     setSprayTanDepositRequired(getDefaultSprayTanDeposit(defaultService))
     setSprayTanDepositPaid(column === 'patch_test' ? 0 : '')
-    setSprayTanDepositStatus(column === 'patch_test' ? 'not_required' : 'pending')
     setSprayTanPatchCompleted(column === 'patch_test')
-    setSprayTanPatchTestDate('')
-    setSprayTanApprovalStatus('pending')
-    setSprayTanStatusControl('Pending Approval')
+    setSprayTanApprovalStatus('approved')
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')
     setCustomerSearch('')
@@ -3499,38 +3477,9 @@ function App() {
     setSprayTanModalOpen(true)
   }
 
-  function openSprayTanBookingForEdit(booking) {
-    if (!requireStaffSignIn()) return
-    const bookingTime = new Date(booking.appointment_time)
-    setSprayTanEditingBooking(booking)
-    setSprayTanSlot(null)
-    setSprayTanCustomerName(booking.customer_name || '')
-    setSprayTanColumn(booking.spraytan_column || 'spray_tan')
-    setSprayTanService(booking.spraytan_service || 'Full Body')
-    setSprayTanDate(formatLocalDate(bookingTime))
-    setSprayTanTime(`${String(bookingTime.getHours()).padStart(2, '0')}:${String(bookingTime.getMinutes()).padStart(2, '0')}`)
-    setSprayTanDuration(Number(booking.spraytan_duration_minutes || 30))
-    setSprayTanArtist(booking.spraytan_artist || '')
-    setSprayTanNotes(booking.notes || '')
-    setSprayTanDepositRequired(Number(booking.deposit_required || 0))
-    setSprayTanDepositPaid(Number(booking.deposit_paid || 0))
-    setSprayTanDepositStatus(booking.deposit_status || getSprayTanDepositStatus(booking.spraytan_service, booking.deposit_required, booking.deposit_paid))
-    setSprayTanPatchCompleted(Boolean(booking.patch_test_completed))
-    setSprayTanPatchTestDate(booking.patch_test_date ? formatLocalDate(new Date(booking.patch_test_date)) : '')
-    setSprayTanApprovalStatus(booking.approval_status || 'approved')
-    setSprayTanStatusControl(getSprayTanStatusLabel(booking))
-    setSelectedCustomerId(booking.customer_id ? String(booking.customer_id) : '')
-    setSelectedStaffAsCustomerId('')
-    setCustomerSearch(booking.customer_name || '')
-    setSprayTanSaving(false)
-    setSprayTanModalOpen(true)
-  }
-
   function closeSprayTanModal() {
     setSprayTanModalOpen(false)
-    setSprayTanEditingBooking(null)
     setSprayTanSlot(null)
-    setSprayTanCustomerName('')
     setSprayTanColumn('spray_tan')
     setSprayTanService('Full Body')
     setSprayTanDate(selectedDate)
@@ -3540,11 +3489,8 @@ function App() {
     setSprayTanNotes('')
     setSprayTanDepositRequired(15)
     setSprayTanDepositPaid('')
-    setSprayTanDepositStatus('pending')
     setSprayTanPatchCompleted(false)
-    setSprayTanPatchTestDate('')
-    setSprayTanApprovalStatus('pending')
-    setSprayTanStatusControl('Pending Approval')
+    setSprayTanApprovalStatus('approved')
     setSprayTanSaving(false)
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')
@@ -3583,7 +3529,7 @@ function App() {
     const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || getDefaultSprayTanDeposit(sprayTanService))
     const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
     const balanceDue = Math.max(0, servicePrice - depositPaid)
-    const statusFields = getSprayTanStatusFields(sprayTanStatusControl, sprayTanDepositStatus || getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid))
+    const depositStatus = getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid)
     const patchWarning = getPatchTestWarning(customer, appointmentDateTime, sprayTanService)
 
     if (depositPaid > servicePrice) {
@@ -3603,7 +3549,7 @@ function App() {
       customer_phone: customer.phone || null,
       customer_email: customer.email || null,
       appointment_time: appointmentDateTime.toISOString(),
-      status: statusFields.status,
+      status: 'booked',
       booking_source: 'dashboard',
       booking_type: 'spraytan',
       spraytan_column: sprayTanColumn,
@@ -3611,13 +3557,13 @@ function App() {
       spraytan_artist: sprayTanArtist || null,
       deposit_required: depositRequired,
       deposit_paid: depositPaid,
-      deposit_status: statusFields.deposit_status,
+      deposit_status: depositStatus,
       patch_test_required: sprayTanService !== 'Patch Test',
       patch_test_completed: sprayTanService === 'Patch Test' ? true : sprayTanPatchCompleted,
-      patch_test_date: sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || null,
-      approval_status: statusFields.approval_status,
-      approved_by: statusFields.approval_status === 'approved' ? getCurrentStaffUser()?.name || null : null,
-      approved_at: statusFields.approval_status === 'approved' ? new Date().toISOString() : null,
+      patch_test_date: sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || null,
+      approval_status: sprayTanApprovalStatus,
+      approved_by: sprayTanApprovalStatus === 'approved' ? getCurrentStaffUser()?.name || null : null,
+      approved_at: sprayTanApprovalStatus === 'approved' ? new Date().toISOString() : null,
       spraytan_duration_minutes: Number(sprayTanDuration || 0),
       spraytan_balance_due: balanceDue,
       notes: sprayTanNotes || null
@@ -3644,99 +3590,6 @@ function App() {
     await getBookings()
     await getCustomers()
     if (data) setDashboardView('spraytan')
-  }
-
-  async function saveSprayTanBookingEdits() {
-    if (sprayTanSaving) return
-    if (!requireStaffSignIn()) return
-    if (!sprayTanEditingBooking?.id) {
-      alert('No spray tan booking selected to edit.')
-      return
-    }
-
-    const appointmentDateTime = new Date(`${sprayTanDate}T${sprayTanTime}`)
-    if (Number.isNaN(appointmentDateTime.getTime())) {
-      alert('Please choose a valid date and time.')
-      return
-    }
-
-    const servicePrice = getSprayTanServicePrice(sprayTanService)
-    const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
-    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || getDefaultSprayTanDeposit(sprayTanService))
-    if (depositPaid > servicePrice) {
-      alert('Deposit paid cannot be more than the service price.')
-      return
-    }
-
-    const statusFields = getSprayTanStatusFields(sprayTanStatusControl, sprayTanDepositStatus)
-    const balanceDue = Math.max(0, servicePrice - depositPaid)
-    const patchDate = sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : null
-    const customerName = sprayTanCustomerName.trim() || customerSearch.trim() || sprayTanEditingBooking.customer_name || 'Spray tan customer'
-
-    setSprayTanSaving(true)
-    const { error } = await supabase.from('Bookings').update({
-      customer_name: customerName,
-      appointment_time: appointmentDateTime.toISOString(),
-      spraytan_column: sprayTanColumn,
-      spraytan_service: sprayTanService,
-      spraytan_artist: sprayTanArtist || null,
-      spraytan_duration_minutes: Number(sprayTanDuration || 0),
-      deposit_required: depositRequired,
-      deposit_paid: depositPaid,
-      deposit_status: statusFields.deposit_status,
-      approval_status: statusFields.approval_status,
-      approved_by: statusFields.approval_status === 'approved' && sprayTanEditingBooking.approval_status !== 'approved' ? getCurrentStaffUser()?.name || null : sprayTanEditingBooking.approved_by || null,
-      approved_at: statusFields.approval_status === 'approved' && sprayTanEditingBooking.approval_status !== 'approved' ? new Date().toISOString() : sprayTanEditingBooking.approved_at || null,
-      status: statusFields.status,
-      patch_test_required: sprayTanService !== 'Patch Test',
-      patch_test_completed: sprayTanService === 'Patch Test' ? true : sprayTanPatchCompleted,
-      patch_test_date: sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : patchDate,
-      spraytan_balance_due: balanceDue,
-      notes: sprayTanNotes || null
-    }).eq('id', sprayTanEditingBooking.id)
-    setSprayTanSaving(false)
-
-    if (error) {
-      alert('Spray tan booking changes were not saved. Please check the connection.')
-      showDataLoadWarning('Spray tan booking update failed.', error)
-      console.log(error)
-      return
-    }
-
-    if ((sprayTanService === 'Patch Test' || sprayTanPatchCompleted) && sprayTanEditingBooking.customer_id) {
-      const customerPatchDate = sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : patchDate
-      if (customerPatchDate) {
-        await supabase.from('Customers').update({ last_patch_test_date: customerPatchDate }).eq('id', sprayTanEditingBooking.customer_id)
-      }
-    }
-
-    closeSprayTanModal()
-    await getBookings()
-    await getCustomers()
-  }
-
-  async function cancelSprayTanBooking() {
-    if (!sprayTanEditingBooking?.id) return
-    const confirmed = window.confirm('Cancel this spray tan booking? This will keep the record and mark it as Cancelled.')
-    if (!confirmed) return
-    setSprayTanStatusControl('Cancelled')
-    setSprayTanSaving(true)
-    const { error } = await supabase.from('Bookings').update({
-      status: 'cancelled',
-      approval_status: 'cancelled',
-      last_wix_sync_at: sprayTanEditingBooking.booking_source === 'wix' ? new Date().toISOString() : sprayTanEditingBooking.last_wix_sync_at || null
-    }).eq('id', sprayTanEditingBooking.id)
-    setSprayTanSaving(false)
-
-    if (error) {
-      alert('Spray tan booking was not cancelled. Please check the connection.')
-      showDataLoadWarning('Spray tan booking cancel failed.', error)
-      console.log(error)
-      return
-    }
-
-    closeSprayTanModal()
-    await getBookings()
   }
 
   async function openCustomerManagementFromBooking(booking) {
@@ -6104,14 +5957,7 @@ function App() {
                         const lastPatchTestDate = customer?.last_patch_test_date || booking.patch_test_date
 
                         return (
-                          <div
-                            key={booking.id}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              openSprayTanBookingForEdit(booking)
-                            }}
-                            style={{ background: '#111', border: '1px solid rgba(212,168,83,0.22)', borderRadius: '8px', padding: '10px', marginBottom: '8px', cursor: 'pointer' }}
-                          >
+                          <div key={booking.id} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.22)', borderRadius: '8px', padding: '10px', marginBottom: '8px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                               <strong>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
                               <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
@@ -6158,19 +6004,10 @@ function App() {
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
         <div style={{ background: '#1e1e1e', padding: '24px', borderRadius: '16px', width: '620px', maxWidth: '94%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid rgba(212,168,83,0.35)' }}>
-          <h2 style={{ marginTop: 0 }}>{sprayTanEditingBooking ? 'Edit Spray Tan Booking' : 'Create Spray Tan Booking'}</h2>
+          <h2 style={{ marginTop: 0 }}>Create Spray Tan Booking</h2>
           <p style={{ color: '#aaa' }}>{getSprayTanColumnLabel(sprayTanSlot?.column || sprayTanColumn)} at {sprayTanSlot?.time || sprayTanTime}</p>
 
-          {sprayTanEditingBooking ? (
-            <div style={{ marginBottom: '12px' }}>
-              <label>Customer name</label>
-              <input
-                value={sprayTanCustomerName}
-                onChange={(e) => setSprayTanCustomerName(e.target.value)}
-                style={{ width: '100%', padding: '12px', marginTop: '5px', boxSizing: 'border-box' }}
-              />
-            </div>
-          ) : renderCustomerSearchBox()}
+          {renderCustomerSearchBox()}
           {selectedStaff && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Spray tan bookings must be linked to a customer, not a staff free-minutes account.</p>}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
@@ -6201,35 +6038,18 @@ function App() {
             <div><label>Artist</label><input value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} placeholder="Artist name" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Deposit required</label><input type="number" step="0.01" value={depositRequired} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanDepositRequired(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Deposit paid</label><input type="number" step="0.01" value={depositPaid} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanDepositPaid(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit status</label>
-              <select value={sprayTanDepositStatus} onChange={(e) => setSprayTanDepositStatus(e.target.value)} disabled={sprayTanService === 'Patch Test'} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                <option value="pending">Deposit Pending</option>
-                <option value="paid">Deposit Paid</option>
-                <option value="not_required">Not Required</option>
+            <div><label>Approval status</label>
+              <select value={sprayTanApprovalStatus} onChange={(e) => setSprayTanApprovalStatus(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
+                <option value="pending">Pending Approval</option>
+                <option value="approved">Approved</option>
               </select>
             </div>
-            <div><label>Booking status</label>
-              <select
-                value={sprayTanStatusControl}
-                onChange={(e) => {
-                  const nextStatus = e.target.value
-                  setSprayTanStatusControl(nextStatus)
-                  const fields = getSprayTanStatusFields(nextStatus, sprayTanDepositStatus)
-                  setSprayTanApprovalStatus(fields.approval_status)
-                  setSprayTanDepositStatus(fields.deposit_status)
-                }}
-                style={{ width: '100%', padding: '10px', marginTop: '5px' }}
-              >
-                {SPRAY_TAN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-              </select>
-            </div>
-            <div><label>Patch test date</label><input type="date" value={sprayTanPatchTestDate} onChange={(e) => setSprayTanPatchTestDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
           </div>
 
           <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
             <p style={{ margin: '0 0 6px' }}>Service price: <strong>£{servicePrice.toFixed(2)}</strong></p>
             <p style={{ margin: '0 0 6px' }}>Balance due: <strong>£{balanceDue.toFixed(2)}</strong></p>
-            <p style={{ margin: 0 }}>Deposit status: <strong>{formatStatus(sprayTanDepositStatus || getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid))}</strong></p>
+            <p style={{ margin: 0 }}>Deposit status: <strong>{formatStatus(getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid))}</strong></p>
           </div>
 
           <label style={{ display: 'block', marginBottom: '8px', color: sprayTanPatchCompleted ? '#9ccfae' : '#ffcc66' }}>
@@ -6247,10 +6067,7 @@ function App() {
           />
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
-            <button onClick={sprayTanEditingBooking ? saveSprayTanBookingEdits : createSprayTanBookingFromModal} disabled={sprayTanSaving}>
-              {sprayTanSaving ? 'Saving...' : sprayTanEditingBooking ? 'Save Spray Tan Booking' : 'Create Spray Tan Booking'}
-            </button>
-            {sprayTanEditingBooking && <button onClick={cancelSprayTanBooking} disabled={sprayTanSaving}>Cancel Booking</button>}
+            <button onClick={createSprayTanBookingFromModal} disabled={sprayTanSaving}>{sprayTanSaving ? 'Saving...' : 'Create Spray Tan Booking'}</button>
             <button onClick={closeSprayTanModal} disabled={sprayTanSaving}>Cancel</button>
           </div>
         </div>
