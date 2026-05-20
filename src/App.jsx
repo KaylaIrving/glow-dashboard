@@ -7525,7 +7525,6 @@ function App() {
                             {isWixBooking(booking) && <><span style={{ display: 'inline-block', color: '#050505', background: '#d4a853', borderRadius: '6px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold', margin: '3px 0' }}>Wix</span><br /></>}
                             {booking.minutes} mins<br />
                             Blocked: {getTotalBlockMinutes(booking)} mins<br />
-                            {String(booking.status || '').toLowerCase() === 'force_stopped' && <><span style={getStatusChipStyle('Force Stopped')}>Force Stopped</span><br /></>}
                             <span style={getStatusChipStyle(getPhase(booking))}>{getPhase(booking)}</span>
                             {booking.customer_started_at && (
                               <>
