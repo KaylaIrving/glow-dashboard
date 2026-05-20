@@ -151,8 +151,6 @@ function App() {
   const [collapseDailyTakings, setCollapseDailyTakings] = useState(true)
   const [selectedProductManagementId, setSelectedProductManagementId] = useState('')
   const [customerManagerSearch, setCustomerManagerSearch] = useState('')
-  const [showAllCustomersList, setShowAllCustomersList] = useState(false)
-  const [allCustomersSearch, setAllCustomersSearch] = useState('')
   const [selectedManagerCustomerId, setSelectedManagerCustomerId] = useState('')
   const [managerName, setManagerName] = useState('')
   const [managerFirstName, setManagerFirstName] = useState('')
@@ -3846,19 +3844,6 @@ function App() {
     })
   }
 
-  function getFilteredAllCustomers() {
-    const query = allCustomersSearch.trim().toLowerCase()
-    const sortedCustomers = customers.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-    if (!query) return sortedCustomers
-    return sortedCustomers.filter((customer) => {
-      const searchable = [customer.name, customer.first_name, customer.last_name, customer.phone, customer.email, customer.postcode]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return searchable.includes(query)
-    })
-  }
-
   async function createCustomerLog(customer, action, details) {
     if (!customer) return
     await supabase.from('CustomerLogs').insert({ customer_id: customer.id, customer_name: customer.name, action, details })
@@ -5068,62 +5053,6 @@ function App() {
     )
   }
 
-  function renderAllCustomersList() {
-    if (!showAllCustomersList) return null
-    const allCustomers = getFilteredAllCustomers()
-
-    return (
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '14px', marginBottom: '15px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
-          <h3 style={{ margin: 0 }}>All Customers</h3>
-          <span style={{ color: '#aaa' }}>{allCustomers.length} shown / {customers.length} total</span>
-        </div>
-        <input
-          placeholder="Filter by name, phone, email or postcode..."
-          value={allCustomersSearch}
-          onChange={(e) => setAllCustomersSearch(e.target.value)}
-          style={{ width: '100%', padding: '12px', marginBottom: '10px', boxSizing: 'border-box' }}
-        />
-        <div style={{ maxHeight: '420px', overflowY: 'auto', overflowX: 'auto', border: '1px solid #333', borderRadius: '10px' }}>
-          <div style={{ minWidth: '860px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1.4fr 0.7fr 0.7fr 0.8fr 0.9fr', gap: '8px', padding: '10px', background: '#111', color: '#d4a853', fontWeight: 'bold', position: 'sticky', top: 0, zIndex: 1 }}>
-              <span>Customer</span>
-              <span>Phone</span>
-              <span>Email</span>
-              <span>Standard</span>
-              <span>Hybrid</span>
-              <span>Postcode</span>
-              <span>Warning</span>
-            </div>
-            {allCustomers.length === 0 ? (
-              <div style={{ padding: '14px', color: '#aaa' }}>No customers found.</div>
-            ) : allCustomers.map((customer) => {
-              const warningLevel = getCustomerWarningLevel(customer)
-              const warningStyle = getCustomerWarningStyle(warningLevel)
-              return (
-                <div
-                  key={customer.id}
-                  onClick={() => selectManagerCustomer(customer)}
-                  style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1.4fr 0.7fr 0.7fr 0.8fr 0.9fr', gap: '8px', padding: '10px', borderTop: '1px solid #222', cursor: 'pointer', alignItems: 'center', background: String(selectedManagerCustomerId) === String(customer.id) ? '#17130b' : '#0b0b0b' }}
-                >
-                  <strong>{customer.name || 'Unnamed customer'}</strong>
-                  <span style={{ color: '#ddd' }}>{customer.phone || '-'}</span>
-                  <span style={{ color: '#ddd', overflowWrap: 'anywhere' }}>{customer.email || '-'}</span>
-                  <span>{customer.standard_minutes_balance || 0}</span>
-                  <span>{customer.hybrid_minutes_balance || 0}</span>
-                  <span>{customer.postcode || '-'}</span>
-                  <span style={{ color: customer.warning_flag ? warningStyle.color : '#777', fontWeight: customer.warning_flag ? 'bold' : 'normal' }}>
-                    {customer.warning_flag ? formatStatus(warningLevel) : 'None'}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   function renderCustomerManagementPanel() {
     const selectedCustomer = getSelectedManagerCustomer()
     const filteredCustomers = getFilteredManagerCustomers()
@@ -5134,7 +5063,6 @@ function App() {
           <h2 style={{ margin: 0 }}>Customer Management</h2>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <button onClick={() => { setAddCustomerSuccess(''); setShowAddCustomerForm(!showAddCustomerForm) }}>{showAddCustomerForm ? 'Hide Add Customer' : 'Add New Customer'}</button>
-            <button onClick={() => setShowAllCustomersList(!showAllCustomersList)}>{showAllCustomersList ? 'Hide All Customers' : 'All Customers'}</button>
             <button onClick={() => setShowCustomerImport(!showCustomerImport)}>{showCustomerImport ? 'Hide Import' : 'Import Customers'}</button>
             {selectedCustomer && <button onClick={clearCustomerManager}>Clear</button>}
           </div>
@@ -5186,7 +5114,6 @@ function App() {
         )}
 
         {renderCustomerImportPanel()}
-        {renderAllCustomersList()}
 
         <input placeholder="Search customer by name, phone or email..." value={customerManagerSearch} onChange={(e) => { setCustomerManagerSearch(e.target.value); setSelectedManagerCustomerId('') }} style={{ width: '100%', padding: '12px', marginBottom: '10px' }} />
 
