@@ -903,11 +903,12 @@ function App() {
 
   async function deleteStaffScheduleEntry(entry) {
     if (!requireStaffSignIn()) return
+    if (!canCurrentStaffEditScheduleEntry(entry)) {
+      alert('Only managers can delete this Staff Calendar entry.')
+      return
+    }
     const confirmed = window.confirm(`Delete schedule entry for ${entry.staff_name || 'the shop'} on ${entry.schedule_date}?`)
     if (!confirmed) return
-    if (!canCurrentStaffEditScheduleEntry(entry)) {
-      if (!requireManagerAccess('Manager PIN required to delete this Staff Calendar request:')) return
-    }
 
     const { error } = await supabase.from('StaffSchedule').delete().eq('id', entry.id)
     if (error) {
@@ -6641,30 +6642,7 @@ function App() {
         : { background: '#7a1f2a', color: '#fff' }
 
     return (
-      <div key={entry.id} style={{ ...entryStyle, borderRadius: '7px', padding: '7px 26px 7px 7px', marginBottom: '6px', position: 'relative' }}>
-        <button
-          onClick={() => deleteStaffScheduleEntry(entry)}
-          title="Delete request"
-          aria-label="Delete staff calendar request"
-          style={{
-            position: 'absolute',
-            top: '5px',
-            right: '5px',
-            width: '16px',
-            height: '16px',
-            minWidth: '16px',
-            padding: 0,
-            border: '1px solid rgba(212,168,83,0.22)',
-            borderRadius: '50%',
-            background: 'rgba(0,0,0,0.28)',
-            color: '#d4a853',
-            boxShadow: 'none',
-            fontSize: '11px',
-            lineHeight: '13px'
-          }}
-        >
-          ×
-        </button>
+      <div key={entry.id} style={{ ...entryStyle, borderRadius: '7px', padding: '7px', marginBottom: '6px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
           <strong style={{ fontSize: '13px' }}>{entry.staff_name || 'Shop'}</strong>
           <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -6685,6 +6663,7 @@ function App() {
             {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'approved')} style={{ padding: '5px 7px', fontSize: '11px' }}>Approve</button>}
             {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'rejected')} style={{ padding: '5px 7px', fontSize: '11px' }}>Deny</button>}
             {canEditEntry && <button onClick={() => editStaffScheduleEntry(entry)} style={{ padding: '5px 7px', fontSize: '11px' }}>Edit</button>}
+            {canEditEntry && <button onClick={() => deleteStaffScheduleEntry(entry)} style={{ padding: '5px 7px', fontSize: '11px' }}>Delete</button>}
           </div>
         )}
       </div>
