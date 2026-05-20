@@ -3625,6 +3625,12 @@ function App() {
   function getPhase(booking) {
     if (isShopTestBooking(booking) && !booking?.booking_start) return 'Shop Test'
 
+    const bookingStatus = String(booking?.status || '').toLowerCase()
+
+    if (bookingStatus === 'force_stopped') {
+      return 'Force Stopped'
+    }
+
     if (!booking?.booking_start && !booking?.customer_started_at) {
       return formatStatus(booking?.status || 'booked')
     }
