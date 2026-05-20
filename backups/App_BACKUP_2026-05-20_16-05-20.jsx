@@ -57,11 +57,12 @@ const STAFF_SERVICE_TYPES = [
 ]
 
 const PRODUCT_CATEGORIES = [
-  { value: 'tanning_lotions', label: 'Tanning Lotions' },
   { value: 'sachets', label: 'Sachets' },
   { value: 'bottles', label: 'Bottles' },
   { value: 'drinks', label: 'Drinks' },
-  { value: 'other', label: 'Other' }
+  { value: 'lip_balm', label: 'Lip Balm' },
+  { value: 'shots', label: 'Shots' },
+  { value: 'other_accessories', label: 'Other Accessories' }
 ]
 
 const DEFAULT_STAFF = [
@@ -275,7 +276,6 @@ function App() {
   const [productCategory, setProductCategory] = useState('sachets')
   const [productPrice, setProductPrice] = useState('')
   const [productStockQuantity, setProductStockQuantity] = useState('')
-  const [productIsActive, setProductIsActive] = useState(true)
   const [productEditingId, setProductEditingId] = useState('')
 
   const [saleReceipt, setSaleReceipt] = useState(null)
@@ -1062,14 +1062,6 @@ function App() {
 
   function getProductCategoryLabel(category) {
     return PRODUCT_CATEGORIES.find((item) => item.value === category)?.label || formatStatus(category || 'other')
-  }
-
-  function normalizeProductCategory(category) {
-    const value = category || 'other'
-    if (PRODUCT_CATEGORIES.some((item) => item.value === value)) return value
-    if (['lip_balm', 'shots', 'other_accessories'].includes(value)) return 'other'
-    if (value === 'tanning_lotion') return 'tanning_lotions'
-    return 'other'
   }
 
   function getProductStockQuantity(product) {
@@ -5113,10 +5105,10 @@ function App() {
 
     const payload = {
       name: productName.trim(),
-      category: normalizeProductCategory(productCategory),
+      category: productCategory,
       price: Number(productPrice || 0),
       stock_quantity: productStockQuantity === '' ? 0 : Number(productStockQuantity || 0),
-      is_active: productIsActive
+      is_active: true
     }
 
     const request = productEditingId
@@ -5131,18 +5123,16 @@ function App() {
       return
     }
 
-    await getProducts()
-    if (!productEditingId) clearProductForm()
+    clearProductForm()
+    getProducts()
   }
 
   function editProduct(product) {
     setProductEditingId(String(product.id))
-    setSelectedProductManagementId(String(product.id))
     setProductName(product.name || '')
-    setProductCategory(normalizeProductCategory(product.category))
+    setProductCategory(product.category || 'other')
     setProductPrice(product.price || '')
     setProductStockQuantity(product.stock_quantity ?? '')
-    setProductIsActive(product.is_active !== false)
   }
 
   function clearProductForm() {
@@ -5151,17 +5141,6 @@ function App() {
     setProductCategory('sachets')
     setProductPrice('')
     setProductStockQuantity('')
-    setProductIsActive(true)
-  }
-
-  function selectProductForManagement(productId) {
-    setSelectedProductManagementId(productId)
-    const product = products.find((item) => String(item.id) === String(productId))
-    if (product) {
-      editProduct(product)
-    } else {
-      clearProductForm()
-    }
   }
 
   async function deactivateProduct(product) {
@@ -6641,10 +6620,6 @@ function App() {
           </select>
           <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
           <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-            <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
-            Active
-          </label>
           <button onClick={saveProduct}>{productEditingId ? 'Save Product' : 'Add Product'}</button>
           {productEditingId && <button onClick={clearProductForm}>Cancel Edit</button>}
         </div>
@@ -6681,7 +6656,7 @@ function App() {
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Manage existing product</label>
           <select
             value={selectedProductManagementId}
-            onChange={(e) => selectProductForManagement(e.target.value)}
+            onChange={(e) => setSelectedProductManagementId(e.target.value)}
             style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
           >
             <option value="">Select product...</option>
@@ -6693,29 +6668,15 @@ function App() {
           </select>
 
           {selectedProduct && (
-            <div style={{ marginTop: '12px', padding: '12px', background: '#111', borderRadius: '12px', border: '1px solid #333' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '10px', alignItems: 'center', marginTop: '12px', padding: '12px', background: '#111', borderRadius: '12px' }}>
               <div>
                 <strong>{selectedProduct.name}</strong><br />
                 <span>{getProductCategoryLabel(selectedProduct.category)} — £{Number(selectedProduct.price || 0).toFixed(2)} — Stock {getProductStockQuantity(selectedProduct)}</span><br />
                 <span style={getProductStockStatusStyle(selectedProduct)}>{getProductStockStatus(selectedProduct)}</span><br />
                 <span>Status: {selectedProduct.is_active === false ? 'Inactive' : 'Active'}</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
-                <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
-                <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} style={{ padding: '10px' }}>
-                  {PRODUCT_CATEGORIES.map((category) => (
-                    <option key={category.value} value={category.value}>{category.label}</option>
-                  ))}
-                </select>
-                <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
-                <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-                  <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
-                  Active
-                </label>
-                <button onClick={saveProduct}>Save Product Changes</button>
-                <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
-              </div>
+              <button onClick={() => editProduct(selectedProduct)}>Edit</button>
+              <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
             </div>
           )}
         </div>
