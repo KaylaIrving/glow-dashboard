@@ -169,9 +169,6 @@ function App() {
   const [managerTermsAccepted, setManagerTermsAccepted] = useState(false)
   const [managerIdChecked, setManagerIdChecked] = useState(false)
   const [managerActive, setManagerActive] = useState(true)
-  const [managerWarningFlag, setManagerWarningFlag] = useState(false)
-  const [managerWarningLevel, setManagerWarningLevel] = useState('none')
-  const [managerWarningNote, setManagerWarningNote] = useState('')
   const [showAddCustomerForm, setShowAddCustomerForm] = useState(false)
   const [addCustomerFirstName, setAddCustomerFirstName] = useState('')
   const [addCustomerLastName, setAddCustomerLastName] = useState('')
@@ -185,9 +182,6 @@ function App() {
   const [addCustomerStandardMinutes, setAddCustomerStandardMinutes] = useState('')
   const [addCustomerHybridMinutes, setAddCustomerHybridMinutes] = useState('')
   const [addCustomerActive, setAddCustomerActive] = useState(true)
-  const [addCustomerWarningFlag, setAddCustomerWarningFlag] = useState(false)
-  const [addCustomerWarningLevel, setAddCustomerWarningLevel] = useState('none')
-  const [addCustomerWarningNote, setAddCustomerWarningNote] = useState('')
   const [addCustomerSaving, setAddCustomerSaving] = useState(false)
   const [addCustomerSuccess, setAddCustomerSuccess] = useState('')
   const [showCustomerImport, setShowCustomerImport] = useState(false)
@@ -394,43 +388,6 @@ function App() {
 
   function getStaffServiceTypeLabel(type) {
     return STAFF_SERVICE_TYPES.find((item) => item.value === type)?.label || formatStatus(type)
-  }
-
-  function getCustomerWarningLevel(customer) {
-    if (!customer?.warning_flag) return 'none'
-    return customer.warning_level || 'caution'
-  }
-
-  function getCustomerWarningStyle(level) {
-    const colours = {
-      caution: { border: 'rgba(212,168,83,0.7)', color: '#ffcc66', background: '#1f1a10' },
-      important: { border: 'rgba(181,106,34,0.8)', color: '#f0a34a', background: '#21150b' },
-      banned: { border: 'rgba(255,120,117,0.75)', color: '#ff7875', background: '#211010' },
-      none: { border: 'rgba(212,168,83,0.25)', color: '#aaa', background: '#111' }
-    }
-    return colours[level] || colours.caution
-  }
-
-  function renderCustomerWarning(customer) {
-    if (!customer?.warning_flag || getCustomerWarningLevel(customer) === 'none') return null
-    const level = getCustomerWarningLevel(customer)
-    const style = getCustomerWarningStyle(level)
-    return (
-      <div style={{ background: style.background, border: `1px solid ${style.border}`, color: style.color, borderRadius: '10px', padding: '10px 12px', marginTop: '10px', fontWeight: 'bold' }}>
-        Customer warning: {formatStatus(level)}
-        {customer.warning_note && <div style={{ marginTop: '5px', fontWeight: 'normal', color: style.color }}>{customer.warning_note}</div>}
-      </div>
-    )
-  }
-
-  function isCustomerBanned(customer) {
-    return Boolean(customer?.warning_flag && getCustomerWarningLevel(customer) === 'banned')
-  }
-
-  function blockIfCustomerBanned(customer) {
-    if (!isCustomerBanned(customer)) return false
-    alert(`Booking blocked. ${customer.name || 'This customer'} is marked as banned.${customer.warning_note ? `\n\n${customer.warning_note}` : ''}`)
-    return true
   }
 
   function formatStatus(text) {
@@ -1873,9 +1830,6 @@ function App() {
       id_checked_at: newCustomerIdChecked ? now : null,
       id_checked_by_staff: newCustomerIdChecked ? staffUser?.name || null : null,
       is_active: true,
-      warning_flag: false,
-      warning_level: 'none',
-      warning_note: null,
       customer_source: 'dashboard'
     }).select().single()
 
@@ -2704,7 +2658,6 @@ function App() {
     }
 
     if (!isInternalShopTest && !checkCustomerAgeBeforeSunbed(customer)) return
-    if (!isInternalShopTest && blockIfCustomerBanned(customer)) return
     if (!isInternalShopTest) {
       customer = await ensureCustomerTermsAccepted(customer)
       if (!customer) return
@@ -2851,7 +2804,6 @@ function App() {
     }
 
     if (!isInternalShopTest && !checkCustomerAgeBeforeSunbed(customer)) return
-    if (!isInternalShopTest && blockIfCustomerBanned(customer)) return
     if (!isInternalShopTest) {
       customer = await ensureCustomerTermsAccepted(customer)
       if (!customer) return
@@ -3621,8 +3573,6 @@ function App() {
       return
     }
 
-    if (blockIfCustomerBanned(customer)) return
-
     const appointmentDateTime = new Date(`${sprayTanDate}T${sprayTanTime}`)
     if (Number.isNaN(appointmentDateTime.getTime())) {
       alert('Please choose a valid date and time.')
@@ -3882,9 +3832,6 @@ function App() {
     setManagerTermsAccepted(Boolean(customer.terms_accepted))
     setManagerIdChecked(Boolean(customer.id_checked))
     setManagerActive(customer.is_active !== false)
-    setManagerWarningFlag(Boolean(customer.warning_flag))
-    setManagerWarningLevel(customer.warning_level || 'none')
-    setManagerWarningNote(customer.warning_note || '')
     clearMinuteCorrection()
     loadCustomerHistory(customer.id)
   }
@@ -3909,9 +3856,6 @@ function App() {
     setManagerTermsAccepted(false)
     setManagerIdChecked(false)
     setManagerActive(true)
-    setManagerWarningFlag(false)
-    setManagerWarningLevel('none')
-    setManagerWarningNote('')
     clearMinuteCorrection()
     setCustomerPayments([])
     setCustomerLogs([])
@@ -3930,9 +3874,6 @@ function App() {
     setAddCustomerStandardMinutes('')
     setAddCustomerHybridMinutes('')
     setAddCustomerActive(true)
-    setAddCustomerWarningFlag(false)
-    setAddCustomerWarningLevel('none')
-    setAddCustomerWarningNote('')
   }
 
   function resetCustomerImport() {
@@ -4078,9 +4019,6 @@ function App() {
         terms_accepted: termsAccepted,
         id_checked: idChecked,
         is_active: active,
-        warning_flag: false,
-        warning_level: 'none',
-        warning_note: null,
         customer_source: 'dashboard'
       }
     }
@@ -4282,9 +4220,6 @@ function App() {
       standard_minutes_balance: standardMinutes,
       hybrid_minutes_balance: hybridMinutes,
       is_active: addCustomerActive,
-      warning_flag: addCustomerWarningFlag && addCustomerWarningLevel !== 'none',
-      warning_level: addCustomerWarningFlag ? addCustomerWarningLevel : 'none',
-      warning_note: addCustomerWarningFlag ? addCustomerWarningNote.trim() || null : null,
       customer_source: 'dashboard'
     }).select().single()
     setAddCustomerSaving(false)
@@ -4444,10 +4379,7 @@ function App() {
       id_checked: managerIdChecked,
       id_checked_at: managerIdChecked && !oldIdChecked ? now : customer.id_checked_at || null,
       id_checked_by_staff: managerIdChecked && !oldIdChecked ? staffUser?.name || null : customer.id_checked_by_staff || null,
-      is_active: managerActive,
-      warning_flag: managerWarningFlag && managerWarningLevel !== 'none',
-      warning_level: managerWarningFlag ? managerWarningLevel : 'none',
-      warning_note: managerWarningFlag ? managerWarningNote || null : null
+      is_active: managerActive
     }).eq('id', customer.id)
 
     if (error) {
@@ -4745,7 +4677,6 @@ function App() {
                 {!selectedCustomer.date_of_birth && <p style={{ color: '#faad14', fontWeight: 'bold' }}>DOB not recorded — check ID before use.</p>}
                 {!selectedCustomer.terms_accepted && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Salon terms not accepted yet.</p>}
                 {!selectedCustomer.id_checked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>ID check not recorded.</p>}
-                {renderCustomerWarning(selectedCustomer)}
                 <div style={{ background: '#0b0b0b', padding: '15px', borderRadius: '10px', marginTop: '12px', border: '1px solid #333', textAlign: 'center' }}>
                   <p style={{ margin: '5px 0' }}>Standard balance: <strong>{selectedCustomer.standard_minutes_balance || 0} mins</strong></p>
                   <p style={{ margin: '5px 0' }}>Hybrid balance: <strong>{selectedCustomer.hybrid_minutes_balance || 0} mins</strong></p>
@@ -5090,19 +5021,6 @@ function App() {
               <input type="number" min="0" placeholder="Hybrid minutes balance" value={addCustomerHybridMinutes} onChange={(e) => setAddCustomerHybridMinutes(e.target.value)} style={{ padding: '10px' }} />
             </div>
             <textarea placeholder="Notes" value={addCustomerNotes} onChange={(e) => setAddCustomerNotes(e.target.value)} style={{ width: '100%', minHeight: '70px', padding: '10px', marginBottom: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '12px', fontFamily: 'inherit' }} />
-            <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '10px' }}>
-              <label style={{ display: 'block', marginBottom: '8px' }}>
-                <input type="checkbox" checked={addCustomerWarningFlag} onChange={(e) => setAddCustomerWarningFlag(e.target.checked)} style={{ marginRight: '8px' }} />
-                Customer warning flag
-              </label>
-              <select value={addCustomerWarningLevel} onChange={(e) => setAddCustomerWarningLevel(e.target.value)} disabled={!addCustomerWarningFlag} style={{ width: '100%', padding: '10px', marginBottom: '8px' }}>
-                <option value="none">None</option>
-                <option value="caution">Caution</option>
-                <option value="important">Important</option>
-                <option value="banned">Banned</option>
-              </select>
-              <textarea placeholder="Warning note" value={addCustomerWarningNote} disabled={!addCustomerWarningFlag} onChange={(e) => setAddCustomerWarningNote(e.target.value)} style={{ width: '100%', minHeight: '60px', padding: '10px', background: '#0b0b0b', color: 'white', border: '1px solid #333', borderRadius: '10px', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-            </div>
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '10px' }}>
               <label><input type="checkbox" checked={addCustomerActive} onChange={(e) => setAddCustomerActive(e.target.checked)} style={{ marginRight: '8px' }} />Active</label>
             </div>
@@ -5123,7 +5041,6 @@ function App() {
               <div key={customer.id} onClick={() => selectManagerCustomer(customer)} style={{ padding: '12px', borderBottom: '1px solid #333', cursor: 'pointer' }}>
                 <strong>{customer.name}</strong><br />
                 <span style={{ color: '#aaa' }}>Standard {customer.standard_minutes_balance || 0} mins / Hybrid {customer.hybrid_minutes_balance || 0} mins {customer.phone ? ` / ${customer.phone}` : ''} {customer.email ? ` / ${customer.email}` : ''}</span>
-                {customer.warning_flag && <span style={{ color: getCustomerWarningStyle(getCustomerWarningLevel(customer)).color, fontWeight: 'bold' }}> / {formatStatus(getCustomerWarningLevel(customer))}</span>}
               </div>
             ))}
           </div>
@@ -5146,7 +5063,6 @@ function App() {
             <p style={{ color: managerDateOfBirth && calculateAge(managerDateOfBirth) < 18 ? '#ff7875' : '#aaa', fontWeight: managerDateOfBirth && calculateAge(managerDateOfBirth) < 18 ? 'bold' : 'normal' }}>
               {managerDateOfBirth ? `Age ${calculateAge(managerDateOfBirth)}` : 'DOB not recorded'}
             </p>
-            {renderCustomerWarning(selectedCustomer)}
 
             <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '15px' }}>
               {!managerTermsAccepted && <p style={{ color: '#ffcc66', fontWeight: 'bold', marginTop: 0 }}>Salon terms not accepted yet.</p>}
@@ -5163,21 +5079,6 @@ function App() {
                 <input type="checkbox" checked={managerActive} onChange={(e) => setManagerActive(e.target.checked)} style={{ marginRight: '8px' }} />
                 Active customer
               </label>
-            </div>
-
-            <div style={{ background: '#0b0b0b', border: `1px solid ${getCustomerWarningStyle(managerWarningLevel).border}`, borderRadius: '12px', padding: '12px', marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '8px' }}>
-                <input type="checkbox" checked={managerWarningFlag} onChange={(e) => setManagerWarningFlag(e.target.checked)} style={{ marginRight: '8px' }} />
-                Customer warning flag
-              </label>
-              <select value={managerWarningLevel} onChange={(e) => setManagerWarningLevel(e.target.value)} disabled={!managerWarningFlag} style={{ width: '100%', padding: '10px', marginBottom: '8px' }}>
-                <option value="none">None</option>
-                <option value="caution">Caution</option>
-                <option value="important">Important</option>
-                <option value="banned">Banned</option>
-              </select>
-              <textarea value={managerWarningNote} placeholder="Warning note" disabled={!managerWarningFlag} onChange={(e) => setManagerWarningNote(e.target.value)} style={{ width: '100%', minHeight: '70px', padding: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-              {managerWarningFlag && managerWarningLevel === 'banned' && <p style={{ color: '#ff7875', fontWeight: 'bold', marginBottom: 0 }}>Banned customers cannot be booked.</p>}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '15px' }}>
