@@ -141,7 +141,6 @@ function App() {
   const [collapseMaintenance, setCollapseMaintenance] = useState(true)
   const [collapseProducts, setCollapseProducts] = useState(true)
   const [collapseExports, setCollapseExports] = useState(true)
-  const [collapseWixSync, setCollapseWixSync] = useState(true)
   const [collapseCashUp, setCollapseCashUp] = useState(true)
   const [collapseDailyTakings, setCollapseDailyTakings] = useState(true)
   const [selectedProductManagementId, setSelectedProductManagementId] = useState('')
@@ -269,10 +268,6 @@ function App() {
   const [dataLoadWarning, setDataLoadWarning] = useState('')
   const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false)
   const [showBackToTop, setShowBackToTop] = useState(false)
-  const [wixSyncStatus, setWixSyncStatus] = useState('Not run yet')
-  const [wixImportedCount, setWixImportedCount] = useState(0)
-  const [wixFailedCount, setWixFailedCount] = useState(0)
-  const [wixSyncRunning, setWixSyncRunning] = useState(false)
 
   useEffect(() => {
     getBeds()
@@ -2263,32 +2258,6 @@ function App() {
     return WIX_SERVICE_BOOKING_MAP[key] || null
   }
 
-  function getSampleWixSprayTanPayload() {
-    const sampleTime = new Date(`${selectedDate}T10:00:00`)
-    return {
-      wix_booking_id: `glow-test-spraytan-${selectedDate}`,
-      wix_status: 'CREATED',
-      booking_type: 'spraytan',
-      service_name: 'Full Body',
-      wix_service_name: 'Full Body',
-      customer_name: 'Wix Test Customer',
-      customer_email: 'wix.test.customer@example.com',
-      customer_phone: '07000000000',
-      appointment_time: sampleTime.toISOString(),
-      spraytan_column: 'spray_tan',
-      spraytan_service: 'Full Body',
-      spraytan_artist: 'Unassigned',
-      spraytan_duration_minutes: 30,
-      deposit_required: 15,
-      deposit_paid: 0,
-      deposit_status: 'pending',
-      patch_test_required: true,
-      patch_test_completed: false,
-      patch_test_date: null,
-      approval_status: 'pending'
-    }
-  }
-
   async function findOrCreateWixCustomer(wixBookingPayload) {
     const wixCustomerName = wixBookingPayload.customer_name || wixBookingPayload.wix_customer_name || wixBookingPayload.name || 'Wix Customer'
     const wixCustomerEmail = wixBookingPayload.customer_email || wixBookingPayload.wix_customer_email || wixBookingPayload.email || null
@@ -2331,158 +2300,11 @@ function App() {
     return newCustomer
   }
 
-  async function checkWixBookingExists(wixBookingId) {
-    if (!wixBookingId) return null
-    const { data, error } = await supabase
-      .from('Bookings')
-      .select('*')
-      .eq('wix_booking_id', wixBookingId)
-      .maybeSingle()
-    if (error) throw error
-    return data || null
-  }
-
-  function buildWixBookingPayload(wixBookingPayload, customer) {
-    // Future Wix webhook/API data should be normalized into this shape before insert/update.
-    // The Vercel route can call these same field names after verifying the Wix request signature.
-    const serviceName = wixBookingPayload.spraytan_service || wixBookingPayload.service_name || wixBookingPayload.wix_service_name || ''
-    const bookingType = wixBookingPayload.booking_type || 'spraytan'
-    const appointmentTime = wixBookingPayload.appointment_time || wixBookingPayload.start_time || wixBookingPayload.startDate
-    const isSprayTan = bookingType === 'spraytan'
-    const servicePrice = isSprayTan ? getSprayTanServicePrice(serviceName) : 0
-    const depositRequired = Number(wixBookingPayload.deposit_required ?? (isSprayTan && serviceName !== 'Patch Test' ? servicePrice * 0.5 : 0))
-    const depositPaid = Number(wixBookingPayload.deposit_paid || 0)
-
-    return {
-      customer_id: customer?.id || null,
-      customer_name: customer?.name || wixBookingPayload.wix_customer_name || wixBookingPayload.customer_name || 'Wix Customer',
-      customer_phone: customer?.phone || wixBookingPayload.wix_customer_phone || wixBookingPayload.customer_phone || null,
-      customer_email: customer?.email || wixBookingPayload.wix_customer_email || wixBookingPayload.customer_email || null,
-      appointment_time: new Date(appointmentTime).toISOString(),
-      status: wixBookingPayload.status || 'booked',
-      source: 'wix',
-      booking_source: 'wix',
-      wix_booking_id: wixBookingPayload.wix_booking_id,
-      wix_status: wixBookingPayload.wix_status || wixBookingPayload.status || null,
-      wix_service_name: wixBookingPayload.wix_service_name || serviceName || null,
-      wix_customer_name: wixBookingPayload.wix_customer_name || wixBookingPayload.customer_name || customer?.name || null,
-      wix_customer_email: wixBookingPayload.wix_customer_email || wixBookingPayload.customer_email || customer?.email || null,
-      wix_customer_phone: wixBookingPayload.wix_customer_phone || wixBookingPayload.customer_phone || customer?.phone || null,
-      last_wix_sync_at: new Date().toISOString(),
-      approval_status: wixBookingPayload.approval_status || (isSprayTan ? 'pending' : 'approved'),
-      booking_type: bookingType,
-      spraytan_service: isSprayTan ? serviceName || null : null,
-      spraytan_artist: isSprayTan ? wixBookingPayload.spraytan_artist || null : null,
-      deposit_required: isSprayTan ? depositRequired : null,
-      deposit_paid: isSprayTan ? depositPaid : null,
-      deposit_status: isSprayTan ? wixBookingPayload.deposit_status || getSprayTanDepositStatus(serviceName, depositRequired, depositPaid) : null,
-      patch_test_required: isSprayTan ? Boolean(wixBookingPayload.patch_test_required) : false,
-      patch_test_completed: isSprayTan ? Boolean(wixBookingPayload.patch_test_completed) : false,
-      patch_test_date: isSprayTan ? wixBookingPayload.patch_test_date || null : null,
-      spraytan_column: isSprayTan ? wixBookingPayload.spraytan_column || 'spray_tan' : null,
-      spraytan_duration_minutes: isSprayTan ? Number(wixBookingPayload.spraytan_duration_minutes || 30) : null,
-      spraytan_balance_due: isSprayTan ? Number(wixBookingPayload.spraytan_balance_due ?? Math.max(0, servicePrice - depositPaid)) : null
-    }
-  }
-
-  async function insertWixBooking(wixBookingPayload) {
-    if (!wixBookingPayload?.wix_booking_id) throw new Error('Wix booking payload must include wix_booking_id.')
-    if (!wixBookingPayload.appointment_time && !wixBookingPayload.start_time && !wixBookingPayload.startDate) {
-      throw new Error('Wix booking payload must include an appointment/start time.')
-    }
-
-    const existingBooking = await checkWixBookingExists(wixBookingPayload.wix_booking_id)
-    if (existingBooking) return upsertWixBooking(wixBookingPayload)
-
-    const customer = await findOrCreateWixCustomer(wixBookingPayload)
-    const bookingPayload = buildWixBookingPayload(wixBookingPayload, customer)
-
-    const { data, error } = await supabase
-      .from('Bookings')
-      .insert(bookingPayload)
-      .select()
-      .single()
-
-    if (error) throw error
-    return data
-  }
-
-  async function updateWixBookingStatus(wixBookingId, wixStatus, approvalStatus = null) {
-    const existingBooking = await checkWixBookingExists(wixBookingId)
-    if (!existingBooking) throw new Error('Wix booking was not found.')
-    if (existingBooking.booking_source && existingBooking.booking_source !== 'wix') {
-      throw new Error('Matched booking is not a Wix booking. Refusing to update dashboard-created booking.')
-    }
-
-    const { data, error } = await supabase
-      .from('Bookings')
-      .update({
-        wix_status: wixStatus,
-        approval_status: approvalStatus || existingBooking.approval_status || 'pending',
-        last_wix_sync_at: new Date().toISOString()
-      })
-      .eq('id', existingBooking.id)
-      .select()
-      .single()
-
-    if (error) throw error
-    return data
-  }
-
-  async function runWixTestImport() {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required for Wix test import:')) return
-
-    setWixSyncRunning(true)
-    setWixSyncStatus('Running test import...')
-    setWixImportedCount(0)
-    setWixFailedCount(0)
-
-    try {
-      // TODO Wix webhook/API: replace this sample payload with verified Wix booking data
-      // from a Vercel serverless route, then call insertWixBooking/upsertWixBooking there.
-      const samplePayload = getSampleWixSprayTanPayload()
-      const importedBooking = await insertWixBooking(samplePayload)
-      setWixImportedCount(1)
-      setWixFailedCount(0)
-      setWixSyncStatus(`Test import OK: ${importedBooking.customer_name || 'Wix booking'} is pending approval.`)
-      await getBookings()
-      await getCustomers()
-      setDashboardView('spraytan')
-    } catch (error) {
-      setWixImportedCount(0)
-      setWixFailedCount(1)
-      setWixSyncStatus(error.message || 'Test import failed.')
-      showDataLoadWarning('Wix test import failed. Check booking fields and Supabase connection.', error)
-      console.log(error)
-    } finally {
-      setWixSyncRunning(false)
-    }
-  }
-
   async function upsertWixBooking(wixBookingPayload) {
     // Future Vercel webhook/API route should call this helper after verifying the Wix request.
     // Keep this helper dormant in the client until the server route is added.
     if (!wixBookingPayload?.wix_booking_id) {
       throw new Error('Wix booking payload must include wix_booking_id.')
-    }
-
-    if (wixBookingPayload.booking_type === 'spraytan') {
-      const existingBooking = await checkWixBookingExists(wixBookingPayload.wix_booking_id)
-      if (!existingBooking) return insertWixBooking(wixBookingPayload)
-      if (existingBooking.booking_source && existingBooking.booking_source !== 'wix') {
-        throw new Error('Matched booking is not a Wix booking. Refusing to update dashboard-created booking.')
-      }
-      const customer = await findOrCreateWixCustomer(wixBookingPayload)
-      const bookingPayload = buildWixBookingPayload(wixBookingPayload, customer)
-      const { data, error } = await supabase
-        .from('Bookings')
-        .update(bookingPayload)
-        .eq('id', existingBooking.id)
-        .select()
-        .single()
-      if (error) throw error
-      return data
     }
 
     const serviceName = wixBookingPayload.service_name || wixBookingPayload.wix_service_name || ''
@@ -5315,41 +5137,6 @@ function App() {
     )
   }
 
-  function renderWixBookingSyncPanel() {
-    if (!showManagerView) return null
-
-    return renderCollapsibleSection(
-      'Wix Booking Sync',
-      collapseWixSync,
-      setCollapseWixSync,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <p style={{ color: '#aaa', marginTop: 0 }}>
-          Foundation only. Real Wix webhook data should be verified in a Vercel API route before calling the Wix booking helpers.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Last sync status</span>
-            <h3 style={{ marginBottom: 0 }}>{wixSyncStatus}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Imported bookings</span>
-            <h3 style={{ marginBottom: 0 }}>{wixImportedCount}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Failed bookings</span>
-            <h3 style={{ marginBottom: 0 }}>{wixFailedCount}</h3>
-          </div>
-        </div>
-        <button onClick={runWixTestImport} disabled={wixSyncRunning}>
-          {wixSyncRunning ? 'Testing Import...' : 'Test Import'}
-        </button>
-        <p style={{ color: '#aaa', marginBottom: 0 }}>
-          Test Import creates or updates one sample pending spray tan booking for the selected date using a fixed Wix booking ID.
-        </p>
-      </div>
-    )
-  }
-
   function renderStaffSelectorModal() {
     if (!staffSelectorOpen) return null
     const activeStaff = staff.filter((member) => member.is_active !== false)
@@ -6157,7 +5944,6 @@ function App() {
       {showManagerView && renderMaintenancePanel()}
       {showManagerView && renderProductsManagementPanel()}
       {showManagerView && renderCorrectionsPanel()}
-      {showManagerView && renderWixBookingSyncPanel()}
       {showManagerView && renderExportsPanel()}
       {showManagerView && renderDailyTakingsPanel()}
 
