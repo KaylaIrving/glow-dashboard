@@ -249,7 +249,6 @@ function App() {
   const [staffSchedule, setStaffSchedule] = useState([])
   const [staffScheduleLoadError, setStaffScheduleLoadError] = useState('')
   const [staffScheduleSaving, setStaffScheduleSaving] = useState(false)
-  const [staffScheduleModalOpen, setStaffScheduleModalOpen] = useState(false)
   const [staffScheduleEditingId, setStaffScheduleEditingId] = useState('')
   const [staffScheduleStaffId, setStaffScheduleStaffId] = useState('')
   const [staffScheduleDate, setStaffScheduleDate] = useState(formatLocalDate(new Date()))
@@ -259,7 +258,6 @@ function App() {
   const [staffScheduleServiceType, setStaffScheduleServiceType] = useState('general')
   const [staffScheduleNotes, setStaffScheduleNotes] = useState('')
   const [staffScheduleAvailable, setStaffScheduleAvailable] = useState(true)
-  const [staffScheduleApprovalStatus, setStaffScheduleApprovalStatus] = useState('approved')
   const [staffScheduleFilterStaffId, setStaffScheduleFilterStaffId] = useState('')
   const [staffScheduleFilterType, setStaffScheduleFilterType] = useState('')
   const [staffScheduleFilterServiceType, setStaffScheduleFilterServiceType] = useState('')
@@ -729,7 +727,6 @@ function App() {
   }
 
   function clearStaffScheduleForm() {
-    setStaffScheduleModalOpen(false)
     setStaffScheduleEditingId('')
     setStaffScheduleStaffId('')
     setStaffScheduleDate(selectedDate)
@@ -739,7 +736,6 @@ function App() {
     setStaffScheduleServiceType('general')
     setStaffScheduleNotes('')
     setStaffScheduleAvailable(true)
-    setStaffScheduleApprovalStatus(showManagerView ? 'approved' : 'pending')
   }
 
   function getStaffScheduleApprovalStatus(entry) {
@@ -760,8 +756,6 @@ function App() {
     setStaffScheduleServiceType(entry.service_type || 'general')
     setStaffScheduleNotes(entry.notes || '')
     setStaffScheduleAvailable(entry.is_available !== false)
-    setStaffScheduleApprovalStatus(getStaffScheduleApprovalStatus(entry))
-    setStaffScheduleModalOpen(true)
   }
 
   function startStaffScheduleEntryForCell(member, date) {
@@ -777,9 +771,7 @@ function App() {
     setStaffScheduleServiceType('general')
     setStaffScheduleNotes('')
     setStaffScheduleAvailable(true)
-    setStaffScheduleApprovalStatus(showManagerView ? 'approved' : 'pending')
     setCollapseStaffCalendar(false)
-    setStaffScheduleModalOpen(true)
   }
 
   function getFilteredStaffSchedule() {
@@ -851,7 +843,11 @@ function App() {
 
     const selectedMember = staff.find((member) => String(member.id) === String(staffScheduleStaffId)) || currentStaff
     const existingEntry = staffSchedule.find((entry) => String(entry.id) === String(staffScheduleEditingId))
-    const approvalStatus = isManager ? staffScheduleApprovalStatus || 'approved' : 'pending'
+    const approvalStatus = isManager
+      ? staffScheduleEditingId
+        ? getStaffScheduleApprovalStatus(existingEntry)
+        : 'approved'
+      : 'pending'
     const payload = {
       staff_id: staffScheduleType === 'shop_closed' ? null : Number(selectedMember?.id),
       staff_name: staffScheduleType === 'shop_closed' ? 'Shop Closed' : selectedMember?.name || '',
@@ -865,7 +861,7 @@ function App() {
       approval_status: approvalStatus,
       approved_by: isManager && approvalStatus === 'approved' ? existingEntry?.approved_by || currentStaff?.name || null : null,
       approved_at: isManager && approvalStatus === 'approved' ? existingEntry?.approved_at || new Date().toISOString() : null,
-      request_created_by: existingEntry?.request_created_by || currentStaff?.name || null
+      request_created_by: currentStaff?.name || null
     }
 
     setStaffScheduleSaving(true)
@@ -6614,18 +6610,12 @@ function App() {
   function renderStaffScheduleEntry(entry, showActions = false) {
     const approval = getStaffScheduleApprovalStatus(entry)
     const entryStyle = getStaffScheduleEntryStyle(entry)
-    const approvalStyle = approval === 'approved'
-      ? { background: '#2f7a4b', color: '#fff' }
-      : approval === 'pending'
-        ? { background: '#b56a22', color: '#050505' }
-        : { background: '#7a1f2a', color: '#fff' }
-
     return (
       <div key={entry.id} style={{ ...entryStyle, borderRadius: '10px', padding: '10px', marginBottom: '8px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
           <strong>{entry.staff_name || 'Shop'}</strong>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ ...approvalStyle, borderRadius: '8px', padding: '3px 7px', fontWeight: 'bold', fontSize: '12px' }}>
+            <span style={{ color: approval === 'approved' ? '#d4a853' : approval === 'pending' ? '#ffcc66' : '#ff7875', fontWeight: 'bold' }}>
               {formatStatus(approval)}
             </span>
             <span style={{ color: entry.is_available === false ? '#ff7875' : '#d4a853', fontWeight: 'bold' }}>
@@ -6641,7 +6631,7 @@ function App() {
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
             {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'approved')}>Approve</button>}
             {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'rejected')}>Reject</button>}
-            <button onClick={() => editStaffScheduleEntry(entry)}>Move/Edit</button>
+            <button onClick={() => editStaffScheduleEntry(entry)}>Edit</button>
             <button onClick={() => deleteStaffScheduleEntry(entry)}>Delete</button>
           </div>
         )}
@@ -6651,63 +6641,6 @@ function App() {
 
   function renderStaffOwnSchedulePanel() {
     return null
-  }
-
-  function renderStaffScheduleModal() {
-    if (!staffScheduleModalOpen) return null
-
-    const isManager = showManagerView
-
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ background: '#1e1e1e', border: '1px solid rgba(212,168,83,0.35)', borderRadius: '18px', padding: '22px', width: '620px', maxWidth: '94%', maxHeight: '88vh', overflowY: 'auto' }}>
-          <h2 style={{ marginTop: 0 }}>{staffScheduleEditingId ? 'Move/Edit Staff Calendar Entry' : isManager ? 'Add Staff Calendar Entry' : 'Submit Staff Calendar Request'}</h2>
-          {!isManager && <p style={{ color: '#ffcc66', marginTop: 0 }}>Staff requests save as pending until a manager approves them.</p>}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-            <select value={staffScheduleStaffId} onChange={(e) => setStaffScheduleStaffId(e.target.value)} disabled={staffScheduleType === 'shop_closed'} style={{ padding: '10px' }}>
-              <option value="">Staff member</option>
-              {staff.filter((member) => member.is_active !== false).map((member) => (
-                <option key={member.id} value={member.id}>{member.name}</option>
-              ))}
-            </select>
-            <input type="date" value={staffScheduleDate} onChange={(e) => setStaffScheduleDate(e.target.value)} style={{ padding: '10px' }} />
-            <input type="time" value={staffScheduleStartTime} onChange={(e) => setStaffScheduleStartTime(e.target.value)} style={{ padding: '10px' }} />
-            <input type="time" value={staffScheduleEndTime} onChange={(e) => setStaffScheduleEndTime(e.target.value)} style={{ padding: '10px' }} />
-            <select value={staffScheduleType} onChange={(e) => setStaffScheduleType(e.target.value)} style={{ padding: '10px' }}>
-              {STAFF_SCHEDULE_TYPES.filter((type) => isManager || type.value !== 'shop_closed').map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-            <select value={staffScheduleServiceType} onChange={(e) => setStaffScheduleServiceType(e.target.value)} style={{ padding: '10px' }}>
-              {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-            {isManager && (
-              <select value={staffScheduleApprovalStatus} onChange={(e) => setStaffScheduleApprovalStatus(e.target.value)} style={{ padding: '10px' }}>
-                <option value="approved">Approved</option>
-                <option value="pending">Pending</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            )}
-          </div>
-
-          <textarea
-            placeholder="Notes"
-            value={staffScheduleNotes}
-            onChange={(e) => setStaffScheduleNotes(e.target.value)}
-            style={{ width: '100%', minHeight: '80px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box', fontFamily: 'inherit' }}
-          />
-
-          <label style={{ display: 'block', marginTop: '10px' }}>
-            <input type="checkbox" checked={staffScheduleAvailable} onChange={(e) => setStaffScheduleAvailable(e.target.checked)} style={{ marginRight: '8px' }} />
-            Available for this entry
-          </label>
-
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
-            <button onClick={saveStaffScheduleEntry} disabled={staffScheduleSaving}>{staffScheduleSaving ? 'Saving...' : staffScheduleEditingId ? 'Save Changes' : isManager ? 'Save Entry' : 'Submit Request'}</button>
-            <button onClick={clearStaffScheduleForm}>Cancel</button>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   function renderStaffCalendarPanel() {
@@ -6728,6 +6661,42 @@ function App() {
       setCollapseStaffCalendar,
       <div>
         {staffScheduleLoadError && <p style={{ color: '#ff7875' }}>{staffScheduleLoadError}</p>}
+
+        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '14px' }}>
+          <h3 style={{ marginTop: 0 }}>{staffScheduleEditingId ? 'Edit Schedule Entry' : isManager ? 'Add Schedule Entry' : 'Submit Staff Calendar Request'}</h3>
+          {!isManager && <p style={{ color: '#ffcc66', marginTop: 0 }}>Requests are saved as pending until a manager approves them.</p>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
+            <select value={staffScheduleStaffId} onChange={(e) => setStaffScheduleStaffId(e.target.value)} disabled={staffScheduleType === 'shop_closed'} style={{ padding: '10px' }}>
+              <option value="">Staff member</option>
+              {staff.filter((member) => member.is_active !== false).map((member) => (
+                <option key={member.id} value={member.id}>{member.name}</option>
+              ))}
+            </select>
+            <input type="date" value={staffScheduleDate} onChange={(e) => setStaffScheduleDate(e.target.value)} style={{ padding: '10px' }} />
+            <input type="time" value={staffScheduleStartTime} onChange={(e) => setStaffScheduleStartTime(e.target.value)} style={{ padding: '10px' }} />
+            <input type="time" value={staffScheduleEndTime} onChange={(e) => setStaffScheduleEndTime(e.target.value)} style={{ padding: '10px' }} />
+            <select value={staffScheduleType} onChange={(e) => setStaffScheduleType(e.target.value)} style={{ padding: '10px' }}>
+              {STAFF_SCHEDULE_TYPES.filter((type) => isManager || type.value !== 'shop_closed').map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+            </select>
+            <select value={staffScheduleServiceType} onChange={(e) => setStaffScheduleServiceType(e.target.value)} style={{ padding: '10px' }}>
+              {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+            </select>
+          </div>
+          <textarea
+            placeholder="Notes for this staff member/day"
+            value={staffScheduleNotes}
+            onChange={(e) => setStaffScheduleNotes(e.target.value)}
+            style={{ width: '100%', minHeight: '70px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box', fontFamily: 'inherit' }}
+          />
+          <label style={{ display: 'block', marginTop: '10px' }}>
+            <input type="checkbox" checked={staffScheduleAvailable} onChange={(e) => setStaffScheduleAvailable(e.target.checked)} style={{ marginRight: '8px' }} />
+            Available for this entry
+          </label>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
+            <button onClick={saveStaffScheduleEntry} disabled={staffScheduleSaving}>{staffScheduleSaving ? 'Saving...' : staffScheduleEditingId ? 'Save Entry' : isManager ? 'Add Entry' : 'Submit Request'}</button>
+            {staffScheduleEditingId && <button onClick={clearStaffScheduleForm}>Cancel Edit</button>}
+          </div>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
           <select value={staffScheduleFilterStaffId} onChange={(e) => setStaffScheduleFilterStaffId(e.target.value)} style={{ padding: '10px' }}>
@@ -7430,7 +7399,6 @@ function App() {
       {showCustomerManagement && renderCustomerManagementPanel()}
       {!collapseCashUp && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
       {renderStaffCalendarPanel()}
-      {renderStaffScheduleModal()}
       {renderManagerSectionNav()}
       {showManagerView && renderStaffManagementPanel()}
       {showManagerView && renderMaintenancePanel()}
