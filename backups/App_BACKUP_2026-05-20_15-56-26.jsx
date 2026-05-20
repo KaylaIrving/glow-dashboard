@@ -2123,7 +2123,7 @@ function App() {
       Number(customer.hybrid_minutes_balance || 0),
       newHybridBalance,
       'added',
-      `${purchase.name}. Payment ${formatStatus(paymentMethod)}. Total paid £${totalAmount.toFixed(2)}.`
+      `${purchase.name}. Payment ${formatStatus(paymentMethod)}. Total paid Â£${totalAmount.toFixed(2)}.`
     )
 
     await createReceipt({
@@ -2222,11 +2222,11 @@ function App() {
     if (summary.grandTotal <= 0) return true
 
     const cashMessage = paymentMethod === 'cash'
-      ? `\nCash received: £${Number(cashReceived || 0).toFixed(2)}\nChange due: £${Math.max(0, Number(cashReceived || 0) - summary.grandTotal).toFixed(2)}`
+      ? `\nCash received: Â£${Number(cashReceived || 0).toFixed(2)}\nChange due: Â£${Math.max(0, Number(cashReceived || 0) - summary.grandTotal).toFixed(2)}`
       : ''
 
     return window.confirm(
-      `Complete booking checkout?\n\nCustomer: ${customer?.name || 'Walk-in'}\nSession: ${selectedMinutes || 0} tanning mins\nTop-up total: £${summary.topUpTotal.toFixed(2)}\nProducts total: £${summary.productsTotal.toFixed(2)}\nTotal to pay: £${summary.grandTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
+      `Complete booking checkout?\n\nCustomer: ${customer?.name || 'Walk-in'}\nSession: ${selectedMinutes || 0} tanning mins\nTop-up total: Â£${summary.topUpTotal.toFixed(2)}\nProducts total: Â£${summary.productsTotal.toFixed(2)}\nTotal to pay: Â£${summary.grandTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
     )
   }
 
@@ -2296,7 +2296,7 @@ function App() {
         return false
       }
 
-      await createCustomerLog(customer, 'Top up added', `${summary.purchase.name}: ${summary.topUpMinutesToAdd} mins added during booking checkout. Standard ${customer.standard_minutes_balance || 0} → ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} → ${newHybridBalance}. Total paid £${summary.topUpTotal.toFixed(2)}.`)
+      await createCustomerLog(customer, 'Top up added', `${summary.purchase.name}: ${summary.topUpMinutesToAdd} mins added during booking checkout. Standard ${customer.standard_minutes_balance || 0} â†’ ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} â†’ ${newHybridBalance}. Total paid Â£${summary.topUpTotal.toFixed(2)}.`)
       await logCustomerMinuteChanges(
         customer,
         Number(customer.standard_minutes_balance || 0),
@@ -2304,7 +2304,7 @@ function App() {
         Number(customer.hybrid_minutes_balance || 0),
         newHybridBalance,
         'added',
-        `${summary.purchase.name}. Booking checkout payment ${formatStatus(paymentMethod)}. Total paid £${summary.topUpTotal.toFixed(2)}.`
+        `${summary.purchase.name}. Booking checkout payment ${formatStatus(paymentMethod)}. Total paid Â£${summary.topUpTotal.toFixed(2)}.`
       )
 
       nextCustomer = {
@@ -5407,8 +5407,9 @@ function App() {
           {showBookingTopUp ? 'Hide Top Up Minutes' : 'Add / Top Up Minutes'}
         </button>
       </div>
-      {showBookingTopUp && (
-        <div style={{ background: '#111', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid #333' }}>
+      <div style={{ background: '#111', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid #333' }}>
+        {showBookingTopUp && (
+          <>
         <h3 style={{ marginTop: 0 }}>Top up minutes</h3>
         <select value={purchaseOption} onChange={(e) => { setPurchaseOption(e.target.value); setTopUpMinutes(0) }} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
           {Object.entries(PURCHASE_OPTIONS).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
@@ -5427,9 +5428,10 @@ function App() {
         ) : (
           <p style={{ margin: '8px 0' }}>Minutes to add: <strong>{purchase.minutes} mins</strong></p>
         )}
-        <p style={{ margin: '8px 0 0' }}>Top-up cost: <strong>£{Number((Number(purchase.minutes || 0) > 0 ? purchase.total : 0) || 0).toFixed(2)}</strong></p>
-        </div>
-      )}
+        <p style={{ margin: '8px 0 0' }}>Top-up cost: <strong>Â£{Number((Number(purchase.minutes || 0) > 0 ? purchase.total : 0) || 0).toFixed(2)}</strong></p>
+          </>
+        )}
+      </div>
       </>
     )
   }
@@ -5465,9 +5467,9 @@ function App() {
         <h3 style={{ marginTop: 0 }}>Payment Summary</h3>
         <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
           <p style={{ margin: 0 }}>Selected tanning session: <strong>{Number(selectedMinutes || 0)} mins</strong></p>
-          <p style={{ margin: 0 }}>Top-up minutes cost: <strong>£{summary.topUpTotal.toFixed(2)}</strong></p>
-          <p style={{ margin: 0 }}>Products total: <strong>£{summary.productsTotal.toFixed(2)}</strong></p>
-          <p style={{ margin: 0, color: '#d4a853', fontWeight: 'bold' }}>Grand total to pay: £{summary.grandTotal.toFixed(2)}</p>
+          <p style={{ margin: 0 }}>Top-up minutes cost: <strong>Â£{summary.topUpTotal.toFixed(2)}</strong></p>
+          <p style={{ margin: 0 }}>Products total: <strong>Â£{summary.productsTotal.toFixed(2)}</strong></p>
+          <p style={{ margin: 0, color: '#d4a853', fontWeight: 'bold' }}>Grand total to pay: Â£{summary.grandTotal.toFixed(2)}</p>
         </div>
         <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
           <option value="cash">Cash</option>
@@ -5488,7 +5490,7 @@ function App() {
               onChange={(e) => setCashReceived(e.target.value)}
               style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}
             />
-            <p style={{ margin: 0 }}>Change to give: <strong style={{ color: '#d4a853' }}>£{changeDue.toFixed(2)}</strong></p>
+            <p style={{ margin: 0 }}>Change to give: <strong style={{ color: '#d4a853' }}>Â£{changeDue.toFixed(2)}</strong></p>
             {Number(cashReceived || 0) > 0 && Number(cashReceived || 0) < summary.grandTotal && (
               <p style={{ margin: '6px 0 0', color: '#ff7875', fontWeight: 'bold' }}>Cash given is less than the total.</p>
             )}
@@ -5850,7 +5852,7 @@ function App() {
                   </strong>
                   <span>{formatStatus(transaction.minute_type)}<br />{formatStatus(transaction.transaction_type)}</span>
                   <span>
-                    {Number(transaction.balance_before || 0)} → {Number(transaction.balance_after || 0)}
+                    {Number(transaction.balance_before || 0)} â†’ {Number(transaction.balance_after || 0)}
                     {transaction.staff_name ? ` / ${transaction.staff_name}` : ''}
                     <br />
                     <span style={{ color: '#aaa' }}>{transaction.created_at ? new Date(transaction.created_at).toLocaleString('en-GB') : ''}</span>
