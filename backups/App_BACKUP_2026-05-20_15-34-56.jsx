@@ -147,7 +147,6 @@ function App() {
   const [collapseProducts, setCollapseProducts] = useState(true)
   const [collapseExports, setCollapseExports] = useState(true)
   const [collapseWixSync, setCollapseWixSync] = useState(true)
-  const [collapseReceipts, setCollapseReceipts] = useState(true)
   const [collapseCashUp, setCollapseCashUp] = useState(true)
   const [collapseDailyTakings, setCollapseDailyTakings] = useState(true)
   const [selectedProductManagementId, setSelectedProductManagementId] = useState('')
@@ -203,7 +202,6 @@ function App() {
   const [customerPayments, setCustomerPayments] = useState([])
   const [customerLogs, setCustomerLogs] = useState([])
   const [customerMinuteTransactions, setCustomerMinuteTransactions] = useState([])
-  const [customerReceipts, setCustomerReceipts] = useState([])
 
   const [showMinuteCorrection, setShowMinuteCorrection] = useState(false)
   const [correctionType, setCorrectionType] = useState('move_standard_to_hybrid')
@@ -289,13 +287,6 @@ function App() {
   const [wixImportedCount, setWixImportedCount] = useState(0)
   const [wixFailedCount, setWixFailedCount] = useState(0)
   const [wixSyncRunning, setWixSyncRunning] = useState(false)
-  const [managerReceipts, setManagerReceipts] = useState([])
-  const [receiptSearchDate, setReceiptSearchDate] = useState(formatLocalDate(new Date()))
-  const [receiptSearchCustomer, setReceiptSearchCustomer] = useState('')
-  const [receiptSearchType, setReceiptSearchType] = useState('')
-  const [receiptSearchPaymentMethod, setReceiptSearchPaymentMethod] = useState('')
-  const [receiptSearchLoading, setReceiptSearchLoading] = useState(false)
-  const [receiptSearchError, setReceiptSearchError] = useState('')
 
   useEffect(() => {
     getBeds()
@@ -1120,55 +1111,6 @@ function App() {
     })
   }
 
-  function buildReceiptText(receipt) {
-    const items = Array.isArray(receipt.items) ? receipt.items : []
-    return [
-      'Glow Tanning Receipt',
-      `Date: ${receipt.created_at ? new Date(receipt.created_at).toLocaleString('en-GB') : ''}`,
-      `Customer: ${receipt.customer_name || 'Walk-in'}`,
-      `Type: ${formatStatus(receipt.receipt_type)}`,
-      `Payment: ${formatStatus(receipt.payment_method)}`,
-      ...items.map((item) => `${item.name || item.product_name || item.description || 'Item'} x ${item.quantity || 1} - £${Number(item.total || item.total_amount || 0).toFixed(2)}`),
-      `Subtotal: £${Number(receipt.subtotal || 0).toFixed(2)}`,
-      `Discount: £${Number(receipt.discount || 0).toFixed(2)}`,
-      `Total: £${Number(receipt.total || 0).toFixed(2)}`,
-      `Staff: ${receipt.staff_name || ''}`,
-      receipt.notes ? `Notes: ${receipt.notes}` : ''
-    ].filter(Boolean).join('\n')
-  }
-
-  async function copyReceipt(receipt) {
-    const text = buildReceiptText(receipt)
-    try {
-      await navigator.clipboard.writeText(text)
-      alert('Receipt copied.')
-    } catch (error) {
-      window.prompt('Copy receipt text:', text)
-    }
-  }
-
-  async function createReceipt({ customer = null, customerName = '', receiptType, items = [], subtotal = 0, discount = 0, total = 0, paymentMethod = '', notes = '' }) {
-    const staffUser = getCurrentStaffUser()
-    const { error } = await supabase.from('Receipts').insert({
-      customer_id: customer?.id || null,
-      customer_name: customer?.name || customerName || null,
-      receipt_type: receiptType,
-      items,
-      subtotal: Number(subtotal || 0),
-      discount: Number(discount || 0),
-      total: Number(total || 0),
-      payment_method: paymentMethod || null,
-      staff_name: staffUser?.name || null,
-      notes: notes || null
-    })
-    if (error) {
-      showDataLoadWarning('Receipt could not be saved. Check the Receipts table.', error)
-      console.log(error)
-      return false
-    }
-    return true
-  }
-
   function printReceipt() {
     window.print()
   }
@@ -1475,18 +1417,6 @@ function App() {
       reason,
       notes: `Old standard ${oldStandard}, new standard ${newStandard}. Old hybrid ${oldHybrid}, new hybrid ${newHybrid}.`
     })
-
-    if (moneyAmount > 0) {
-      await createReceipt({
-        customer,
-        receiptType: 'correction',
-        items: [{ name: formatStatus(correctionLabel), quantity: 1, total: moneyAmount }],
-        subtotal: moneyAmount,
-        total: moneyAmount,
-        paymentMethod: managerCorrectionPaymentMethod,
-        notes: reason
-      })
-    }
 
     if (String(selectedManagerCustomerId) === String(customer.id)) {
       await loadCustomerHistory(customer.id)
@@ -1902,15 +1832,6 @@ function App() {
 
     const saved = await recordProductSales({ paymentMethodForSale: posPaymentMethod })
     if (saved) {
-      await createReceipt({
-        customerName: 'Product sale',
-        receiptType: 'product_sale',
-        items: receiptProducts.map((item) => ({ name: item.product_name, quantity: item.quantity, unit_price: item.unit_price, total: item.total_amount })),
-        subtotal: saleTotal,
-        total: saleTotal,
-        paymentMethod: posPaymentMethod,
-        notes: 'Standalone product sale.'
-      })
       showSaleReceipt({
         customerName: 'Product sale',
         products: receiptProducts,
@@ -2125,19 +2046,6 @@ function App() {
       'added',
       `${purchase.name}. Payment ${formatStatus(paymentMethod)}. Total paid Â£${totalAmount.toFixed(2)}.`
     )
-
-    await createReceipt({
-      customer,
-      receiptType: receiptProducts.length > 0 ? 'minutes_topup_with_products' : 'minutes_topup',
-      items: [
-        { name: purchase.name, quantity: 1, minutes: amount, total: totalAmount },
-        ...receiptProducts.map((item) => ({ name: item.product_name, quantity: item.quantity, unit_price: item.unit_price, total: item.total_amount }))
-      ],
-      subtotal: combinedTotal,
-      total: combinedTotal,
-      paymentMethod,
-      notes: paymentNotes || null
-    })
 
     setCustomers((prevCustomers) => prevCustomers.map((c) => c.id === customer.id ? { ...c, standard_minutes_balance: newStandardBalance, hybrid_minutes_balance: newHybridBalance } : c))
     if (selectedManagerCustomerId && Number(selectedManagerCustomerId) === Number(customer.id)) {
@@ -3822,17 +3730,6 @@ function App() {
     }
 
     await createCustomerLog(customer, 'Spray tan booking created', `${sprayTanService} booked for ${appointmentDateTime.toLocaleString('en-GB')}. Deposit required £${depositRequired.toFixed(2)}, paid £${depositPaid.toFixed(2)}.`)
-    if (depositPaid > 0) {
-      await createReceipt({
-        customer,
-        receiptType: 'spray_tan_deposit',
-        items: [{ name: sprayTanService, quantity: 1, total: depositPaid }],
-        subtotal: depositPaid,
-        total: depositPaid,
-        paymentMethod: 'not_recorded',
-        notes: `Deposit recorded for spray tan booking ${data?.id || ''}.`
-      })
-    }
     closeSprayTanModal()
     await getBookings()
     await getCustomers()
@@ -3901,21 +3798,6 @@ function App() {
       if (customerPatchDate) {
         await supabase.from('Customers').update({ last_patch_test_date: customerPatchDate }).eq('id', sprayTanEditingBooking.customer_id)
       }
-    }
-
-    const previousDepositPaid = Number(sprayTanEditingBooking.deposit_paid || 0)
-    const depositIncrease = depositPaid - previousDepositPaid
-    if (depositIncrease > 0) {
-      await createReceipt({
-        customer: sprayTanEditingBooking.customer_id ? { id: sprayTanEditingBooking.customer_id, name: customerName } : null,
-        customerName,
-        receiptType: previousDepositPaid >= depositRequired ? 'spray_tan_balance_payment' : 'spray_tan_deposit',
-        items: [{ name: sprayTanService, quantity: 1, total: depositIncrease }],
-        subtotal: depositIncrease,
-        total: depositIncrease,
-        paymentMethod: 'not_recorded',
-        notes: `Additional payment recorded for spray tan booking ${sprayTanEditingBooking.id}.`
-      })
     }
 
     closeSprayTanModal()
@@ -4072,7 +3954,6 @@ function App() {
       setCustomerPayments([])
       setCustomerLogs([])
       setCustomerMinuteTransactions([])
-      setCustomerReceipts([])
       return
     }
     const { data: paymentsData } = await supabase.from('Payments').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(10)
@@ -4091,47 +3972,6 @@ function App() {
     } else {
       setCustomerMinuteTransactions(minuteTransactionsData || [])
     }
-    const { data: receiptData, error: receiptError } = await supabase
-      .from('Receipts')
-      .select('*')
-      .eq('customer_id', customerId)
-      .order('created_at', { ascending: false })
-      .limit(30)
-    if (receiptError) {
-      setCustomerReceipts([])
-      showDataLoadWarning('Customer receipt history could not be loaded.', receiptError)
-    } else {
-      setCustomerReceipts(receiptData || [])
-    }
-  }
-
-  async function searchReceipts() {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required for receipt history:')) return
-
-    setReceiptSearchLoading(true)
-    setReceiptSearchError('')
-    const dayStart = receiptSearchDate ? new Date(`${receiptSearchDate}T00:00:00`) : null
-    const dayEnd = receiptSearchDate ? new Date(`${receiptSearchDate}T23:59:59.999`) : null
-    let query = supabase.from('Receipts').select('*').order('created_at', { ascending: false }).limit(200)
-    if (dayStart && dayEnd) query = query.gte('created_at', dayStart.toISOString()).lte('created_at', dayEnd.toISOString())
-    if (receiptSearchType) query = query.eq('receipt_type', receiptSearchType)
-    if (receiptSearchPaymentMethod) query = query.eq('payment_method', receiptSearchPaymentMethod)
-
-    const { data, error } = await query
-    setReceiptSearchLoading(false)
-    if (error) {
-      setManagerReceipts([])
-      setReceiptSearchError(error.message || 'Receipt search failed.')
-      showDataLoadWarning('Receipt history could not be loaded.', error)
-      return
-    }
-
-    const customerQuery = receiptSearchCustomer.trim().toLowerCase()
-    const filtered = customerQuery
-      ? (data || []).filter((receipt) => String(receipt.customer_name || '').toLowerCase().includes(customerQuery))
-      : data || []
-    setManagerReceipts(filtered)
   }
 
   function selectManagerCustomer(customer) {
@@ -4189,7 +4029,6 @@ function App() {
     setCustomerPayments([])
     setCustomerLogs([])
     setCustomerMinuteTransactions([])
-    setCustomerReceipts([])
   }
 
   function clearAddCustomerForm() {
@@ -5355,32 +5194,6 @@ function App() {
     )
   }
 
-  function renderReceiptSummary(receipt) {
-    const items = Array.isArray(receipt.items) ? receipt.items : []
-    return (
-      <div key={receipt.id} style={{ borderBottom: '1px solid #333', padding: '8px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <strong>{formatStatus(receipt.receipt_type)}</strong>
-          <strong style={{ color: '#d4a853' }}>£{Number(receipt.total || 0).toFixed(2)}</strong>
-        </div>
-        <span style={{ color: '#aaa' }}>
-          {receipt.created_at ? new Date(receipt.created_at).toLocaleString('en-GB') : ''} / {formatStatus(receipt.payment_method)} / {receipt.staff_name || 'No staff'}
-        </span>
-        <br />
-        <span>{receipt.customer_name || 'Walk-in'}</span>
-        {items.length > 0 && (
-          <div style={{ color: '#aaa', marginTop: '4px' }}>
-            {items.slice(0, 3).map((item, index) => (
-              <div key={`${receipt.id}-item-${index}`}>{item.name || item.product_name || item.description || 'Item'} x {item.quantity || 1}</div>
-            ))}
-            {items.length > 3 && <div>+ {items.length - 3} more item(s)</div>}
-          </div>
-        )}
-        <button onClick={() => copyReceipt(receipt)} style={{ marginTop: '6px' }}>Copy Receipt</button>
-      </div>
-    )
-  }
-
   function renderAllCustomersList() {
     if (!showAllCustomersList) return null
     const allCustomers = getFilteredAllCustomers()
@@ -5626,11 +5439,6 @@ function App() {
                   </span>
                 </div>
               ))}
-            </div>
-
-            <div style={{ background: '#111', padding: '15px', borderRadius: '14px', border: '1px solid #333', maxHeight: '320px', overflowY: 'auto', marginBottom: '15px' }}>
-              <h3 style={{ marginTop: 0 }}>Receipt History</h3>
-              {customerReceipts.length === 0 ? <p style={{ color: '#aaa' }}>No receipts found.</p> : customerReceipts.map((receipt) => renderReceiptSummary(receipt))}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
@@ -6020,44 +5828,6 @@ function App() {
             </button>
           ))}
           <button onClick={() => setStaffSelectorOpen(false)}>Cancel</button>
-        </div>
-      </div>
-    )
-  }
-
-  function renderReceiptHistoryPanel() {
-    if (!showManagerView) return null
-
-    return renderCollapsibleSection(
-      'Receipt History',
-      collapseReceipts,
-      setCollapseReceipts,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <input type="date" value={receiptSearchDate} onChange={(e) => setReceiptSearchDate(e.target.value)} style={{ padding: '10px' }} />
-          <input placeholder="Customer name" value={receiptSearchCustomer} onChange={(e) => setReceiptSearchCustomer(e.target.value)} style={{ padding: '10px' }} />
-          <select value={receiptSearchType} onChange={(e) => setReceiptSearchType(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All receipt types</option>
-            <option value="minutes_topup">Minutes Top-Up</option>
-            <option value="minutes_topup_with_products">Minutes + Products</option>
-            <option value="product_sale">Product Sale</option>
-            <option value="spray_tan_deposit">Spray Tan Deposit</option>
-            <option value="spray_tan_balance_payment">Spray Tan Balance</option>
-            <option value="correction">Correction</option>
-          </select>
-          <select value={receiptSearchPaymentMethod} onChange={(e) => setReceiptSearchPaymentMethod(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All payment methods</option>
-            <option value="card">Card</option>
-            <option value="cash">Cash</option>
-            <option value="bank_transfer">Bank Transfer</option>
-            <option value="other">Other</option>
-            <option value="not_recorded">Not Recorded</option>
-          </select>
-          <button onClick={searchReceipts} disabled={receiptSearchLoading}>{receiptSearchLoading ? 'Searching...' : 'Search Receipts'}</button>
-        </div>
-        {receiptSearchError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{receiptSearchError}</p>}
-        <div style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px', padding: '10px', background: '#111' }}>
-          {managerReceipts.length === 0 ? <p style={{ color: '#aaa' }}>No receipts loaded.</p> : managerReceipts.map((receipt) => renderReceiptSummary(receipt))}
         </div>
       </div>
     )
@@ -6888,7 +6658,6 @@ function App() {
       {showManagerView && renderProductsManagementPanel()}
       {showManagerView && renderCorrectionsPanel()}
       {showManagerView && renderWixBookingSyncPanel()}
-      {showManagerView && renderReceiptHistoryPanel()}
       {showManagerView && renderExportsPanel()}
       {showManagerView && renderDailyTakingsPanel()}
 
