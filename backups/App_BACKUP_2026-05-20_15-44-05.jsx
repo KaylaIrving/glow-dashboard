@@ -2161,199 +2161,6 @@ function App() {
     setCashReceived('')
   }
 
-  function getSunbedCheckoutSummary(customerOverride = null) {
-    const customer = customerOverride || getSelectedCustomer()
-    const purchase = getPurchaseDetails()
-    const canTopUpCustomer = customer && !getSelectedStaffAsCustomer() && !isShopTestCustomer(customer)
-    const topUpMinutesToAdd = showBookingTopUp && canTopUpCustomer ? Number(purchase.minutes || 0) : 0
-    const topUpTotal = topUpMinutesToAdd > 0 ? Number(purchase.total.toFixed(2)) : 0
-    const productsTotal = Number(getProductCartTotal().toFixed(2))
-    const grandTotal = Number((topUpTotal + productsTotal).toFixed(2))
-
-    return {
-      purchase,
-      topUpMinutesToAdd,
-      topUpTotal,
-      productsTotal,
-      grandTotal,
-      hasTopUp: topUpMinutesToAdd > 0,
-      hasProducts: productCart.length > 0
-    }
-  }
-
-  function getProjectedUsableMinutesForCheckout(customer, bedId) {
-    const summary = getSunbedCheckoutSummary(customer)
-    const standardBalance = Number(customer?.standard_minutes_balance || 0)
-    const hybridBalance = Number(customer?.hybrid_minutes_balance || 0)
-    const addedStandard = summary.hasTopUp && summary.purchase.type !== 'hybrid' ? summary.topUpMinutesToAdd : 0
-    const addedHybrid = summary.hasTopUp && summary.purchase.type === 'hybrid' ? summary.topUpMinutesToAdd : 0
-
-    if (Number(bedId) === 2) return hybridBalance + addedHybrid
-    return standardBalance + hybridBalance + addedStandard + addedHybrid
-  }
-
-  function validateSunbedCheckoutBeforeSave(customer) {
-    const summary = getSunbedCheckoutSummary(customer)
-
-    if (showBookingTopUp && summary.topUpMinutesToAdd <= 0 && summary.productsTotal <= 0) {
-      alert('Enter minutes to top up or hide the top-up section before continuing.')
-      return false
-    }
-
-    if (paymentMethod === 'cash' && summary.grandTotal > 0 && Number(cashReceived || 0) < summary.grandTotal) {
-      alert('Cash received is less than the total amount.')
-      return false
-    }
-
-    for (const item of productCart) {
-      const product = products.find((entry) => entry.id === item.product_id)
-      const quantity = Number(item.quantity || 0)
-      const stock = getProductStockQuantity(product)
-      if (stock <= 0) {
-        alert(`${item.product_name} is out of stock and cannot be sold.`)
-        return false
-      }
-      if (quantity > stock) {
-        alert(`${item.product_name} only has ${stock} in stock.`)
-        return false
-      }
-    }
-
-    if (summary.grandTotal <= 0) return true
-
-    const cashMessage = paymentMethod === 'cash'
-      ? `\nCash received: Â£${Number(cashReceived || 0).toFixed(2)}\nChange due: Â£${Math.max(0, Number(cashReceived || 0) - summary.grandTotal).toFixed(2)}`
-      : ''
-
-    return window.confirm(
-      `Complete booking checkout?\n\nCustomer: ${customer?.name || 'Walk-in'}\nSession: ${selectedMinutes || 0} tanning mins\nTop-up total: Â£${summary.topUpTotal.toFixed(2)}\nProducts total: Â£${summary.productsTotal.toFixed(2)}\nTotal to pay: Â£${summary.grandTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
-    )
-  }
-
-  async function applySunbedCheckout(customer) {
-    const summary = getSunbedCheckoutSummary(customer)
-    if (summary.grandTotal <= 0) return true
-
-    const receiptProducts = getProductReceiptItems()
-    const receiptCashReceived = Number(cashReceived || 0)
-    let receiptItems = []
-    let receiptType = 'sunbed_checkout'
-    let nextCustomer = customer
-
-    if (summary.hasProducts) {
-      const productSalesReady = await recordProductSales({ paymentMethodForSale: paymentMethod, customer })
-      if (!productSalesReady) return false
-      receiptItems = [
-        ...receiptItems,
-        ...receiptProducts.map((item) => ({
-          name: item.product_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total: item.total_amount
-        }))
-      ]
-    }
-
-    if (summary.hasTopUp) {
-      const isHybridTopUp = summary.purchase.type === 'hybrid'
-      const pricePerMinute = Number(summary.purchase.pricePerMinute)
-      const newStandardBalance = isHybridTopUp
-        ? Number(customer.standard_minutes_balance || 0)
-        : Number(customer.standard_minutes_balance || 0) + summary.topUpMinutesToAdd
-      const newHybridBalance = isHybridTopUp
-        ? Number(customer.hybrid_minutes_balance || 0) + summary.topUpMinutesToAdd
-        : Number(customer.hybrid_minutes_balance || 0)
-
-      const { error: paymentError } = await supabase.from('Payments').insert({
-        customer_id: customer.id,
-        customer_name: customer.name,
-        bed_type: summary.purchase.type === 'hybrid' ? 'Hybrid Minutes - Any Bed' : 'Standard Minutes - Bed 1 and Bed 3',
-        minutes_added: summary.topUpMinutesToAdd,
-        price_per_minute: Number(pricePerMinute.toFixed(4)),
-        total_amount: summary.topUpTotal,
-        payment_method: paymentMethod,
-        package_type: summary.purchase.type,
-        package_name: summary.purchase.name,
-        notes: paymentNotes || null
-      })
-
-      if (paymentError) {
-        alert('Payment was not saved, so customer minutes were not added. Please check the connection and try again.')
-        showDataLoadWarning('A payment failed to save. Please check the connection before continuing.', paymentError)
-        console.log(paymentError)
-        return false
-      }
-
-      const { error: customerError } = await supabase.from('Customers').update({
-        standard_minutes_balance: newStandardBalance,
-        hybrid_minutes_balance: newHybridBalance
-      }).eq('id', customer.id)
-
-      if (customerError) {
-        alert('Customer balance was not updated. Please check the connection before retrying.')
-        showDataLoadWarning('A customer balance update failed. Please check the connection.', customerError)
-        console.log(customerError)
-        return false
-      }
-
-      await createCustomerLog(customer, 'Top up added', `${summary.purchase.name}: ${summary.topUpMinutesToAdd} mins added during booking checkout. Standard ${customer.standard_minutes_balance || 0} â†’ ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} â†’ ${newHybridBalance}. Total paid Â£${summary.topUpTotal.toFixed(2)}.`)
-      await logCustomerMinuteChanges(
-        customer,
-        Number(customer.standard_minutes_balance || 0),
-        newStandardBalance,
-        Number(customer.hybrid_minutes_balance || 0),
-        newHybridBalance,
-        'added',
-        `${summary.purchase.name}. Booking checkout payment ${formatStatus(paymentMethod)}. Total paid Â£${summary.topUpTotal.toFixed(2)}.`
-      )
-
-      nextCustomer = {
-        ...customer,
-        standard_minutes_balance: newStandardBalance,
-        hybrid_minutes_balance: newHybridBalance
-      }
-      setCustomers((prevCustomers) => prevCustomers.map((c) => c.id === customer.id ? nextCustomer : c))
-      if (selectedManagerCustomerId && Number(selectedManagerCustomerId) === Number(customer.id)) {
-        setManagerStandardBalance(newStandardBalance)
-        setManagerHybridBalance(newHybridBalance)
-        await loadCustomerHistory(customer.id)
-      }
-
-      receiptItems = [
-        { name: summary.purchase.name, quantity: 1, minutes: summary.topUpMinutesToAdd, total: summary.topUpTotal },
-        ...receiptItems
-      ]
-      receiptType = summary.hasProducts ? 'sunbed_checkout_with_products' : 'minutes_topup'
-    } else if (summary.hasProducts) {
-      receiptType = 'product_sale'
-    }
-
-    await createReceipt({
-      customer: nextCustomer,
-      receiptType,
-      items: receiptItems,
-      subtotal: summary.grandTotal,
-      total: summary.grandTotal,
-      paymentMethod,
-      notes: paymentNotes || null
-    })
-
-    await getDailyTakings()
-    showSaleReceipt({
-      customerName: nextCustomer?.name || customer?.name || 'Walk-in',
-      packageName: summary.hasTopUp ? summary.purchase.name : '',
-      minutes: summary.hasTopUp ? summary.topUpMinutesToAdd : 0,
-      products: receiptProducts,
-      method: paymentMethod,
-      totalPaid: summary.grandTotal,
-      cashAmount: receiptCashReceived
-    })
-    setTopUpMinutes(0)
-    setPaymentNotes('')
-    setCashReceived('')
-    return true
-  }
-
   function getTotalBlockMinutes(booking) {
     return Number(booking.minutes || 0) + UNDRESS_SECONDS / 60 + COOLDOWN_SECONDS / 60
   }
@@ -3026,12 +2833,10 @@ function App() {
       if (!customer) return
     }
 
-    if (!isInternalShopTest && getProjectedUsableMinutesForCheckout(customer, modalSlot.bedId) < Number(selectedMinutes || 0)) {
+    if (!isInternalShopTest && !customerHasEnoughMinutes(customer, selectedMinutes, modalSlot.bedId)) {
       alert(`${customer.name} only has ${getUsableMinutesForBed(customer, modalSlot.bedId)} usable mins for this bed. Please top up before booking ${selectedMinutes} mins.`)
       return
     }
-
-    if (!isInternalShopTest && !validateSunbedCheckoutBeforeSave(customer)) return
 
     if (!isInternalShopTest && hasUsedSunbedWithin24Hours(customer.id)) {
       const override = window.confirm(`${customer.name} has used or booked a sunbed within the last 24 hours. Continue anyway?`)
@@ -3063,14 +2868,9 @@ function App() {
       source: isInternalShopTest ? 'shop_test' : 'calendar',
       booking_source: 'dashboard'
     })
+    setBookingSaving(false)
+
     if (!error) {
-      if (!isInternalShopTest) {
-        const checkoutSaved = await applySunbedCheckout(customer)
-        if (!checkoutSaved) {
-          setBookingSaving(false)
-          return
-        }
-      }
       closeModal()
       getBookings()
       getCustomers()
@@ -3079,7 +2879,6 @@ function App() {
       showDataLoadWarning('A booking save failed. Please check the connection.', error)
       console.log(error)
     }
-    setBookingSaving(false)
   }
 
   async function createStaffFreeBookingFromModal(member) {
@@ -3181,12 +2980,10 @@ function App() {
       if (!customer) return
     }
 
-    if (!isInternalShopTest && !modalBooking.minutes_deducted && getProjectedUsableMinutesForCheckout(customer, editBedId) < Number(selectedMinutes || 0)) {
+    if (!isInternalShopTest && !modalBooking.minutes_deducted && !customerHasEnoughMinutes(customer, selectedMinutes, editBedId)) {
       alert(`${customer.name} only has ${getUsableMinutesForBed(customer, editBedId)} usable mins for this bed. Please top up before booking ${selectedMinutes} mins.`)
       return
     }
-
-    if (!isInternalShopTest && !validateSunbedCheckoutBeforeSave(customer)) return
 
     if (!isInternalShopTest && hasUsedSunbedWithin24Hours(customer.id, modalBooking.id)) {
       const override = window.confirm(`${customer.name} has used or booked a sunbed within the last 24 hours. Continue anyway?`)
@@ -3217,14 +3014,9 @@ function App() {
       booking_source: modalBooking.booking_source || 'dashboard',
       minutes_deducted: isInternalShopTest ? true : modalBooking.minutes_deducted
     }).eq('id', modalBooking.id)
+    setBookingSaving(false)
+
     if (!error) {
-      if (!isInternalShopTest) {
-        const checkoutSaved = await applySunbedCheckout(customer)
-        if (!checkoutSaved) {
-          setBookingSaving(false)
-          return
-        }
-      }
       closeModal()
       getBookings()
       getCustomers()
@@ -3233,7 +3025,6 @@ function App() {
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
       console.log(error)
     }
-    setBookingSaving(false)
   }
 
   async function deleteBooking(booking) {
@@ -5406,8 +5197,12 @@ function App() {
         <button type="button" onClick={() => setShowBookingTopUp(!showBookingTopUp)}>
           {showBookingTopUp ? 'Hide Top Up Minutes' : 'Add / Top Up Minutes'}
         </button>
+        <button type="button" onClick={() => { if (requireStaffSignIn()) setShowBookingProducts(!showBookingProducts) }}>
+          {showBookingProducts ? 'Hide Products' : 'Add Products'}
+        </button>
       </div>
       <div style={{ background: '#111', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid #333' }}>
+        {!showBookingTopUp && showBookingProducts && renderProductPicker()}
         {showBookingTopUp && (
           <>
         <h3 style={{ marginTop: 0 }}>Top up minutes</h3>
@@ -5428,58 +5223,16 @@ function App() {
         ) : (
           <p style={{ margin: '8px 0' }}>Minutes to add: <strong>{purchase.minutes} mins</strong></p>
         )}
-        <p style={{ margin: '8px 0 0' }}>Top-up cost: <strong>Â£{Number((Number(purchase.minutes || 0) > 0 ? purchase.total : 0) || 0).toFixed(2)}</strong></p>
-          </>
-        )}
-      </div>
-      </>
-    )
-  }
-
-  function renderBookingProductsSection() {
-    const selectedCustomer = getSelectedCustomer()
-    const selectedStaff = getSelectedStaffAsCustomer()
-
-    if (!selectedCustomer || selectedStaff || isShopTestCustomer(selectedCustomer)) return null
-
-    return (
-      <>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '0', marginBottom: '12px' }}>
-          <button type="button" onClick={() => { if (requireStaffSignIn()) setShowBookingProducts(!showBookingProducts) }}>
-            {showBookingProducts ? 'Hide Products' : 'Add Products'}
-          </button>
-        </div>
-        {showBookingProducts && renderProductPicker()}
-      </>
-    )
-  }
-
-  function renderSunbedCheckoutSummary() {
-    const selectedCustomer = getSelectedCustomer()
-    const selectedStaff = getSelectedStaffAsCustomer()
-    if (!selectedCustomer || selectedStaff || isShopTestCustomer(selectedCustomer)) return null
-
-    const summary = getSunbedCheckoutSummary(selectedCustomer)
-    const changeDue = Math.max(0, Number(cashReceived || 0) - summary.grandTotal)
-
-    return (
-      <div style={{ background: '#0b0b0b', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid rgba(212,168,83,0.45)' }}>
-        <h3 style={{ marginTop: 0 }}>Payment Summary</h3>
-        <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
-          <p style={{ margin: 0 }}>Selected tanning session: <strong>{Number(selectedMinutes || 0)} mins</strong></p>
-          <p style={{ margin: 0 }}>Top-up minutes cost: <strong>Â£{summary.topUpTotal.toFixed(2)}</strong></p>
-          <p style={{ margin: 0 }}>Products total: <strong>Â£{summary.productsTotal.toFixed(2)}</strong></p>
-          <p style={{ margin: 0, color: '#d4a853', fontWeight: 'bold' }}>Grand total to pay: Â£{summary.grandTotal.toFixed(2)}</p>
-        </div>
         <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
-          <option value="cash">Cash</option>
           <option value="card">Card</option>
+          <option value="cash">Cash</option>
           <option value="bank_transfer">Bank Transfer</option>
           <option value="other">Other</option>
         </select>
         <input placeholder="Payment notes optional" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
-        {paymentMethod === 'cash' && summary.grandTotal > 0 && (
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginTop: '4px' }}>
+
+        {paymentMethod === 'cash' && (
+          <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '10px' }}>
             <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>Cash received</label>
             <input
               type="number"
@@ -5490,14 +5243,27 @@ function App() {
               onChange={(e) => setCashReceived(e.target.value)}
               style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}
             />
-            <p style={{ margin: 0 }}>Change to give: <strong style={{ color: '#d4a853' }}>Â£{changeDue.toFixed(2)}</strong></p>
-            {Number(cashReceived || 0) > 0 && Number(cashReceived || 0) < summary.grandTotal && (
-              <p style={{ margin: '6px 0 0', color: '#ff7875', fontWeight: 'bold' }}>Cash given is less than the total.</p>
+            <p style={{ margin: 0 }}>
+              Change to give:
+              <strong style={{ marginLeft: '6px', color: '#d4a853' }}>
+                £{Math.max(0, Number(cashReceived || 0) - Number((purchase.total + getProductCartTotal()).toFixed(2))).toFixed(2)}
+              </strong>
+            </p>
+            {Number(cashReceived || 0) > 0 && Number(cashReceived || 0) < Number((purchase.total + getProductCartTotal()).toFixed(2)) && (
+              <p style={{ margin: '6px 0 0', color: '#ff7875', fontWeight: 'bold' }}>
+                Cash given is less than the total.
+              </p>
             )}
           </div>
         )}
-        {summary.grandTotal <= 0 && <p style={{ margin: '8px 0 0', color: '#aaa' }}>No payment due for this checkout.</p>}
+
+        {showBookingProducts && renderProductPicker()}
+        <p>Total to pay: <strong>£{(purchase.total + getProductCartTotal()).toFixed(2)}</strong></p>
+        <button onClick={topUpSelectedCustomer}>Payment Taken + Add Minutes</button>
+          </>
+        )}
       </div>
+      </>
     )
   }
 
@@ -7249,14 +7015,12 @@ function App() {
                 {renderBookingMinutesControl()}
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
                 {renderTopUpSection()}
-                {renderBookingProductsSection()}
-                {renderSunbedCheckoutSummary()}
 
                 <button
                   onClick={createBookingFromModal}
                   disabled={bookingSaving}
                 >
-                  {bookingSaving ? 'Saving...' : 'Complete Booking & Payment'}
+                  {bookingSaving ? 'Saving...' : 'Create Booking'}
                 </button>
                 <button onClick={closeModal} style={{ marginLeft: '10px' }}>Cancel</button>
               </>
@@ -7273,13 +7037,11 @@ function App() {
                 {renderBookingMinutesControl()}
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
                 {renderTopUpSection()}
-                {renderBookingProductsSection()}
-                {renderSunbedCheckoutSummary()}
                 <button
                   onClick={saveEditedBooking}
                   disabled={bookingSaving}
                 >
-                  {bookingSaving ? 'Saving...' : 'Complete Booking & Payment'}
+                  {bookingSaving ? 'Saving...' : 'Save Changes'}
                 </button>
                 <button onClick={() => setEditMode(false)} style={{ marginLeft: '10px' }}>Cancel</button>
               </>
