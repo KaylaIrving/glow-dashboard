@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from './supabase'
 import './App.css'
@@ -697,14 +697,6 @@ function App() {
     setStaffScheduleAvailable(true)
   }
 
-  function getStaffScheduleApprovalStatus(entry) {
-    return String(entry?.approval_status || 'approved').toLowerCase()
-  }
-
-  function isApprovedStaffSchedule(entry) {
-    return getStaffScheduleApprovalStatus(entry) === 'approved'
-  }
-
   function editStaffScheduleEntry(entry) {
     setStaffScheduleEditingId(String(entry.id))
     setStaffScheduleStaffId(entry.staff_id ? String(entry.staff_id) : '')
@@ -727,7 +719,7 @@ function App() {
   }
 
   function getShopClosuresForSelectedDate() {
-    return staffSchedule.filter((entry) => entry.schedule_date === selectedDate && entry.schedule_type === 'shop_closed' && isApprovedStaffSchedule(entry))
+    return staffSchedule.filter((entry) => entry.schedule_date === selectedDate && entry.schedule_type === 'shop_closed')
   }
 
   function getCurrentStaffScheduleForSelectedDate() {
@@ -740,7 +732,6 @@ function App() {
     // TODO Spray tan approvals: use this helper when assigning/approving spray tan bookings.
     return staffSchedule.filter((entry) => {
       if (entry.schedule_date !== date) return false
-      if (!isApprovedStaffSchedule(entry)) return false
       if (entry.service_type !== 'spraytan') return false
       if (!['spray_tan_available', 'shift'].includes(entry.schedule_type)) return false
       if (entry.is_available === false) return false
@@ -751,40 +742,21 @@ function App() {
 
   async function saveStaffScheduleEntry() {
     if (!requireStaffSignIn()) return
-    const currentStaff = getCurrentStaffUser()
-    const isManager = showManagerView
-
-    if (staffScheduleEditingId && !isManager) {
-      alert('Only managers can edit existing Staff Calendar entries.')
-      return
-    }
-
-    if (!isManager && staffScheduleType === 'shop_closed') {
-      alert('Only managers can add shop closures.')
-      return
-    }
+    if (!showManagerView && !requireManagerAccess('Manager PIN required to edit Staff Calendar:')) return
 
     if (!staffScheduleDate) {
       alert('Choose a schedule date.')
       return
     }
 
-    if (staffScheduleType !== 'shop_closed' && !isManager && !currentStaff) {
-      alert('Please sign in before submitting a staff calendar request.')
-      return
-    }
-
-    if (staffScheduleType !== 'shop_closed' && isManager && !staffScheduleStaffId) {
+    if (staffScheduleType !== 'shop_closed' && !staffScheduleStaffId) {
       alert('Choose a staff member for this schedule entry.')
       return
     }
 
-    const selectedMember = isManager
-      ? staff.find((member) => String(member.id) === String(staffScheduleStaffId))
-      : currentStaff
-    const approvalStatus = isManager ? 'approved' : 'pending'
+    const selectedMember = staff.find((member) => String(member.id) === String(staffScheduleStaffId))
     const payload = {
-      staff_id: staffScheduleType === 'shop_closed' ? null : Number(selectedMember?.id),
+      staff_id: staffScheduleType === 'shop_closed' ? null : Number(staffScheduleStaffId),
       staff_name: staffScheduleType === 'shop_closed' ? 'Shop Closed' : selectedMember?.name || '',
       schedule_date: staffScheduleDate,
       start_time: staffScheduleStartTime || null,
@@ -792,11 +764,7 @@ function App() {
       schedule_type: staffScheduleType,
       service_type: staffScheduleServiceType,
       notes: staffScheduleNotes || null,
-      is_available: isManager ? staffScheduleAvailable : false,
-      approval_status: approvalStatus,
-      approved_by: isManager ? currentStaff?.name || null : null,
-      approved_at: isManager ? new Date().toISOString() : null,
-      request_created_by: currentStaff?.name || null
+      is_available: staffScheduleAvailable
     }
 
     setStaffScheduleSaving(true)
@@ -819,10 +787,7 @@ function App() {
 
   async function deleteStaffScheduleEntry(entry) {
     if (!requireStaffSignIn()) return
-    if (!showManagerView) {
-      alert('Only managers can delete Staff Calendar entries.')
-      return
-    }
+    if (!showManagerView && !requireManagerAccess('Manager PIN required to delete Staff Calendar entries:')) return
     const confirmed = window.confirm(`Delete schedule entry for ${entry.staff_name || 'the shop'} on ${entry.schedule_date}?`)
     if (!confirmed) return
 
@@ -835,31 +800,6 @@ function App() {
     }
 
     if (String(staffScheduleEditingId) === String(entry.id)) clearStaffScheduleForm()
-    await getStaffSchedule()
-  }
-
-  async function updateStaffScheduleApproval(entry, approvalStatus) {
-    if (!requireStaffSignIn()) return
-    if (!showManagerView) {
-      alert('Manager View is required to approve or reject Staff Calendar requests.')
-      return
-    }
-
-    const manager = getCurrentStaffUser()
-    const updates = {
-      approval_status: approvalStatus,
-      approved_by: approvalStatus === 'approved' ? manager?.name || null : null,
-      approved_at: approvalStatus === 'approved' ? new Date().toISOString() : null,
-      is_available: approvalStatus === 'approved' ? !['holiday', 'time_off', 'shop_closed'].includes(entry.schedule_type) : false
-    }
-
-    const { error } = await supabase.from('StaffSchedule').update(updates).eq('id', entry.id)
-    if (error) {
-      alert('Staff Calendar approval was not saved. Please check the connection.')
-      showDataLoadWarning('Staff Calendar approval failed.', error)
-      console.log(error)
-      return
-    }
     await getStaffSchedule()
   }
 
@@ -2547,11 +2487,7 @@ function App() {
   }
 
   function isFinishedBookingStatus(booking) {
-    const status = getBookingStatusKey(booking)
-    if (status === 'force_stopped') {
-      return !(booking?.booking_end && new Date(booking.booking_end) > new Date())
-    }
-    return ['completed', 'deleted', 'cancelled', 'canceled', 'no_show'].includes(status)
+    return ['completed', 'deleted', 'cancelled', 'canceled', 'no_show', 'force_stopped'].includes(getBookingStatusKey(booking))
   }
 
   function getLiveBedSession(bedId, excludeBookingId = null) {
@@ -2578,10 +2514,6 @@ function App() {
   function getBookingLivePhaseKey(booking) {
     const now = new Date()
     const status = getBookingStatusKey(booking)
-    if (status === 'force_stopped') {
-      if (booking?.booking_end && now < new Date(booking.booking_end)) return 'cooldown'
-      return 'force_stopped'
-    }
     if (status === 'cooldown') return 'cooldown'
 
     const actualStartAt = booking?.customer_started_at
@@ -3631,15 +3563,9 @@ function App() {
 
   async function forceStop(booking) {
     if (!requireStaffSignIn()) return
+    if (!requireManagerAccess('Manager PIN required to force stop a session:')) return
 
-    const now = new Date()
-    const cooldownEnd = new Date(now.getTime() + COOLDOWN_SECONDS * 1000)
-    const { error } = await supabase.from('Bookings').update({
-      status: 'force_stopped',
-      actual_tanning_end: now.toISOString(),
-      booking_end: cooldownEnd.toISOString(),
-      tmax_status: 'force_stopped'
-    }).eq('id', booking.id)
+    const { error } = await supabase.from('Bookings').update({ status: 'force_stopped', booking_end: new Date().toISOString(), tmax_status: 'force_stopped' }).eq('id', booking.id)
     if (error) {
       alert('Force stop was not saved. Please check the connection and try again.')
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
@@ -3698,11 +3624,6 @@ function App() {
 
   function getPhase(booking) {
     if (isShopTestBooking(booking) && !booking?.booking_start) return 'Shop Test'
-
-    if (String(booking?.status || '').toLowerCase() === 'force_stopped') {
-      if (booking?.booking_end && currentTime < new Date(booking.booking_end)) return 'Cooldown'
-      return 'Force Stopped'
-    }
 
     if (!booking?.booking_start && !booking?.customer_started_at) {
       return formatStatus(booking?.status || 'booked')
@@ -3773,8 +3694,6 @@ function App() {
     const booking = getLiveBedSession(bedId) || getBookingForBed(bedId)
     if (!booking) return '#0f5b3c'
     const phase = getPhase(booking)
-    if (phase === 'Force Stopped') return '#7a1f2a'
-    if (phase === 'No Show') return '#3a3632'
     if (phase === 'Booked' || phase === 'Waiting' || phase === 'Shop Test') return '#2f2f2f'
     if (phase === 'Undressing') return '#b56a22'
     if (phase === 'Running' || phase === 'Customer Started') return '#5a2f7d'
@@ -3786,7 +3705,7 @@ function App() {
   function getCalendarBookingColour(booking) {
     if (!booking) return 'transparent'
     const phase = getPhase(booking)
-    if (phase === 'Force Stopped') return '#7a1f2a'
+    if (booking.status === 'force_stopped') return '#7a1f2a'
     if (booking.status === 'no_show') return '#3a3632'
     if (phase === 'Booked' || phase === 'Waiting' || phase === 'Shop Test') return '#2f2f2f'
     if (phase === 'Undressing') return '#b56a22'
@@ -3805,11 +3724,7 @@ function App() {
           ? '#5aa8d6'
           : phase === 'Completed'
             ? '#2f7a4b'
-            : phase === 'Force Stopped'
-              ? '#7a1f2a'
-              : phase === 'No Show'
-                ? '#3a3632'
-                : '#2f2f2f'
+            : '#2f2f2f'
     return {
       display: 'inline-block',
       background,
@@ -6492,44 +6407,21 @@ function App() {
     )
   }
 
-  function getStaffScheduleEntryStyle(entry) {
-    const approval = getStaffScheduleApprovalStatus(entry)
-    if (approval === 'pending') return { border: '1px solid rgba(255,204,102,0.7)', background: '#1f1a10' }
-    if (approval === 'rejected') return { border: '1px solid rgba(255,120,117,0.65)', background: '#1f1010' }
-
-    const type = entry.schedule_type
-    if (type === 'shift') return { border: '1px solid rgba(90,168,214,0.45)', background: '#101821' }
-    if (type === 'holiday' || type === 'time_off') return { border: '1px solid rgba(255,120,117,0.45)', background: '#1d1215' }
-    if (type === 'spray_tan_available') return { border: '1px solid rgba(47,122,75,0.55)', background: '#101c16' }
-    if (type === 'training') return { border: '1px solid rgba(90,47,125,0.55)', background: '#17111e' }
-    if (type === 'shop_closed') return { border: '1px solid rgba(122,31,42,0.65)', background: '#1d1012' }
-    return { border: '1px solid #333', background: '#0b0b0b' }
-  }
-
   function renderStaffScheduleEntry(entry, showActions = false) {
-    const approval = getStaffScheduleApprovalStatus(entry)
-    const entryStyle = getStaffScheduleEntryStyle(entry)
     return (
-      <div key={entry.id} style={{ ...entryStyle, borderRadius: '10px', padding: '10px', marginBottom: '8px' }}>
+      <div key={entry.id} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '10px', marginBottom: '8px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
           <strong>{entry.staff_name || 'Shop'}</strong>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ color: approval === 'approved' ? '#d4a853' : approval === 'pending' ? '#ffcc66' : '#ff7875', fontWeight: 'bold' }}>
-              {formatStatus(approval)}
-            </span>
-            <span style={{ color: entry.is_available === false ? '#ff7875' : '#d4a853', fontWeight: 'bold' }}>
-              {entry.is_available === false ? 'Unavailable' : 'Available'}
-            </span>
-          </div>
+          <span style={{ color: entry.is_available === false ? '#ff7875' : '#d4a853', fontWeight: 'bold' }}>
+            {entry.is_available === false ? 'Unavailable' : 'Available'}
+          </span>
         </div>
         <p style={{ margin: '6px 0', color: '#ddd' }}>
-          {entry.start_time || '--:--'} - {entry.end_time || '--:--'} - {getStaffScheduleTypeLabel(entry.schedule_type)} - {getStaffServiceTypeLabel(entry.service_type)}
+          {entry.start_time || '--:--'} - {entry.end_time || '--:--'} · {getStaffScheduleTypeLabel(entry.schedule_type)} · {getStaffServiceTypeLabel(entry.service_type)}
         </p>
         {entry.notes && <p style={{ margin: '6px 0 0', color: '#aaa' }}>{entry.notes}</p>}
         {showActions && (
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
-            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'approved')}>Approve</button>}
-            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'rejected')}>Reject</button>}
             <button onClick={() => editStaffScheduleEntry(entry)}>Edit</button>
             <button onClick={() => deleteStaffScheduleEntry(entry)}>Delete</button>
           </div>
@@ -6540,7 +6432,7 @@ function App() {
 
   function renderStaffOwnSchedulePanel() {
     const currentStaff = getCurrentStaffUser()
-    if (!currentStaff) return null
+    if (!currentStaff || showManagerView) return null
     const entries = getCurrentStaffScheduleForSelectedDate()
     if (entries.length === 0 && !staffScheduleLoadError) return null
 
@@ -6555,16 +6447,11 @@ function App() {
   }
 
   function renderStaffCalendarPanel() {
-    const currentStaff = getCurrentStaffUser()
-    if (!currentStaff) return null
+    if (!showManagerView) return null
 
     const weekDates = getWeekDates(selectedDate)
     const filteredEntries = getFilteredStaffSchedule()
     const sprayTanArtistCount = getAvailableSprayTanArtists(selectedDate).length
-    const isManager = showManagerView
-    const visibleStaff = staff
-      .filter((member) => member.is_active !== false)
-      .filter((member) => !staffScheduleFilterStaffId || String(member.id) === String(staffScheduleFilterStaffId))
 
     return renderCollapsibleSection(
       'Staff Calendar',
@@ -6574,10 +6461,9 @@ function App() {
         {staffScheduleLoadError && <p style={{ color: '#ff7875' }}>{staffScheduleLoadError}</p>}
 
         <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '14px' }}>
-          <h3 style={{ marginTop: 0 }}>{staffScheduleEditingId ? 'Edit Schedule Entry' : isManager ? 'Add Schedule Entry' : 'Submit Staff Calendar Request'}</h3>
-          {!isManager && <p style={{ color: '#ffcc66', marginTop: 0 }}>Requests are saved as pending until a manager approves them.</p>}
+          <h3 style={{ marginTop: 0 }}>{staffScheduleEditingId ? 'Edit Schedule Entry' : 'Add Schedule Entry'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-            <select value={isManager ? staffScheduleStaffId : String(currentStaff.id)} onChange={(e) => setStaffScheduleStaffId(e.target.value)} disabled={!isManager || staffScheduleType === 'shop_closed'} style={{ padding: '10px' }}>
+            <select value={staffScheduleStaffId} onChange={(e) => setStaffScheduleStaffId(e.target.value)} disabled={staffScheduleType === 'shop_closed'} style={{ padding: '10px' }}>
               <option value="">Staff member</option>
               {staff.filter((member) => member.is_active !== false).map((member) => (
                 <option key={member.id} value={member.id}>{member.name}</option>
@@ -6587,7 +6473,7 @@ function App() {
             <input type="time" value={staffScheduleStartTime} onChange={(e) => setStaffScheduleStartTime(e.target.value)} style={{ padding: '10px' }} />
             <input type="time" value={staffScheduleEndTime} onChange={(e) => setStaffScheduleEndTime(e.target.value)} style={{ padding: '10px' }} />
             <select value={staffScheduleType} onChange={(e) => setStaffScheduleType(e.target.value)} style={{ padding: '10px' }}>
-              {STAFF_SCHEDULE_TYPES.filter((type) => isManager || type.value !== 'shop_closed').map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+              {STAFF_SCHEDULE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
             <select value={staffScheduleServiceType} onChange={(e) => setStaffScheduleServiceType(e.target.value)} style={{ padding: '10px' }}>
               {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
@@ -6604,7 +6490,7 @@ function App() {
             Available for this entry
           </label>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
-            <button onClick={saveStaffScheduleEntry} disabled={staffScheduleSaving}>{staffScheduleSaving ? 'Saving...' : staffScheduleEditingId ? 'Save Entry' : isManager ? 'Add Entry' : 'Submit Request'}</button>
+            <button onClick={saveStaffScheduleEntry} disabled={staffScheduleSaving}>{staffScheduleSaving ? 'Saving...' : staffScheduleEditingId ? 'Save Entry' : 'Add Entry'}</button>
             {staffScheduleEditingId && <button onClick={clearStaffScheduleForm}>Cancel Edit</button>}
           </div>
         </div>
@@ -6632,45 +6518,22 @@ function App() {
           <h3>Daily View</h3>
           {filteredEntries.filter((entry) => entry.schedule_date === selectedDate).length === 0 ? (
             <p style={{ color: '#aaa' }}>No schedule entries for this date.</p>
-          ) : filteredEntries.filter((entry) => entry.schedule_date === selectedDate).map((entry) => renderStaffScheduleEntry(entry, isManager))}
+          ) : filteredEntries.filter((entry) => entry.schedule_date === selectedDate).map((entry) => renderStaffScheduleEntry(entry, true))}
         </div>
 
         <h3>Weekly View</h3>
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: '980px', display: 'grid', gridTemplateColumns: '160px repeat(7, minmax(120px, 1fr))', gap: '8px' }}>
-            <div style={{ color: '#d4a853', fontWeight: 'bold' }}>Staff</div>
-            {weekDates.map((date) => (
-              <div key={date} style={{ color: '#d4a853', fontWeight: 'bold' }}>
-                {new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
+          {weekDates.map((date) => {
+            const dayEntries = filteredEntries.filter((entry) => entry.schedule_date === date)
+            return (
+              <div key={date} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px' }}>
+                <strong>{new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</strong>
+                <div style={{ marginTop: '10px' }}>
+                  {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, true))}
+                </div>
               </div>
-            ))}
-            {visibleStaff.map((member) => (
-              <Fragment key={member.id}>
-                <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px', fontWeight: 'bold' }}>{member.name}</div>
-                {weekDates.map((date) => {
-                  const dayEntries = filteredEntries.filter((entry) => String(entry.staff_id) === String(member.id) && entry.schedule_date === date)
-                  return (
-                    <div key={`${member.id}-${date}`} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
-                      {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
-                    </div>
-                  )
-                })}
-              </Fragment>
-            ))}
-            {filteredEntries.filter((entry) => entry.schedule_type === 'shop_closed').length > 0 && (
-              <>
-                <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px', fontWeight: 'bold' }}>Shop</div>
-                {weekDates.map((date) => {
-                  const dayEntries = filteredEntries.filter((entry) => entry.schedule_type === 'shop_closed' && entry.schedule_date === date)
-                  return (
-                    <div key={`shop-${date}`} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
-                      {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
-                    </div>
-                  )
-                })}
-              </>
-            )}
-          </div>
+            )
+          })}
         </div>
       </div>
     )
@@ -7300,7 +7163,7 @@ function App() {
       {renderStaffOwnSchedulePanel()}
       {showCustomerManagement && renderCustomerManagementPanel()}
       {!collapseCashUp && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
-      {renderStaffCalendarPanel()}
+      {showManagerView && renderStaffCalendarPanel()}
       {showManagerView && renderStaffManagementPanel()}
       {showManagerView && renderMaintenancePanel()}
       {showManagerView && renderProductsManagementPanel()}
@@ -7335,7 +7198,6 @@ function App() {
                 <>
                   <p>Customer: <strong>{booking.customer_name}</strong></p>
                   <p>Minutes: <strong>{booking.minutes}</strong></p>
-                  {String(booking.status || '').toLowerCase() === 'force_stopped' && <p><strong>Force Stopped</strong></p>}
                   <p>Status: <strong>{liveBedLabel || phase}</strong></p>
                   {['Undressing', 'Running', 'Cooldown'].includes(phase) && <h1>{getRemainingTime(booking)}</h1>}
                 </>
@@ -7394,7 +7256,6 @@ function App() {
                             {isWixBooking(booking) && <><span style={{ display: 'inline-block', color: '#050505', background: '#d4a853', borderRadius: '6px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold', margin: '3px 0' }}>Wix</span><br /></>}
                             {booking.minutes} mins<br />
                             Blocked: {getTotalBlockMinutes(booking)} mins<br />
-                            {String(booking.status || '').toLowerCase() === 'force_stopped' && <><span style={getStatusChipStyle('Force Stopped')}>Force Stopped</span><br /></>}
                             <span style={getStatusChipStyle(getPhase(booking))}>{getPhase(booking)}</span>
                             {booking.customer_started_at && (
                               <>
@@ -7492,7 +7353,6 @@ function App() {
                   </>
                 )}
                 <p>Total blocked time: {getTotalBlockMinutes(modalBooking)} mins</p>
-                {String(modalBooking.status || '').toLowerCase() === 'force_stopped' && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Force Stopped</p>}
                 <p>Status: <span style={getStatusChipStyle(modalPhase)}>{modalPhase}</span></p>
                 {modalBooking.tmax_sent_at && <p>Time sent: {new Date(modalBooking.tmax_sent_at).toLocaleTimeString('en-GB')}</p>}
                 {modalBooking.customer_started_at && <p><strong>Customer Started</strong></p>}
@@ -7521,7 +7381,7 @@ function App() {
                     <button onClick={() => setEditMode(true)}>Edit</button>
                   )}
 
-                  {['undressing', 'running', 'cooldown', 'active', 'time_sent', 'sent', 'customer_started', 'waiting_to_start', 'in_use'].includes(String(modalBooking.status || '').toLowerCase()) && (
+                  {['undressing', 'running', 'cooldown'].includes(String(modalBooking.status || '').toLowerCase()) && (
                     <button onClick={() => forceStop(modalBooking)}>Force Stop</button>
                   )}
 
