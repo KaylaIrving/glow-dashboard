@@ -201,7 +201,6 @@ function App() {
   const [customerImportError, setCustomerImportError] = useState('')
   const [customerPayments, setCustomerPayments] = useState([])
   const [customerLogs, setCustomerLogs] = useState([])
-  const [customerMinuteTransactions, setCustomerMinuteTransactions] = useState([])
 
   const [showMinuteCorrection, setShowMinuteCorrection] = useState(false)
   const [correctionType, setCorrectionType] = useState('move_standard_to_hybrid')
@@ -1394,15 +1393,6 @@ function App() {
     }
 
     await createCustomerLog(customer, 'Manager booking/payment correction', `${formatStatus(correctionLabel)}. Standard ${oldStandard} -> ${newStandard}. Hybrid ${oldHybrid} -> ${newHybrid}. Money GBP ${moneyAmount.toFixed(2)}. Reason: ${reason}`)
-    await logCustomerMinuteChanges(
-      customer,
-      oldStandard,
-      newStandard,
-      oldHybrid,
-      newHybrid,
-      managerCorrectionType.includes('reverse') ? 'refunded' : 'adjusted',
-      `${formatStatus(correctionLabel)}. Reason: ${reason}`
-    )
 
     await createCorrectionLog({
       correction_type: correctionLabel,
@@ -1899,15 +1889,6 @@ function App() {
     }
 
     await getCustomers()
-    await logCustomerMinuteChanges(
-      data,
-      0,
-      Number(newCustomerBalance || 0),
-      0,
-      0,
-      'added',
-      'Initial minutes when customer was created from booking search.'
-    )
     if (newCustomerTermsAccepted) await createCustomerLog(data, 'Salon terms accepted', `Terms accepted by ${staffUser?.name || 'staff'} when customer was created.`)
     if (newCustomerIdChecked) await createCustomerLog(data, 'ID checked', `ID checked by ${staffUser?.name || 'staff'} when customer was created.`)
     setSelectedCustomerId(String(data.id))
@@ -2036,16 +2017,6 @@ function App() {
     }
 
     await createCustomerLog(customer, 'Top up added', `${purchase.name}: ${amount} mins added. Standard ${customer.standard_minutes_balance || 0} → ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} → ${newHybridBalance}. Total paid £${totalAmount.toFixed(2)}.`)
-
-    await logCustomerMinuteChanges(
-      customer,
-      Number(customer.standard_minutes_balance || 0),
-      newStandardBalance,
-      Number(customer.hybrid_minutes_balance || 0),
-      newHybridBalance,
-      'added',
-      `${purchase.name}. Payment ${formatStatus(paymentMethod)}. Total paid Â£${totalAmount.toFixed(2)}.`
-    )
 
     setCustomers((prevCustomers) => prevCustomers.map((c) => c.id === customer.id ? { ...c, standard_minutes_balance: newStandardBalance, hybrid_minutes_balance: newHybridBalance } : c))
     if (selectedManagerCustomerId && Number(selectedManagerCustomerId) === Number(customer.id)) {
@@ -3145,15 +3116,6 @@ function App() {
     }
 
     await createCustomerLog(customer, 'Minutes deducted', `Booking ${booking.id || ''}: ${sessionMinutes} mins deducted for ${getBedName(booking.bed_id)}. Standard ${standardBalance} → ${newStandardBalance}. Hybrid ${hybridBalance} → ${newHybridBalance}.`)
-    await logCustomerMinuteChanges(
-      customer,
-      standardBalance,
-      newStandardBalance,
-      hybridBalance,
-      newHybridBalance,
-      'used',
-      `Booking ${booking.id || ''}: ${sessionMinutes} mins used on ${getBedName(booking.bed_id)}.`
-    )
     await getCustomers()
     return true
   }
@@ -3902,76 +3864,16 @@ function App() {
     await supabase.from('CustomerLogs').insert({ customer_id: customer.id, customer_name: customer.name, action, details })
   }
 
-  async function createCustomerMinuteTransaction({ customer, minuteType, transactionType, minutesChanged, balanceBefore, balanceAfter, notes }) {
-    if (!customer || !minuteType || Number(minutesChanged || 0) === 0) return
-    const staffUser = getCurrentStaffUser()
-    const { error } = await supabase.from('CustomerMinuteTransactions').insert({
-      customer_id: customer.id,
-      customer_name: customer.name,
-      minute_type: minuteType,
-      transaction_type: transactionType,
-      minutes_changed: Number(minutesChanged || 0),
-      balance_before: Number(balanceBefore || 0),
-      balance_after: Number(balanceAfter || 0),
-      staff_name: staffUser?.name || null,
-      notes: notes || null
-    })
-    if (error) {
-      showDataLoadWarning('Customer minute transaction could not be logged. Check the CustomerMinuteTransactions table.', error)
-      console.log(error)
-    }
-  }
-
-  async function logCustomerMinuteChanges(customer, oldStandard, newStandard, oldHybrid, newHybrid, transactionType, notes) {
-    const standardDelta = Number(newStandard || 0) - Number(oldStandard || 0)
-    const hybridDelta = Number(newHybrid || 0) - Number(oldHybrid || 0)
-    if (standardDelta !== 0) {
-      await createCustomerMinuteTransaction({
-        customer,
-        minuteType: 'standard',
-        transactionType,
-        minutesChanged: standardDelta,
-        balanceBefore: oldStandard,
-        balanceAfter: newStandard,
-        notes
-      })
-    }
-    if (hybridDelta !== 0) {
-      await createCustomerMinuteTransaction({
-        customer,
-        minuteType: 'hybrid',
-        transactionType,
-        minutesChanged: hybridDelta,
-        balanceBefore: oldHybrid,
-        balanceAfter: newHybrid,
-        notes
-      })
-    }
-  }
-
   async function loadCustomerHistory(customerId) {
     if (!customerId) {
       setCustomerPayments([])
       setCustomerLogs([])
-      setCustomerMinuteTransactions([])
       return
     }
     const { data: paymentsData } = await supabase.from('Payments').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(10)
     setCustomerPayments(paymentsData || [])
     const { data: logsData } = await supabase.from('CustomerLogs').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(10)
     setCustomerLogs(logsData || [])
-    const { data: minuteTransactionsData, error: minuteTransactionsError } = await supabase
-      .from('CustomerMinuteTransactions')
-      .select('*')
-      .eq('customer_id', customerId)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    if (minuteTransactionsError) {
-      setCustomerMinuteTransactions([])
-      showDataLoadWarning('Customer minute transaction history could not be loaded.', minuteTransactionsError)
-    } else {
-      setCustomerMinuteTransactions(minuteTransactionsData || [])
-    }
   }
 
   function selectManagerCustomer(customer) {
@@ -4028,7 +3930,6 @@ function App() {
     clearMinuteCorrection()
     setCustomerPayments([])
     setCustomerLogs([])
-    setCustomerMinuteTransactions([])
   }
 
   function clearAddCustomerForm() {
@@ -4411,15 +4312,6 @@ function App() {
     }
 
     await createCustomerLog(data, 'Customer added', `Customer added by ${staffUser?.name || 'staff'}. Initial balances: Standard ${standardMinutes}, Hybrid ${hybridMinutes}.`)
-    await logCustomerMinuteChanges(
-      data,
-      0,
-      standardMinutes,
-      0,
-      hybridMinutes,
-      'added',
-      'Initial balance when customer was added.'
-    )
     await getCustomers()
     clearAddCustomerForm()
     setShowAddCustomerForm(false)
@@ -4508,15 +4400,6 @@ function App() {
     }
 
     await createCustomerLog(customer, 'Manager minute correction', `${getCorrectionTypeLabel(correctionType)}. Amount: ${amount} mins. Old balances: Standard ${oldStandard}, Hybrid ${oldHybrid}. New balances: Standard ${newStandard}, Hybrid ${newHybrid}. Reason: ${reason}`)
-    await logCustomerMinuteChanges(
-      customer,
-      oldStandard,
-      newStandard,
-      oldHybrid,
-      newHybrid,
-      'adjusted',
-      `${getCorrectionTypeLabel(correctionType)}. Reason: ${reason}`
-    )
     await getCustomers()
     await loadCustomerHistory(customer.id)
     setManagerStandardBalance(newStandard)
@@ -4590,15 +4473,6 @@ function App() {
     }
 
     await createCustomerLog(customer, 'Customer updated', `Details saved. DOB: ${managerDateOfBirth || 'not recorded'}. Standard ${oldStandard} → ${newStandard}. Hybrid ${oldHybrid} → ${newHybrid}.`)
-    await logCustomerMinuteChanges(
-      customer,
-      oldStandard,
-      newStandard,
-      oldHybrid,
-      newHybrid,
-      'adjusted',
-      'Manual balance edit from Customer Management.'
-    )
     if (managerTermsAccepted && !oldTermsAccepted) await createCustomerLog(customer, 'Salon terms accepted', `Terms accepted by ${staffUser?.name || 'staff'} in Customer Management.`)
     if (managerIdChecked && !oldIdChecked) await createCustomerLog(customer, 'ID checked', `ID checked by ${staffUser?.name || 'staff'} in Customer Management.`)
     await getCustomers()
@@ -5421,25 +5295,6 @@ function App() {
                 <button onClick={clearMinuteCorrection} style={{ marginLeft: '10px' }}>Cancel</button>
               </div>
             )}
-
-            <div style={{ background: '#111', padding: '15px', borderRadius: '14px', border: '1px solid #333', maxHeight: '320px', overflowY: 'auto', marginBottom: '15px' }}>
-              <h3 style={{ marginTop: 0 }}>Minute Transaction History</h3>
-              {customerMinuteTransactions.length === 0 ? <p style={{ color: '#aaa' }}>No minute transactions found.</p> : customerMinuteTransactions.map((transaction) => (
-                <div key={transaction.id} style={{ display: 'grid', gridTemplateColumns: '120px 110px 1fr', gap: '10px', borderBottom: '1px solid #333', padding: '8px 0', alignItems: 'start' }}>
-                  <strong style={{ color: Number(transaction.minutes_changed || 0) < 0 ? '#ffcc66' : '#d4a853' }}>
-                    {Number(transaction.minutes_changed || 0) > 0 ? '+' : ''}{Number(transaction.minutes_changed || 0)} mins
-                  </strong>
-                  <span>{formatStatus(transaction.minute_type)}<br />{formatStatus(transaction.transaction_type)}</span>
-                  <span>
-                    {Number(transaction.balance_before || 0)} â†’ {Number(transaction.balance_after || 0)}
-                    {transaction.staff_name ? ` / ${transaction.staff_name}` : ''}
-                    <br />
-                    <span style={{ color: '#aaa' }}>{transaction.created_at ? new Date(transaction.created_at).toLocaleString('en-GB') : ''}</span>
-                    {transaction.notes && <><br /><span style={{ color: '#aaa' }}>{transaction.notes}</span></>}
-                  </span>
-                </div>
-              ))}
-            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <div style={{ background: '#111', padding: '15px', borderRadius: '14px', border: '1px solid #333', maxHeight: '420px', overflowY: 'auto' }}>
