@@ -750,21 +750,7 @@ function App() {
     return getStaffScheduleApprovalStatus(entry) === 'approved'
   }
 
-  function canCurrentStaffEditScheduleEntry(entry) {
-    if (showManagerView) return true
-    const currentStaff = getCurrentStaffUser()
-    if (!currentStaff) return false
-    if (getStaffScheduleApprovalStatus(entry) !== 'pending') return false
-    const createdBy = String(entry?.request_created_by || '').trim().toLowerCase()
-    const currentName = String(currentStaff.name || '').trim().toLowerCase()
-    return String(entry.staff_id) === String(currentStaff.id) || (createdBy && createdBy === currentName)
-  }
-
   function editStaffScheduleEntry(entry) {
-    if (!canCurrentStaffEditScheduleEntry(entry)) {
-      alert('Only managers can edit this Staff Calendar entry.')
-      return
-    }
     setStaffScheduleEditingId(String(entry.id))
     setStaffScheduleStaffId(entry.staff_id ? String(entry.staff_id) : '')
     setStaffScheduleDate(entry.schedule_date || selectedDate)
@@ -843,9 +829,8 @@ function App() {
     const currentStaff = getCurrentStaffUser()
     const isManager = showManagerView
 
-    const existingEntry = staffSchedule.find((entry) => String(entry.id) === String(staffScheduleEditingId))
-    if (staffScheduleEditingId && !isManager && !canCurrentStaffEditScheduleEntry(existingEntry)) {
-      alert('Only managers can edit this Staff Calendar entry.')
+    if (staffScheduleEditingId && !isManager) {
+      alert('Only managers can edit existing Staff Calendar entries.')
       return
     }
 
@@ -865,6 +850,7 @@ function App() {
     }
 
     const selectedMember = staff.find((member) => String(member.id) === String(staffScheduleStaffId)) || currentStaff
+    const existingEntry = staffSchedule.find((entry) => String(entry.id) === String(staffScheduleEditingId))
     const approvalStatus = isManager ? staffScheduleApprovalStatus || 'approved' : 'pending'
     const payload = {
       staff_id: staffScheduleType === 'shop_closed' ? null : Number(selectedMember?.id),
@@ -902,8 +888,8 @@ function App() {
 
   async function deleteStaffScheduleEntry(entry) {
     if (!requireStaffSignIn()) return
-    if (!canCurrentStaffEditScheduleEntry(entry)) {
-      alert('Only managers can delete this Staff Calendar entry.')
+    if (!showManagerView) {
+      alert('Only managers can delete Staff Calendar entries.')
       return
     }
     const confirmed = window.confirm(`Delete schedule entry for ${entry.staff_name || 'the shop'} on ${entry.schedule_date}?`)
@@ -923,7 +909,10 @@ function App() {
 
   async function updateStaffScheduleApproval(entry, approvalStatus) {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to approve or deny Staff Calendar requests:')) return
+    if (!showManagerView) {
+      alert('Manager View is required to approve or reject Staff Calendar requests.')
+      return
+    }
 
     const manager = getCurrentStaffUser()
     const updates = {
@@ -6625,7 +6614,6 @@ function App() {
   function renderStaffScheduleEntry(entry, showActions = false) {
     const approval = getStaffScheduleApprovalStatus(entry)
     const entryStyle = getStaffScheduleEntryStyle(entry)
-    const canEditEntry = showActions || canCurrentStaffEditScheduleEntry(entry)
     const approvalStyle = approval === 'approved'
       ? { background: '#2f7a4b', color: '#fff' }
       : approval === 'pending'
@@ -6633,28 +6621,28 @@ function App() {
         : { background: '#7a1f2a', color: '#fff' }
 
     return (
-      <div key={entry.id} style={{ ...entryStyle, borderRadius: '7px', padding: '7px', marginBottom: '6px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <strong style={{ fontSize: '13px' }}>{entry.staff_name || 'Shop'}</strong>
-          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ ...approvalStyle, borderRadius: '7px', padding: '2px 6px', fontWeight: 'bold', fontSize: '11px' }}>
+      <div key={entry.id} style={{ ...entryStyle, borderRadius: '8px', padding: '8px', marginBottom: '6px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
+          <strong>{entry.staff_name || 'Shop'}</strong>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ ...approvalStyle, borderRadius: '8px', padding: '3px 7px', fontWeight: 'bold', fontSize: '12px' }}>
               {formatStatus(approval)}
             </span>
-            <span style={{ color: entry.is_available === false ? '#ff7875' : '#d4a853', fontWeight: 'bold', fontSize: '11px' }}>
+            <span style={{ color: entry.is_available === false ? '#ff7875' : '#d4a853', fontWeight: 'bold' }}>
               {entry.is_available === false ? 'Unavailable' : 'Available'}
             </span>
           </div>
         </div>
-        <p style={{ margin: '4px 0', color: '#ddd', fontSize: '12px' }}>
+        <p style={{ margin: '5px 0', color: '#ddd', fontSize: '13px' }}>
           {entry.start_time || '--:--'} - {entry.end_time || '--:--'} - {getStaffScheduleTypeLabel(entry.schedule_type)} - {getStaffServiceTypeLabel(entry.service_type)}
         </p>
-        {entry.notes && <p style={{ margin: '4px 0 0', color: '#aaa', fontSize: '11px' }}>{entry.notes}</p>}
-        {(approval === 'pending' || canEditEntry) && (
-          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '7px' }}>
-            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'approved')} style={{ padding: '5px 7px', fontSize: '11px' }}>Approve</button>}
-            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'rejected')} style={{ padding: '5px 7px', fontSize: '11px' }}>Deny</button>}
-            {canEditEntry && <button onClick={() => editStaffScheduleEntry(entry)} style={{ padding: '5px 7px', fontSize: '11px' }}>Edit</button>}
-            {canEditEntry && <button onClick={() => deleteStaffScheduleEntry(entry)} style={{ padding: '5px 7px', fontSize: '11px' }}>Delete</button>}
+        {entry.notes && <p style={{ margin: '5px 0 0', color: '#aaa', fontSize: '12px' }}>{entry.notes}</p>}
+        {showActions && (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'approved')} style={{ padding: '6px 8px', fontSize: '12px' }}>Approve</button>}
+            {approval === 'pending' && <button onClick={() => updateStaffScheduleApproval(entry, 'rejected')} style={{ padding: '6px 8px', fontSize: '12px' }}>Deny</button>}
+            <button onClick={() => editStaffScheduleEntry(entry)} style={{ padding: '6px 8px', fontSize: '12px' }}>Move/Edit</button>
+            <button onClick={() => deleteStaffScheduleEntry(entry)} style={{ padding: '6px 8px', fontSize: '12px' }}>Delete</button>
           </div>
         )}
       </div>
@@ -6760,6 +6748,13 @@ function App() {
           Spray tan artists available on selected date: <strong style={{ color: '#d4a853' }}>{sprayTanArtistCount}</strong>
         </div>
 
+        <div style={{ marginBottom: '16px' }}>
+          <h3>Daily View</h3>
+          {filteredEntries.filter((entry) => entry.schedule_date === selectedDate).length === 0 ? (
+            <p style={{ color: '#aaa' }}>No schedule entries for this date.</p>
+          ) : filteredEntries.filter((entry) => entry.schedule_date === selectedDate).map((entry) => renderStaffScheduleEntry(entry, isManager))}
+        </div>
+
         <h3>Weekly View</h3>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ minWidth: '980px', display: 'grid', gridTemplateColumns: '160px repeat(7, minmax(120px, 1fr))', gap: '8px' }}>
@@ -6775,12 +6770,12 @@ function App() {
                 {weekDates.map((date) => {
                   const dayEntries = filteredEntries.filter((entry) => String(entry.staff_id) === String(member.id) && entry.schedule_date === date)
                   return (
-                    <div key={`${member.id}-${date}`} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', minHeight: '74px', display: 'flex', flexDirection: 'column', justifyContent: dayEntries.length === 0 ? 'center' : 'flex-start' }}>
-                      {dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
+                    <div key={`${member.id}-${date}`} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
+                      {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
                       <button
                         onClick={() => startStaffScheduleEntryForCell(member, date)}
                         title={`Add entry for ${member.name}`}
-                        style={{ alignSelf: 'center', width: '18px', height: '18px', minWidth: '18px', padding: 0, marginTop: dayEntries.length === 0 ? 0 : '4px', border: 'none', background: 'transparent', boxShadow: 'none', color: '#d4a853', fontSize: '18px', lineHeight: '18px' }}
+                        style={{ width: '30px', height: '30px', minWidth: '30px', padding: 0, marginTop: '6px', borderRadius: '50%', fontSize: '18px', lineHeight: '28px' }}
                       >
                         +
                       </button>
