@@ -54,8 +54,6 @@ const PRODUCT_CATEGORIES = [
   { value: 'other', label: 'Other' }
 ]
 
-const PRODUCT_SUBCATEGORIES = ['Accelerator', 'Intensifier', 'Bronzer', 'Tingle']
-
 const DEFAULT_STAFF = [
   { name: 'Charlie', role: 'manager' },
   { name: 'Jazz', role: 'manager' },
@@ -271,7 +269,6 @@ function App() {
   const [posCashReceived, setPosCashReceived] = useState('')
   const [productName, setProductName] = useState('')
   const [productCategory, setProductCategory] = useState('sachets')
-  const [productSubcategories, setProductSubcategories] = useState([])
   const [productCategories, setProductCategories] = useState(() => {
     try {
       const savedCategories = localStorage.getItem('glow_product_categories')
@@ -287,12 +284,6 @@ function App() {
   const [productStockQuantity, setProductStockQuantity] = useState('')
   const [productIsActive, setProductIsActive] = useState(true)
   const [productEditingId, setProductEditingId] = useState('')
-  const [editProductName, setEditProductName] = useState('')
-  const [editProductCategory, setEditProductCategory] = useState('sachets')
-  const [editProductSubcategories, setEditProductSubcategories] = useState([])
-  const [editProductPrice, setEditProductPrice] = useState('')
-  const [editProductStockQuantity, setEditProductStockQuantity] = useState('')
-  const [editProductIsActive, setEditProductIsActive] = useState(true)
   const [stockMovementType, setStockMovementType] = useState('restock')
   const [stockMovementQuantity, setStockMovementQuantity] = useState('')
   const [stockMovementNote, setStockMovementNote] = useState('')
@@ -1778,30 +1769,6 @@ function App() {
     return { color: '#d4a853', fontWeight: 'bold' }
   }
 
-  function getProductSubcategories(product) {
-    if (Array.isArray(product?.subcategories)) return product.subcategories
-    if (typeof product?.subcategories === 'string' && product.subcategories.trim()) {
-      try {
-        const parsed = JSON.parse(product.subcategories)
-        if (Array.isArray(parsed)) return parsed
-      } catch {
-        return product.subcategories.split(',').map((item) => item.trim()).filter(Boolean)
-      }
-    }
-    return []
-  }
-
-  function shouldShowProductSubcategories(category) {
-    const normalized = normalizeProductCategory(category)
-    return ['sachets', 'bottles'].includes(normalized)
-  }
-
-  function toggleProductSubcategory(currentSubcategories, subcategory) {
-    return currentSubcategories.includes(subcategory)
-      ? currentSubcategories.filter((item) => item !== subcategory)
-      : [...currentSubcategories, subcategory]
-  }
-
   function getLowStockProducts() {
     return getActiveProducts().filter((product) => getProductStockQuantity(product) > 0 && getProductStockQuantity(product) <= LOW_STOCK_THRESHOLD)
   }
@@ -1924,65 +1891,6 @@ function App() {
       `Total paid: GBP ${Number(saleReceipt.totalPaid || 0).toFixed(2)}`,
       `Cash received: GBP ${Number(saleReceipt.cashReceived || 0).toFixed(2)}`,
       `Change given: GBP ${Number(saleReceipt.changeGiven || 0).toFixed(2)}`,
-      '',
-      'Thank you for visiting Glow Tanning.'
-    ].join('\n')
-
-    window.location.href = `mailto:${encodeURIComponent(customerEmail)}?subject=${encodeURIComponent('Glow Tanning Receipt')}&body=${encodeURIComponent(body)}`
-  }
-
-  async function emailBookingReceipt(booking) {
-    if (!booking) return
-    let customer = getCustomerForBooking(booking)
-
-    if (!customer && booking.customer_id) {
-      const { data, error } = await supabase.from('Customers').select('*').eq('id', booking.customer_id).single()
-      if (!error) customer = data
-    }
-
-    const customerEmail = customer?.email || booking.customer_email || ''
-    if (!customerEmail) {
-      alert('Customer does not have an email address saved.')
-      return
-    }
-
-    const appointment = booking.appointment_time ? new Date(booking.appointment_time) : new Date()
-    const dayStart = new Date(appointment)
-    dayStart.setHours(0, 0, 0, 0)
-    const dayEnd = new Date(appointment)
-    dayEnd.setHours(23, 59, 59, 999)
-
-    const [{ data: paymentRows }, { data: productRows }] = await Promise.all([
-      booking.customer_id
-        ? supabase.from('Payments').select('*').eq('customer_id', booking.customer_id).gte('created_at', dayStart.toISOString()).lte('created_at', dayEnd.toISOString()).order('created_at', { ascending: false })
-        : Promise.resolve({ data: [] }),
-      booking.customer_id
-        ? supabase.from('ProductSales').select('*').eq('customer_id', booking.customer_id).gte('created_at', dayStart.toISOString()).lte('created_at', dayEnd.toISOString()).order('created_at', { ascending: false })
-        : Promise.resolve({ data: [] })
-    ])
-
-    const payments = paymentRows || []
-    const productSales = productRows || []
-    const totalPaid = payments.reduce((total, payment) => total + Number(payment.total_amount || 0), 0) + productSales.reduce((total, sale) => total + Number(sale.total_amount || 0), 0)
-    const paymentMethods = Array.from(new Set([...payments.map((payment) => payment.payment_method), ...productSales.map((sale) => sale.payment_method)].filter(Boolean)))
-    const packages = payments.map((payment) => payment.package_name || payment.package_type).filter(Boolean)
-    const productsText = productSales.length === 0
-      ? 'No products recorded.'
-      : productSales.map((sale) => `${sale.product_name || 'Product'} x ${sale.quantity || 1} - GBP ${Number(sale.total_amount || 0).toFixed(2)}`).join('\n')
-
-    const body = [
-      'Glow Tanning',
-      'Receipt',
-      '',
-      `Date/time: ${appointment.toLocaleString('en-GB')}`,
-      `Customer name: ${booking.customer_name || customer?.name || ''}`,
-      `Staff name: ${booking.staff_name || getCurrentStaffUser()?.name || ''}`,
-      `Bed: ${getBedName(booking.bed_id)}`,
-      `Minutes: ${booking.minutes || 0}`,
-      `Booking source: ${isWixBooking(booking) ? 'Wix' : formatStatus(booking.booking_source || booking.source || 'dashboard')}`,
-      `Payment method: ${paymentMethods.length > 0 ? paymentMethods.map(formatStatus).join(', ') : 'Not recorded'}`,
-      `Products/promo:\n${[...packages, productsText].filter(Boolean).join('\n')}`,
-      `Total paid: GBP ${Number(totalPaid || 0).toFixed(2)}`,
       '',
       'Thank you for visiting Glow Tanning.'
     ].join('\n')
@@ -6209,18 +6117,6 @@ function App() {
     getStaff()
   }
 
-  function buildProductPayload({ name, category, price, stockQuantity, isActive, subcategories }) {
-    return {
-      name: name.trim(),
-      category: category || 'other',
-      price: Number(price || 0),
-      stock_quantity: stockQuantity === '' ? 0 : Number(stockQuantity || 0),
-      is_active: isActive,
-      low_stock_threshold: LOW_STOCK_THRESHOLD,
-      subcategories: shouldShowProductSubcategories(category) ? subcategories : []
-    }
-  }
-
   async function saveProduct() {
     if (!requireStaffSignIn()) return
     if (!requireManagerAccess('Manager PIN required to edit products/prices:')) return
@@ -6230,16 +6126,18 @@ function App() {
       return
     }
 
-    const payload = buildProductPayload({
-      name: productName,
-      category: productCategory,
-      price: productPrice,
-      stockQuantity: productStockQuantity,
-      isActive: productIsActive,
-      subcategories: productSubcategories
-    })
+    const payload = {
+      name: productName.trim(),
+      category: productCategory || 'other',
+      price: Number(productPrice || 0),
+      stock_quantity: productStockQuantity === '' ? 0 : Number(productStockQuantity || 0),
+      is_active: productIsActive,
+      low_stock_threshold: LOW_STOCK_THRESHOLD
+    }
 
-    const request = supabase.from('Products').insert(payload)
+    const request = productEditingId
+      ? supabase.from('Products').update(payload).eq('id', productEditingId)
+      : supabase.from('Products').insert(payload)
 
     const { error } = await request
     if (error) {
@@ -6254,70 +6152,26 @@ function App() {
     }
 
     await getProducts()
-    clearProductForm()
-  }
-
-  async function saveProductChanges() {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to edit products/prices:')) return
-    if (!productEditingId) {
-      alert('Select a product to edit.')
-      return
-    }
-    if (!editProductName.trim()) {
-      alert('Product name is required.')
-      return
-    }
-
-    const payload = buildProductPayload({
-      name: editProductName,
-      category: editProductCategory,
-      price: editProductPrice,
-      stockQuantity: editProductStockQuantity,
-      isActive: editProductIsActive,
-      subcategories: editProductSubcategories
-    })
-
-    const { error } = await supabase.from('Products').update(payload).eq('id', productEditingId)
-    if (error) {
-      alert('Product was not saved. Please check the connection and try again.')
-      showDataLoadWarning('A product update failed. Please check the connection.', error)
-      console.error('Product edit failed:', { table: 'Products', payload, productId: productEditingId, error })
-      return
-    }
-
-    await getProducts()
+    if (!productEditingId) clearProductForm()
   }
 
   function editProduct(product) {
     setProductEditingId(String(product.id))
     setSelectedProductManagementId(String(product.id))
-    setEditProductName(product.name || '')
-    setEditProductCategory(normalizeProductCategory(product.category))
-    setEditProductSubcategories(getProductSubcategories(product))
-    setEditProductPrice(product.price || '')
-    setEditProductStockQuantity(product.stock_quantity ?? '')
-    setEditProductIsActive(isProductActive(product))
+    setProductName(product.name || '')
+    setProductCategory(normalizeProductCategory(product.category))
+    setProductPrice(product.price || '')
+    setProductStockQuantity(product.stock_quantity ?? '')
+    setProductIsActive(isProductActive(product))
   }
 
   function clearProductForm() {
+    setProductEditingId('')
     setProductName('')
     setProductCategory('sachets')
-    setProductSubcategories([])
     setProductPrice('')
     setProductStockQuantity('')
     setProductIsActive(true)
-  }
-
-  function clearProductEditForm() {
-    setProductEditingId('')
-    setSelectedProductManagementId('')
-    setEditProductName('')
-    setEditProductCategory('sachets')
-    setEditProductSubcategories([])
-    setEditProductPrice('')
-    setEditProductStockQuantity('')
-    setEditProductIsActive(true)
   }
 
   function selectProductForManagement(productId) {
@@ -6326,7 +6180,7 @@ function App() {
     if (product) {
       editProduct(product)
     } else {
-      clearProductEditForm()
+      clearProductForm()
     }
   }
 
@@ -6386,7 +6240,8 @@ function App() {
     }
 
     if (String(selectedProductManagementId) === String(product.id)) {
-      clearProductEditForm()
+      setSelectedProductManagementId('')
+      clearProductForm()
     }
     await getProducts()
   }
@@ -8283,24 +8138,6 @@ function App() {
     const selectedProduct = products.find((product) => String(product.id) === String(selectedProductManagementId))
     const lowStockProducts = getLowStockProducts()
     const outOfStockProducts = getOutOfStockProducts()
-    const renderSubcategoryControls = ({ category, selected, setSelected }) => {
-      if (!shouldShowProductSubcategories(category)) return null
-      return (
-        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '10px' }}>
-          <strong style={{ color: '#d4a853' }}>Subcategories</strong>
-          {PRODUCT_SUBCATEGORIES.map((subcategory) => (
-            <label key={subcategory} style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', color: '#ddd' }}>
-              <input
-                type="checkbox"
-                checked={selected.includes(subcategory)}
-                onChange={() => setSelected(toggleProductSubcategory(selected, subcategory))}
-              />
-              {subcategory}
-            </label>
-          ))}
-        </div>
-      )
-    }
 
     return renderCollapsibleSection(
       'Products',
@@ -8348,19 +8185,19 @@ function App() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '15px' }}>
           <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
-          <select value={productCategory} onChange={(e) => { setProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setProductSubcategories([]) }} style={{ padding: '10px' }}>
+          <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} style={{ padding: '10px' }}>
             {productCategories.map((category) => (
               <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
             ))}
           </select>
-          {renderSubcategoryControls({ category: productCategory, selected: productSubcategories, setSelected: setProductSubcategories })}
           <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
           <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
             <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
             Active
           </label>
-          <button onClick={saveProduct}>Add Product</button>
+          <button onClick={saveProduct}>{productEditingId ? 'Save Product' : 'Add Product'}</button>
+          {productEditingId && <button onClick={clearProductForm}>Cancel Edit</button>}
         </div>
 
         <button onClick={() => { if (requireStaffSignIn()) setShowStandalonePOS(true) }} style={{ marginBottom: '15px' }}>Products / POS</button>
@@ -8415,20 +8252,19 @@ function App() {
                 <span>Status: {isProductActive(selectedProduct) ? 'Active' : 'Inactive'}</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
-                <input placeholder="Product name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} style={{ padding: '10px' }} />
-                <select value={editProductCategory} onChange={(e) => { setEditProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setEditProductSubcategories([]) }} style={{ padding: '10px' }}>
+                <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
+                <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} style={{ padding: '10px' }}>
                   {productCategories.map((category) => (
                     <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
                   ))}
                 </select>
-                {renderSubcategoryControls({ category: editProductCategory, selected: editProductSubcategories, setSelected: setEditProductSubcategories })}
-                <input type="number" step="0.01" placeholder="Price" value={editProductPrice} onChange={(e) => setEditProductPrice(e.target.value)} style={{ padding: '10px' }} />
-                <input type="number" placeholder="Stock quantity" value={editProductStockQuantity} onChange={(e) => setEditProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
+                <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
+                <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-                  <input type="checkbox" checked={editProductIsActive} onChange={(e) => setEditProductIsActive(e.target.checked)} />
+                  <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
                   Active
                 </label>
-                <button onClick={saveProductChanges}>Save Product Changes</button>
+                <button onClick={saveProduct}>Save Product Changes</button>
                 <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
                 <button onClick={() => deleteProduct(selectedProduct)} style={{ borderColor: 'rgba(255,120,117,0.5)', color: '#ffaaa6' }}>Delete Product</button>
               </div>
@@ -9224,9 +9060,6 @@ function App() {
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '20px' }}>
                   {modalBooking.customer_id && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
                     <button onClick={() => openCustomerManagementFromBooking(modalBooking)}>View/Edit Customer</button>
-                  )}
-                  {modalBooking.customer_id && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
-                    <button onClick={() => emailBookingReceipt(modalBooking)}>Email Receipt</button>
                   )}
 
                   {!modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
