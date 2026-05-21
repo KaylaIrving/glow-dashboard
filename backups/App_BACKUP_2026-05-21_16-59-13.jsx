@@ -298,7 +298,7 @@ function App() {
   const [promoValidTo, setPromoValidTo] = useState('')
   const [promoIncludedMinutes, setPromoIncludedMinutes] = useState('')
   const [promoBedType, setPromoBedType] = useState('any')
-  const [promoChoiceGroups, setPromoChoiceGroups] = useState([])
+  const [promoChoiceGroupsText, setPromoChoiceGroupsText] = useState('[]')
   const [promoStaffNotes, setPromoStaffNotes] = useState('')
   const [promoMinutesExpiryDays, setPromoMinutesExpiryDays] = useState('')
   const [selectedPromoId, setSelectedPromoId] = useState('')
@@ -1623,60 +1623,6 @@ function App() {
       }
     }
     return []
-  }
-
-  function normalizePromoChoiceGroup(group = {}) {
-    const allowedIds = Array.isArray(group.allowed_product_ids) ? group.allowed_product_ids : []
-    return {
-      group_name: group.group_name || '',
-      required_quantity: Number(group.required_quantity || 1),
-      allowed_product_ids: allowedIds.map((id) => Number(id)).filter((id) => !Number.isNaN(id)),
-      selected_product_id: ''
-    }
-  }
-
-  function getPromoChoiceGroupsForSave() {
-    return promoChoiceGroups
-      .map((group) => normalizePromoChoiceGroup(group))
-      .filter((group) => group.group_name.trim() || group.allowed_product_ids.length > 0)
-      .map(({ selected_product_id, ...group }) => ({
-        group_name: group.group_name.trim() || 'Product choice',
-        required_quantity: Math.max(1, Number(group.required_quantity || 1)),
-        allowed_product_ids: group.allowed_product_ids
-      }))
-  }
-
-  function addPromoChoiceGroup() {
-    setPromoChoiceGroups((groups) => [...groups, { group_name: '', required_quantity: 1, allowed_product_ids: [], selected_product_id: '' }])
-  }
-
-  function updatePromoChoiceGroup(index, updates) {
-    setPromoChoiceGroups((groups) => groups.map((group, groupIndex) => groupIndex === index ? { ...group, ...updates } : group))
-  }
-
-  function addProductToPromoChoiceGroup(index) {
-    setPromoChoiceGroups((groups) => groups.map((group, groupIndex) => {
-      if (groupIndex !== index) return group
-      const productId = Number(group.selected_product_id || 0)
-      if (!productId || group.allowed_product_ids.map(Number).includes(productId)) return group
-      return {
-        ...group,
-        allowed_product_ids: [...group.allowed_product_ids, productId],
-        selected_product_id: ''
-      }
-    }))
-  }
-
-  function removeProductFromPromoChoiceGroup(index, productId) {
-    setPromoChoiceGroups((groups) => groups.map((group, groupIndex) => (
-      groupIndex === index
-        ? { ...group, allowed_product_ids: group.allowed_product_ids.filter((id) => Number(id) !== Number(productId)) }
-        : group
-    )))
-  }
-
-  function deletePromoChoiceGroup(index) {
-    setPromoChoiceGroups((groups) => groups.filter((_, groupIndex) => groupIndex !== index))
   }
 
   function getSelectedPromo() {
@@ -6160,7 +6106,7 @@ function App() {
     setPromoValidTo('')
     setPromoIncludedMinutes('')
     setPromoBedType('any')
-    setPromoChoiceGroups([])
+    setPromoChoiceGroupsText('[]')
     setPromoStaffNotes('')
     setPromoMinutesExpiryDays('')
   }
@@ -6175,7 +6121,7 @@ function App() {
     setPromoValidTo(promo.valid_to || '')
     setPromoIncludedMinutes(promo.included_minutes ?? '')
     setPromoBedType(promo.bed_type || 'any')
-    setPromoChoiceGroups(getPromoChoiceGroups(promo).map(normalizePromoChoiceGroup))
+    setPromoChoiceGroupsText(JSON.stringify(getPromoChoiceGroups(promo), null, 2))
     setPromoStaffNotes(promo.staff_notes || '')
     setPromoMinutesExpiryDays(promo.minutes_expiry_days ?? '')
   }
@@ -6187,10 +6133,12 @@ function App() {
       alert('Enter a promo name.')
       return
     }
-    const groups = getPromoChoiceGroupsForSave()
-    const incompleteGroup = groups.find((group) => group.allowed_product_ids.length < Number(group.required_quantity || 1))
-    if (incompleteGroup) {
-      alert(`${incompleteGroup.group_name} needs at least ${incompleteGroup.required_quantity} allowed product(s).`)
+    let groups = []
+    try {
+      groups = promoChoiceGroupsText.trim() ? JSON.parse(promoChoiceGroupsText) : []
+      if (!Array.isArray(groups)) throw new Error('Choice groups must be an array.')
+    } catch {
+      alert('Product choice groups must be valid JSON.')
       return
     }
     const payload = {
@@ -6573,7 +6521,7 @@ function App() {
                     >
                       <option value="">Select product...</option>
                       {allowedProducts.map((product) => (
-                        <option key={product.id} value={product.id} disabled={getProductStockQuantity(product) <= 0}>
+                        <option key={product.id} value={product.id}>
                           {product.name} - Stock {getProductStockQuantity(product)} - {getProductStockStatus(product)}
                         </option>
                       ))}
@@ -8242,6 +8190,9 @@ function App() {
       setCollapsePromos,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
         {promoLoadError && <p style={{ color: '#ffcc66' }}>Promos table not loaded: {promoLoadError}</p>}
+        <p style={{ color: '#aaa', marginTop: 0 }}>
+          Product choice groups are saved as JSON. Example: <code>{'[{"group_name":"Bronzer sachet","required_quantity":1,"allowed_product_ids":[1,2,3]}]'}</code>
+        </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '10px' }}>
           <input placeholder="Promo name" value={promoName} onChange={(e) => setPromoName(e.target.value)} style={{ padding: '10px' }} />
           <input type="number" step="0.01" placeholder="Promo price" value={promoPrice} onChange={(e) => setPromoPrice(e.target.value)} style={{ padding: '10px' }} />
@@ -8260,72 +8211,21 @@ function App() {
           </label>
         </div>
         <textarea placeholder="Promo description" value={promoDescription} onChange={(e) => setPromoDescription(e.target.value)} style={{ width: '100%', minHeight: '60px', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }} />
-        <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
-            <strong>Included Product Choices</strong>
-            <button type="button" onClick={addPromoChoiceGroup}>Add Product Choice Group</button>
-          </div>
-          {promoChoiceGroups.length === 0 ? (
-            <p style={{ color: '#aaa', margin: 0 }}>No included product choices added.</p>
-          ) : promoChoiceGroups.map((group, groupIndex) => {
-            const allowedIds = group.allowed_product_ids || []
-            const availableProducts = products.filter((product) => !allowedIds.map(Number).includes(Number(product.id)))
-            return (
-              <div key={groupIndex} style={{ background: '#0b0b0b', border: '1px solid rgba(212,168,83,0.22)', borderRadius: '10px', padding: '12px', marginBottom: '10px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '10px' }}>
-                  <input
-                    placeholder="Group name, e.g. Bronzer sachet"
-                    value={group.group_name || ''}
-                    onChange={(e) => updatePromoChoiceGroup(groupIndex, { group_name: e.target.value })}
-                    style={{ padding: '10px' }}
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    placeholder="Required quantity"
-                    value={group.required_quantity || 1}
-                    onChange={(e) => updatePromoChoiceGroup(groupIndex, { required_quantity: Number(e.target.value || 1) })}
-                    style={{ padding: '10px' }}
-                  />
-                  <button type="button" onClick={() => deletePromoChoiceGroup(groupIndex)}>Delete Group</button>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                  <select
-                    value={group.selected_product_id || ''}
-                    onChange={(e) => updatePromoChoiceGroup(groupIndex, { selected_product_id: e.target.value })}
-                    style={{ flex: '1 1 220px', padding: '10px' }}
-                  >
-                    <option value="">Choose allowed product...</option>
-                    {availableProducts.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name} - {getProductCategoryLabel(product.category)} - Stock {getProductStockQuantity(product)}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="button" onClick={() => addProductToPromoChoiceGroup(groupIndex)}>Add Product</button>
-                </div>
-                <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
-                  {allowedIds.length === 0 ? (
-                    <span style={{ color: '#aaa' }}>No products allowed yet.</span>
-                  ) : allowedIds.map((productId) => {
-                    const product = products.find((item) => Number(item.id) === Number(productId))
-                    return (
-                      <span key={productId} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', border: '1px solid rgba(212,168,83,0.35)', background: '#151515', padding: '6px 8px', borderRadius: '8px' }}>
-                        {product?.name || `Product ${productId}`}
-                        <button type="button" onClick={() => removeProductFromPromoChoiceGroup(groupIndex, productId)} style={{ width: '18px', height: '18px', minWidth: '18px', padding: 0, borderRadius: '50%', lineHeight: '14px' }}>x</button>
-                      </span>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <textarea value={promoChoiceGroupsText} onChange={(e) => setPromoChoiceGroupsText(e.target.value)} style={{ width: '100%', minHeight: '110px', padding: '10px', marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'monospace' }} />
         <textarea placeholder="Staff notes" value={promoStaffNotes} onChange={(e) => setPromoStaffNotes(e.target.value)} style={{ width: '100%', minHeight: '60px', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }} />
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
           <button onClick={savePromo}>{promoEditingId ? 'Save Promo' : 'Create Promo'}</button>
           {promoEditingId && <button onClick={clearPromoForm}>Cancel Edit</button>}
+        </div>
+        <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '10px', marginBottom: '14px' }}>
+          <strong>Product IDs for choice groups</strong>
+          <div style={{ maxHeight: '150px', overflowY: 'auto', marginTop: '8px' }}>
+            {products.map((product) => (
+              <div key={product.id} style={{ borderTop: '1px solid #222', padding: '5px 0' }}>
+                ID {product.id}: {product.name} / {getProductCategoryLabel(product.category)} / Stock {getProductStockQuantity(product)}
+              </div>
+            ))}
+          </div>
         </div>
         <div style={{ display: 'grid', gap: '10px' }}>
           {promos.length === 0 ? <p style={{ color: '#aaa' }}>No promos found.</p> : promos.map((promo) => (
