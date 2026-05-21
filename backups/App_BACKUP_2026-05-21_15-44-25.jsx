@@ -259,7 +259,6 @@ function App() {
   const [staffScheduleDate, setStaffScheduleDate] = useState(formatLocalDate(new Date()))
   const [staffScheduleStartTime, setStaffScheduleStartTime] = useState('09:00')
   const [staffScheduleEndTime, setStaffScheduleEndTime] = useState('17:00')
-  const [staffScheduleAllDay, setStaffScheduleAllDay] = useState(false)
   const [staffScheduleType, setStaffScheduleType] = useState('shift')
   const [staffScheduleServiceType, setStaffScheduleServiceType] = useState('general')
   const [staffScheduleNotes, setStaffScheduleNotes] = useState('')
@@ -746,7 +745,6 @@ function App() {
     setStaffScheduleDate(selectedDate)
     setStaffScheduleStartTime('09:00')
     setStaffScheduleEndTime('17:00')
-    setStaffScheduleAllDay(false)
     setStaffScheduleType('shift')
     setStaffScheduleServiceType('general')
     setStaffScheduleNotes('')
@@ -783,7 +781,6 @@ function App() {
     setStaffScheduleDate(entry.schedule_date || selectedDate)
     setStaffScheduleStartTime(entry.start_time || '09:00')
     setStaffScheduleEndTime(entry.end_time || '17:00')
-    setStaffScheduleAllDay(String(entry.start_time || '').slice(0, 5) === '00:00' && String(entry.end_time || '').slice(0, 5) === '23:59')
     setStaffScheduleType(entry.schedule_type || 'shift')
     setStaffScheduleServiceType(entry.service_type || 'general')
     setStaffScheduleNotes(entry.notes || '')
@@ -801,7 +798,6 @@ function App() {
     setStaffScheduleDate(date)
     setStaffScheduleStartTime('09:00')
     setStaffScheduleEndTime('17:00')
-    setStaffScheduleAllDay(false)
     setStaffScheduleType('shift')
     setStaffScheduleServiceType('general')
     setStaffScheduleNotes('')
@@ -885,8 +881,8 @@ function App() {
       staff_id: staffScheduleType === 'shop_closed' ? null : Number(selectedMember?.id),
       staff_name: staffScheduleType === 'shop_closed' ? 'Shop Closed' : selectedMember?.name || '',
       schedule_date: staffScheduleDate,
-      start_time: staffScheduleAllDay ? '00:00' : staffScheduleStartTime || null,
-      end_time: staffScheduleAllDay ? '23:59' : staffScheduleEndTime || null,
+      start_time: staffScheduleStartTime || null,
+      end_time: staffScheduleEndTime || null,
       schedule_type: staffScheduleType,
       service_type: staffScheduleServiceType,
       notes: staffScheduleNotes || null,
@@ -7115,20 +7111,8 @@ function App() {
               ))}
             </select>
             <input type="date" value={staffScheduleDate} onChange={(e) => setStaffScheduleDate(e.target.value)} style={{ padding: '10px' }} />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '10px' }}>
-              <input
-                type="checkbox"
-                checked={staffScheduleAllDay}
-                onChange={(e) => setStaffScheduleAllDay(e.target.checked)}
-              />
-              All day
-            </label>
-            {!staffScheduleAllDay && (
-              <>
-                <input type="time" value={staffScheduleStartTime} onChange={(e) => setStaffScheduleStartTime(e.target.value)} style={{ padding: '10px' }} />
-                <input type="time" value={staffScheduleEndTime} onChange={(e) => setStaffScheduleEndTime(e.target.value)} style={{ padding: '10px' }} />
-              </>
-            )}
+            <input type="time" value={staffScheduleStartTime} onChange={(e) => setStaffScheduleStartTime(e.target.value)} style={{ padding: '10px' }} />
+            <input type="time" value={staffScheduleEndTime} onChange={(e) => setStaffScheduleEndTime(e.target.value)} style={{ padding: '10px' }} />
             <select value={staffScheduleType} onChange={(e) => setStaffScheduleType(e.target.value)} style={{ padding: '10px' }}>
               {STAFF_SCHEDULE_TYPES.filter((type) => isManager || type.value !== 'shop_closed').map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>

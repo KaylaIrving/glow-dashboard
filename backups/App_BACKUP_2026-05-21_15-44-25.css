@@ -409,7 +409,7 @@ strong {
 button {
   min-height: 42px;
   border: 1px solid rgba(212, 168, 83, 0.44) !important;
-  border-radius: 3px !important;
+  border-radius: 8px !important;
   background: linear-gradient(180deg, #d7b15f 0%, #a9792d 100%) !important;
   color: #090909 !important;
   box-shadow: 0 7px 18px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.26);
@@ -436,7 +436,7 @@ input,
 select,
 textarea {
   border: 1px solid rgba(212, 168, 83, 0.2) !important;
-  border-radius: 4px !important;
+  border-radius: 8px !important;
   background: #0b0b0b !important;
   color: #f4ead7 !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -470,7 +470,7 @@ input::placeholder {
 }
 
 .top-dashboard-header img {
-  height: 88px !important;
+  height: 78px !important;
   filter: drop-shadow(0 0 18px rgba(212, 168, 83, 0.28)) !important;
 }
 
@@ -839,14 +839,4 @@ div[style*="background: #0b0b0b"] {
   .top-action-buttons {
     grid-template-columns: 1fr;
   }
-}
-
-button,
-.top-upcoming-panel button,
-.top-action-buttons button,
-.top-action-panel > button,
-.top-staff-chip button,
-.booking-modal-panel button,
-.calendar-toolbar button {
-  border-radius: 3px !important;
 }
