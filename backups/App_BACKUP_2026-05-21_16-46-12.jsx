@@ -46,6 +46,11 @@ const STAFF_SCHEDULE_TYPES = [
   { value: 'spray_tan_available', label: 'Spray Tan Available' }
 ]
 
+const STAFF_SERVICE_TYPES = [
+  { value: 'general', label: 'General' },
+  { value: 'spraytan', label: 'Spray Tan' }
+]
+
 const PRODUCT_CATEGORIES = [
   { value: 'tanning_lotions', label: 'Tanning Lotions' },
   { value: 'sachets', label: 'Sachets' },
@@ -252,11 +257,13 @@ function App() {
   const [staffScheduleEndTime, setStaffScheduleEndTime] = useState('17:00')
   const [staffScheduleAllDay, setStaffScheduleAllDay] = useState(false)
   const [staffScheduleType, setStaffScheduleType] = useState('shift')
+  const [staffScheduleServiceType, setStaffScheduleServiceType] = useState('general')
   const [staffScheduleNotes, setStaffScheduleNotes] = useState('')
   const [staffScheduleAvailable, setStaffScheduleAvailable] = useState(true)
   const [staffScheduleApprovalStatus, setStaffScheduleApprovalStatus] = useState('approved')
   const [staffScheduleFilterStaffId, setStaffScheduleFilterStaffId] = useState('')
   const [staffScheduleFilterType, setStaffScheduleFilterType] = useState('')
+  const [staffScheduleFilterServiceType, setStaffScheduleFilterServiceType] = useState('')
 
   const [productLoadError, setProductLoadError] = useState('')
   const [productCart, setProductCart] = useState([])
@@ -471,6 +478,10 @@ function App() {
 
   function getStaffScheduleTypeLabel(type) {
     return STAFF_SCHEDULE_TYPES.find((item) => item.value === type)?.label || formatStatus(type)
+  }
+
+  function getStaffServiceTypeLabel(type) {
+    return STAFF_SERVICE_TYPES.find((item) => item.value === type)?.label || formatStatus(type)
   }
 
   function formatStaffScheduleTime(time) {
@@ -804,6 +815,7 @@ function App() {
     setStaffScheduleEndTime('17:00')
     setStaffScheduleAllDay(false)
     setStaffScheduleType('shift')
+    setStaffScheduleServiceType('general')
     setStaffScheduleNotes('')
     setStaffScheduleAvailable(true)
     setStaffScheduleApprovalStatus(showManagerView ? 'approved' : 'pending')
@@ -840,6 +852,7 @@ function App() {
     setStaffScheduleEndTime(formatStaffScheduleTime(entry.end_time) === '--:--' ? '17:00' : formatStaffScheduleTime(entry.end_time))
     setStaffScheduleAllDay(String(entry.start_time || '').slice(0, 5) === '00:00' && String(entry.end_time || '').slice(0, 5) === '23:59')
     setStaffScheduleType(entry.schedule_type || 'shift')
+    setStaffScheduleServiceType(entry.service_type || 'general')
     setStaffScheduleNotes(entry.notes || '')
     setStaffScheduleAvailable(entry.is_available !== false)
     setStaffScheduleApprovalStatus(getStaffScheduleApprovalStatus(entry))
@@ -869,6 +882,7 @@ function App() {
     return staffSchedule.filter((entry) => {
       if (staffScheduleFilterStaffId && String(entry.staff_id) !== String(staffScheduleFilterStaffId)) return false
       if (staffScheduleFilterType && entry.schedule_type !== staffScheduleFilterType) return false
+      if (staffScheduleFilterServiceType && entry.service_type !== staffScheduleFilterServiceType) return false
       return true
     })
   }
@@ -898,6 +912,7 @@ function App() {
     return staffSchedule.filter((entry) => {
       if (entry.schedule_date !== date) return false
       if (!isApprovedStaffSchedule(entry)) return false
+      if (entry.service_type !== 'spraytan') return false
       if (!['spray_tan_available', 'shift'].includes(entry.schedule_type)) return false
       if (entry.is_available === false) return false
       if (time && entry.start_time && entry.end_time) return entry.start_time <= time && entry.end_time >= time
@@ -935,6 +950,7 @@ function App() {
       start_time: staffScheduleAllDay ? '00:00' : staffScheduleStartTime || null,
       end_time: staffScheduleAllDay ? '23:59' : staffScheduleEndTime || null,
       schedule_type: staffScheduleType,
+      service_type: staffScheduleServiceType,
       notes: staffScheduleNotes || null,
       is_available: isManager ? staffScheduleAvailable : false,
       approval_status: approvalStatus,
@@ -1545,11 +1561,7 @@ function App() {
   }
 
   function getActiveProducts() {
-    return products.filter((product) => (product.is_active ?? product.active) !== false)
-  }
-
-  function isProductActive(product) {
-    return (product?.is_active ?? product?.active) !== false
+    return products.filter((product) => product.is_active !== false)
   }
 
   function getProductCategoryLabel(category) {
@@ -2851,12 +2863,10 @@ function App() {
     const addedStandard = summary.hasTopUp && summary.purchase.type !== 'hybrid' ? summary.topUpMinutesToAdd : 0
     const addedHybrid = summary.hasTopUp && summary.purchase.type === 'hybrid' ? summary.topUpMinutesToAdd : 0
     const promoMinutes = summary.hasPromo ? Number(summary.promo?.included_minutes || 0) : 0
-    const promoMinuteType = summary.hasPromo ? getPromoMinuteType(summary.promo) : ''
-    const promoStandard = promoMinuteType === 'standard' ? promoMinutes : 0
-    const promoHybrid = promoMinuteType === 'hybrid' ? promoMinutes : 0
+    if (promoMinutes >= Number(selectedMinutes || 0)) return Number(selectedMinutes || 0)
 
-    if (Number(bedId) === 2) return hybridBalance + addedHybrid + promoHybrid
-    return standardBalance + hybridBalance + addedStandard + addedHybrid + promoStandard + promoHybrid
+    if (Number(bedId) === 2) return hybridBalance + addedHybrid
+    return standardBalance + hybridBalance + addedStandard + addedHybrid
   }
 
   function validateSunbedCheckoutBeforeSave(customer) {
@@ -3791,7 +3801,10 @@ function App() {
       if (!customer) return
     }
 
-    if (!isInternalShopTest && getProjectedUsableMinutesForCheckout(customer, modalSlot.bedId) < Number(selectedMinutes || 0)) {
+    const selectedPromo = getSelectedPromo()
+    const promoCoversSession = selectedPromo && Number(selectedPromo.included_minutes || 0) >= Number(selectedMinutes || 0)
+
+    if (!isInternalShopTest && !promoCoversSession && getProjectedUsableMinutesForCheckout(customer, modalSlot.bedId) < Number(selectedMinutes || 0)) {
       alert(`${customer.name} only has ${getUsableMinutesForBed(customer, modalSlot.bedId)} usable mins for this bed. Please top up before booking ${selectedMinutes} mins.`)
       return
     }
@@ -6018,24 +6031,19 @@ function App() {
       return
     }
 
-    const basePayload = {
+    const payload = {
       name: productName.trim(),
       category: normalizeProductCategory(productCategory),
       price: Number(productPrice || 0),
-      stock_quantity: productStockQuantity === '' ? 0 : Number(productStockQuantity || 0)
+      stock_quantity: productStockQuantity === '' ? 0 : Number(productStockQuantity || 0),
+      is_active: productIsActive
     }
-    const payload = { ...basePayload, is_active: productIsActive }
-    const legacyPayload = { ...basePayload, active: productIsActive }
 
-    const buildRequest = (nextPayload) => productEditingId
-      ? supabase.from('Products').update(nextPayload).eq('id', productEditingId)
-      : supabase.from('Products').insert(nextPayload)
+    const request = productEditingId
+      ? supabase.from('Products').update(payload).eq('id', productEditingId)
+      : supabase.from('Products').insert(payload)
 
-    let { error } = await buildRequest(payload)
-    if (error && String(error.message || '').toLowerCase().includes('is_active')) {
-      const retryResult = await buildRequest(legacyPayload)
-      error = retryResult.error
-    }
+    const { error } = await request
     if (error) {
       alert('Product was not saved. Please check the connection and try again.')
       showDataLoadWarning('A product update failed. Please check the connection.', error)
@@ -6054,7 +6062,7 @@ function App() {
     setProductCategory(normalizeProductCategory(product.category))
     setProductPrice(product.price || '')
     setProductStockQuantity(product.stock_quantity ?? '')
-    setProductIsActive(isProductActive(product))
+    setProductIsActive(product.is_active !== false)
   }
 
   function clearProductForm() {
@@ -6082,11 +6090,7 @@ function App() {
 
     const confirmed = window.confirm(`Deactivate ${product.name}?`)
     if (!confirmed) return
-    let { error } = await supabase.from('Products').update({ is_active: false }).eq('id', product.id)
-    if (error && String(error.message || '').toLowerCase().includes('is_active')) {
-      const retryResult = await supabase.from('Products').update({ active: false }).eq('id', product.id)
-      error = retryResult.error
-    }
+    const { error } = await supabase.from('Products').update({ is_active: false }).eq('id', product.id)
     if (error) {
       alert('Product was not deactivated. Please check the connection and try again.')
       showDataLoadWarning('A product update failed. Please check the connection.', error)
@@ -6474,7 +6478,6 @@ function App() {
     return (
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginTop: '12px' }}>
         <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Apply Offer / Promo</label>
-        <p style={{ color: '#aaa', marginTop: 0, fontSize: '13px' }}>Promo minutes are added to the customer balance. The session minutes chosen above are the minutes used today.</p>
         {promoLoadError && <p style={{ color: '#ffcc66' }}>Promos unavailable: {promoLoadError}</p>}
         <select
           value={selectedPromoId}
@@ -6482,6 +6485,8 @@ function App() {
             const nextId = event.target.value
             setSelectedPromoId(nextId)
             setPromoProductChoices({})
+            const nextPromo = promos.find((entry) => String(entry.id) === String(nextId))
+            if (nextPromo?.included_minutes) setSelectedMinutes(Number(nextPromo.included_minutes))
           }}
           style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
         >
@@ -6496,7 +6501,7 @@ function App() {
           <div style={{ marginTop: '10px' }}>
             {promo.promo_description && <p style={{ color: '#aaa', marginTop: 0 }}>{promo.promo_description}</p>}
             <p style={{ margin: '6px 0' }}>
-              Adds <strong>{Number(promo.included_minutes || 0)} mins</strong> to balance / {formatStatus(promo.bed_type || 'any')} bed{promo.minutes_expiry_days ? ` / expires after ${promo.minutes_expiry_days} days` : ''}.
+              Includes <strong>{Number(promo.included_minutes || 0)} mins</strong> / {formatStatus(promo.bed_type || 'any')} bed{promo.minutes_expiry_days ? ` / expires after ${promo.minutes_expiry_days} days` : ''}.
             </p>
             {getPromoChoiceGroups(promo).map((group, groupIndex) => {
               const allowedIds = group.allowed_product_ids || []
@@ -6594,8 +6599,7 @@ function App() {
         <h3 style={{ marginTop: 0 }}>Payment Summary</h3>
         <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
           <p style={{ margin: 0 }}>Selected tanning session: <strong>{Number(selectedMinutes || 0)} mins</strong></p>
-          {summary.hasPromo && <p style={{ margin: 0 }}>Promo minutes added to account: <strong>{Number(summary.promo.included_minutes || 0)} mins</strong></p>}
-          {summary.hasPromo && <p style={{ margin: 0, color: '#aaa' }}>Today uses the selected session minutes; remaining promo/account balance stays on the customer account.</p>}
+          {summary.hasPromo && <p style={{ margin: 0 }}>Included minutes: <strong>{Number(summary.promo.included_minutes || 0)} mins</strong></p>}
           {promoItems.length > 0 && <p style={{ margin: 0 }}>Included promo products: <strong>{promoItems.map((item) => `${item.product_name} x${item.quantity}`).join(', ')}</strong></p>}
           {summary.hasPromo && <p style={{ margin: 0 }}>Offer / Promo: <strong>{summary.promo.promo_name}</strong> - £{summary.promoTotal.toFixed(2)}</p>}
           <p style={{ margin: 0 }}>Top-up minutes cost: <strong>£{summary.topUpTotal.toFixed(2)}</strong></p>
@@ -7738,7 +7742,7 @@ function App() {
           </div>
         </div>
         <p style={{ margin: '4px 0', color: 'rgba(255,255,255,0.9)', fontSize: '12px' }}>
-          {formatStaffScheduleTime(entry.start_time)} - {formatStaffScheduleTime(entry.end_time)} - {getStaffScheduleTypeLabel(entry.schedule_type)}
+          {formatStaffScheduleTime(entry.start_time)} - {formatStaffScheduleTime(entry.end_time)} - {getStaffScheduleTypeLabel(entry.schedule_type)} - {getStaffServiceTypeLabel(entry.service_type)}
         </p>
         {entry.notes && <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.76)', fontSize: '11px' }}>{entry.notes}</p>}
         {(approval === 'pending' || canEditEntry) && (
@@ -7791,6 +7795,9 @@ function App() {
             )}
             <select value={staffScheduleType} onChange={(e) => setStaffScheduleType(e.target.value)} style={{ padding: '10px' }}>
               {STAFF_SCHEDULE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+            </select>
+            <select value={staffScheduleServiceType} onChange={(e) => setStaffScheduleServiceType(e.target.value)} style={{ padding: '10px' }}>
+              {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
             {isManager && (
               <select value={staffScheduleApprovalStatus} onChange={(e) => setStaffScheduleApprovalStatus(e.target.value)} style={{ padding: '10px' }}>
@@ -7848,6 +7855,10 @@ function App() {
           <select value={staffScheduleFilterType} onChange={(e) => setStaffScheduleFilterType(e.target.value)} style={{ padding: '10px' }}>
             <option value="">All schedule types</option>
             {STAFF_SCHEDULE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+          </select>
+          <select value={staffScheduleFilterServiceType} onChange={(e) => setStaffScheduleFilterServiceType(e.target.value)} style={{ padding: '10px' }}>
+            <option value="">All service types</option>
+            {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
           </select>
         </div>
 
@@ -8088,7 +8099,7 @@ function App() {
             <option value="">Select product...</option>
             {products.map((product) => (
               <option key={product.id} value={product.id}>
-                {product.name} — {getProductCategoryLabel(product.category)} — £{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — {getProductStockStatus(product)} — {isProductActive(product) ? 'Active' : 'Inactive'}
+                {product.name} — {getProductCategoryLabel(product.category)} — £{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — {getProductStockStatus(product)} — {product.is_active === false ? 'Inactive' : 'Active'}
               </option>
             ))}
           </select>
@@ -8099,7 +8110,7 @@ function App() {
                 <strong>{selectedProduct.name}</strong><br />
                 <span>{getProductCategoryLabel(selectedProduct.category)} — £{Number(selectedProduct.price || 0).toFixed(2)} — Stock {getProductStockQuantity(selectedProduct)}</span><br />
                 <span style={getProductStockStatusStyle(selectedProduct)}>{getProductStockStatus(selectedProduct)}</span><br />
-                <span>Status: {isProductActive(selectedProduct) ? 'Active' : 'Inactive'}</span>
+                <span>Status: {selectedProduct.is_active === false ? 'Inactive' : 'Active'}</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
                 <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
