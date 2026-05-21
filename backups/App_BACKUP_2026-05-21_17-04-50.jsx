@@ -6072,28 +6072,28 @@ function App() {
       return
     }
 
-    const payload = {
+    const basePayload = {
       name: productName.trim(),
-      category: productCategory || 'other',
+      category: normalizeProductCategory(productCategory),
       price: Number(productPrice || 0),
-      stock_quantity: productStockQuantity === '' ? 0 : Number(productStockQuantity || 0),
-      is_active: productIsActive,
-      low_stock_threshold: LOW_STOCK_THRESHOLD
+      stock_quantity: productStockQuantity === '' ? 0 : Number(productStockQuantity || 0)
     }
+    const payload = { ...basePayload, is_active: productIsActive }
+    const legacyPayload = { ...basePayload, active: productIsActive }
 
-    const request = productEditingId
-      ? supabase.from('Products').update(payload).eq('id', productEditingId)
-      : supabase.from('Products').insert(payload)
+    const buildRequest = (nextPayload) => productEditingId
+      ? supabase.from('Products').update(nextPayload).eq('id', productEditingId)
+      : supabase.from('Products').insert(nextPayload)
 
-    const { error } = await request
+    let { error } = await buildRequest(payload)
+    if (error && String(error.message || '').toLowerCase().includes('is_active')) {
+      const retryResult = await buildRequest(legacyPayload)
+      error = retryResult.error
+    }
     if (error) {
       alert('Product was not saved. Please check the connection and try again.')
       showDataLoadWarning('A product update failed. Please check the connection.', error)
-      console.error('Product save failed:', {
-        table: 'Products',
-        payload,
-        error
-      })
+      console.log(error)
       return
     }
 
@@ -6136,11 +6136,15 @@ function App() {
 
     const confirmed = window.confirm(`Deactivate ${product.name}?`)
     if (!confirmed) return
-    const { error } = await supabase.from('Products').update({ is_active: false }).eq('id', product.id)
+    let { error } = await supabase.from('Products').update({ is_active: false }).eq('id', product.id)
+    if (error && String(error.message || '').toLowerCase().includes('is_active')) {
+      const retryResult = await supabase.from('Products').update({ active: false }).eq('id', product.id)
+      error = retryResult.error
+    }
     if (error) {
       alert('Product was not deactivated. Please check the connection and try again.')
       showDataLoadWarning('A product update failed. Please check the connection.', error)
-      console.error('Product deactivate failed:', { table: 'Products', productId: product.id, error })
+      console.log(error)
       return
     }
     getProducts()
