@@ -365,10 +365,13 @@ function App() {
       .filter(Boolean)
       .map((category) => ({ value: String(category), label: formatStatus(category) }))
 
+    if (discoveredCategories.length === 0) return
+
     setProductCategories((current) => {
-      const mergedCategories = dedupeProductCategories([...current, ...discoveredCategories])
-      if (JSON.stringify(mergedCategories) === JSON.stringify(current)) return current
-      return mergedCategories
+      const knownValues = new Set(current.map((category) => category.value))
+      const missingCategories = discoveredCategories.filter((category) => !knownValues.has(category.value))
+      if (missingCategories.length === 0) return current
+      return [...current, ...missingCategories]
     })
   }, [products])
 
@@ -1553,30 +1556,12 @@ function App() {
     return productCategories.find((item) => item.value === category)?.label || formatStatus(category || 'other')
   }
 
-  function getProductCategoryKey(category) {
-    return String(category?.label || category?.value || category || '').trim().toLowerCase()
-  }
-
-  function dedupeProductCategories(categories) {
-    const byName = new Map()
-    for (const category of categories || []) {
-      const label = String(category?.label || formatStatus(category?.value || category || 'other')).trim()
-      if (!label) continue
-      const value = category?.value || makeProductCategoryValue(label)
-      const key = label.toLowerCase()
-      if (!byName.has(key)) byName.set(key, { value, label: formatStatus(label) })
-    }
-    return Array.from(byName.values()).sort((a, b) => a.label.localeCompare(b.label))
-  }
-
   function normalizeProductCategory(category) {
-    const value = String(category || 'other').trim()
-    const key = getProductCategoryKey(value)
-    const existing = productCategories.find((item) => getProductCategoryKey(item) === key || String(item.value).trim().toLowerCase() === key)
-    if (existing) return existing.value
+    const value = category || 'other'
+    if (productCategories.some((item) => item.value === value)) return value
     if (['lip_balm', 'shots', 'other_accessories'].includes(value)) return 'other'
     if (value === 'tanning_lotion') return 'tanning_lotions'
-    return value || 'other'
+    return 'other'
   }
 
   function makeProductCategoryValue(label) {
@@ -1595,18 +1580,17 @@ function App() {
     }
 
     const value = makeProductCategoryValue(label)
-    if (productCategories.some((category) => getProductCategoryKey(category) === label.toLowerCase())) {
+    if (productCategories.some((category) => category.value === value)) {
       alert('That category already exists.')
       return
     }
 
-    setProductCategories((current) => dedupeProductCategories([...current, { value, label }]))
+    setProductCategories((current) => [...current, { value, label }])
     setNewProductCategoryName('')
   }
 
   function deleteProductCategory(category) {
-    const categoryKey = getProductCategoryKey(category)
-    const assignedProducts = products.filter((product) => getProductCategoryKey(product.category) === categoryKey || normalizeProductCategory(product.category) === category.value)
+    const assignedProducts = products.filter((product) => normalizeProductCategory(product.category) === category.value || product.category === category.value)
     if (assignedProducts.length > 0) {
       alert('This category is assigned to products. Reassign those products before deleting it.')
       return
@@ -1616,7 +1600,7 @@ function App() {
     if (!confirmed) return
 
     setProductCategories((current) => {
-      const nextCategories = current.filter((item) => getProductCategoryKey(item) !== categoryKey)
+      const nextCategories = current.filter((item) => item.value !== category.value)
       if (productCategory === category.value) setProductCategory(nextCategories[0]?.value || 'other')
       if (bookingProductCategoryFilter === category.value) setBookingProductCategoryFilter('')
       return nextCategories.length > 0 ? nextCategories : PRODUCT_CATEGORIES
@@ -6162,52 +6146,6 @@ function App() {
     getProducts()
   }
 
-  async function deleteProduct(product) {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to delete products:')) return
-
-    const confirmed = window.confirm(`Delete product "${product.name}"? Products with sales history will be deactivated instead.`)
-    if (!confirmed) return
-
-    const { data: salesHistory, error: salesHistoryError } = await supabase
-      .from('ProductSales')
-      .select('id')
-      .eq('product_id', product.id)
-      .limit(1)
-
-    if (salesHistoryError) {
-      alert('Could not check product sales history. Product was not deleted.')
-      showDataLoadWarning('Product sales history check failed.', salesHistoryError)
-      console.error('Product sales history check failed:', { productId: product.id, error: salesHistoryError })
-      return
-    }
-
-    if ((salesHistory || []).length > 0) {
-      alert('This product has sales history, so it will be deactivated instead of deleted.')
-      const { error } = await supabase.from('Products').update({ is_active: false }).eq('id', product.id)
-      if (error) {
-        alert('Product was not deactivated. Please check the connection and try again.')
-        showDataLoadWarning('A product update failed. Please check the connection.', error)
-        console.error('Product soft delete failed:', { productId: product.id, error })
-        return
-      }
-    } else {
-      const { error } = await supabase.from('Products').delete().eq('id', product.id)
-      if (error) {
-        alert('Product was not deleted. Please check the connection and try again.')
-        showDataLoadWarning('A product delete failed. Please check the connection.', error)
-        console.error('Product hard delete failed:', { productId: product.id, error })
-        return
-      }
-    }
-
-    if (String(selectedProductManagementId) === String(product.id)) {
-      setSelectedProductManagementId('')
-      clearProductForm()
-    }
-    await getProducts()
-  }
-
   function clearPromoForm() {
     setPromoEditingId('')
     setPromoName('')
@@ -6506,7 +6444,7 @@ function App() {
               >
                 <option value="">All categories</option>
                 {productCategories.map((category) => (
-                  <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
+                  <option key={category.value} value={category.value}>{category.label}</option>
                 ))}
               </select>
               <select value={bookingProductId} onChange={(e) => setBookingProductId(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}>
@@ -8123,10 +8061,9 @@ function App() {
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {productCategories.map((category) => {
-              const categoryKey = getProductCategoryKey(category)
-              const assignedCount = products.filter((product) => getProductCategoryKey(product.category) === categoryKey || normalizeProductCategory(product.category) === category.value).length
+              const assignedCount = products.filter((product) => normalizeProductCategory(product.category) === category.value || product.category === category.value).length
               return (
-                <span key={getProductCategoryKey(category)} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', border: '1px solid rgba(212,168,83,0.35)', background: '#111', color: '#f3e6c3', padding: '7px 9px', borderRadius: '8px' }}>
+                <span key={category.value} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', border: '1px solid rgba(212,168,83,0.35)', background: '#111', color: '#f3e6c3', padding: '7px 9px', borderRadius: '8px' }}>
                   {category.label}
                   {assignedCount > 0 && <small style={{ color: '#aaa' }}>{assignedCount}</small>}
                   <button
@@ -8148,7 +8085,7 @@ function App() {
           <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
           <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} style={{ padding: '10px' }}>
             {productCategories.map((category) => (
-              <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
+              <option key={category.value} value={category.value}>{category.label}</option>
             ))}
           </select>
           <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
@@ -8216,7 +8153,7 @@ function App() {
                 <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
                 <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} style={{ padding: '10px' }}>
                   {productCategories.map((category) => (
-                    <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
+                    <option key={category.value} value={category.value}>{category.label}</option>
                   ))}
                 </select>
                 <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
@@ -8227,7 +8164,6 @@ function App() {
                 </label>
                 <button onClick={saveProduct}>Save Product Changes</button>
                 <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
-                <button onClick={() => deleteProduct(selectedProduct)} style={{ borderColor: 'rgba(255,120,117,0.5)', color: '#ffaaa6' }}>Delete Product</button>
               </div>
               <div style={{ marginTop: '12px', padding: '12px', background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px' }}>
                 <strong>Stock adjustment</strong>
