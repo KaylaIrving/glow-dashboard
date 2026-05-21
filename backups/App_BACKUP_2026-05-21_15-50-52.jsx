@@ -150,7 +150,6 @@ function App() {
   const [collapseCashUp, setCollapseCashUp] = useState(true)
   const [collapseDailyTakings, setCollapseDailyTakings] = useState(true)
   const [collapseReports, setCollapseReports] = useState(true)
-  const [collapsePromos, setCollapsePromos] = useState(true)
   const [selectedProductManagementId, setSelectedProductManagementId] = useState('')
   const [customerManagerSearch, setCustomerManagerSearch] = useState('')
   const [showAllCustomersList, setShowAllCustomersList] = useState(false)
@@ -285,25 +284,6 @@ function App() {
   const [productStockQuantity, setProductStockQuantity] = useState('')
   const [productIsActive, setProductIsActive] = useState(true)
   const [productEditingId, setProductEditingId] = useState('')
-  const [stockMovementType, setStockMovementType] = useState('restock')
-  const [stockMovementQuantity, setStockMovementQuantity] = useState('')
-  const [stockMovementNote, setStockMovementNote] = useState('')
-  const [promos, setPromos] = useState([])
-  const [promoLoadError, setPromoLoadError] = useState('')
-  const [promoEditingId, setPromoEditingId] = useState('')
-  const [promoName, setPromoName] = useState('')
-  const [promoDescription, setPromoDescription] = useState('')
-  const [promoPrice, setPromoPrice] = useState('')
-  const [promoActive, setPromoActive] = useState(true)
-  const [promoValidFrom, setPromoValidFrom] = useState('')
-  const [promoValidTo, setPromoValidTo] = useState('')
-  const [promoIncludedMinutes, setPromoIncludedMinutes] = useState('')
-  const [promoMinuteType, setPromoMinuteType] = useState('any')
-  const [promoBedType, setPromoBedType] = useState('any')
-  const [promoChoiceGroupsText, setPromoChoiceGroupsText] = useState('[]')
-  const [promoStaffNotes, setPromoStaffNotes] = useState('')
-  const [selectedPromoId, setSelectedPromoId] = useState('')
-  const [promoProductChoices, setPromoProductChoices] = useState({})
 
   const [saleReceipt, setSaleReceipt] = useState(null)
   const [newCustomerTermsAccepted, setNewCustomerTermsAccepted] = useState(false)
@@ -336,7 +316,6 @@ function App() {
     getCustomers()
     getStaff()
     getProducts()
-    getPromos()
     getStaffSchedule()
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
@@ -995,17 +974,6 @@ function App() {
     setProducts(data || [])
   }
 
-  async function getPromos() {
-    const { data, error } = await supabase.from('Promos').select('*').order('created_at', { ascending: false })
-    if (error) {
-      setPromoLoadError(error.message || 'Could not load Promos table.')
-      setPromos([])
-      return
-    }
-    setPromoLoadError('')
-    setPromos(data || [])
-  }
-
   async function getDailyTakings(dateOverride = selectedDate) {
     const dayStart = new Date(`${dateOverride}T00:00:00`)
     const dayEnd = new Date(`${dateOverride}T23:59:59.999`)
@@ -1230,16 +1198,6 @@ function App() {
       return totals
     }, { standard: { minutes: 0, revenue: 0 }, hybrid: { minutes: 0, revenue: 0 } })
 
-    const promoSalesMap = new Map()
-    for (const payment of payments.filter((payment) => payment.package_type === 'promo' || String(payment.package_name || '').toLowerCase().includes('promo'))) {
-      const promoName = payment.package_name || 'Promo'
-      if (!promoSalesMap.has(promoName)) promoSalesMap.set(promoName, { promo_name: promoName, count: 0, minutes: 0, revenue: 0 })
-      const row = promoSalesMap.get(promoName)
-      row.count += 1
-      row.minutes += Number(payment.minutes_added || 0)
-      row.revenue += Number(payment.total_amount || 0)
-    }
-
     const sprayTanMap = new Map()
     for (const booking of reportBookings.filter((booking) => booking.booking_type === 'spraytan')) {
       const service = booking.spraytan_service || 'Unknown service'
@@ -1282,7 +1240,6 @@ function App() {
       productSummary: Array.from(productSummaryMap.values()).sort((a, b) => b.quantity - a.quantity),
       customerSpend: Array.from(customerSpendMap.values()).sort((a, b) => b.total - a.total).slice(0, 20),
       minutesSales,
-      promoSales: Array.from(promoSalesMap.values()).sort((a, b) => b.revenue - a.revenue),
       sprayTan: Array.from(sprayTanMap.values()).map((row) => ({ ...row, artists: Array.from(row.artists).join(', ') || 'Unassigned' })),
       staffActivity: Array.from(staffActivityMap.values()).sort((a, b) => (b.bookings + b.cash_ups) - (a.bookings + a.cash_ups)),
       stockMovement: products.map((product) => ({ name: product.name, category: product.category || 'Uncategorised', current_stock: getProductStockQuantity(product), status: getProductStockStatus(product) }))
@@ -1298,7 +1255,6 @@ function App() {
       ...managerReportsData.productSalesByStaff.map((row) => ({ report: 'Product Sales by Staff', ...row })),
       ...managerReportsData.staffCommission.map((row) => ({ report: 'Staff Commission', ...row })),
       ...managerReportsData.productSummary.map((row) => ({ report: 'Product Sales Summary', ...row })),
-      ...managerReportsData.promoSales.map((row) => ({ report: 'Promo Sales', ...row })),
       ...managerReportsData.customerSpend.map((row) => ({ report: 'Customer Spend', ...row })),
       ...managerReportsData.sprayTan.map((row) => ({ report: 'Spray Tan', ...row })),
       ...managerReportsData.staffActivity.map((row) => ({ report: 'Staff Activity', ...row })),
@@ -1328,7 +1284,6 @@ function App() {
     setCollapseExports(true)
     setCollapseDailyTakings(true)
     setCollapseReports(true)
-    setCollapsePromos(true)
   }
 
   function openManagerSection(sectionName, currentlyOpen) {
@@ -1343,7 +1298,6 @@ function App() {
     if (sectionName === 'exports') setCollapseExports(false)
     if (sectionName === 'daily') setCollapseDailyTakings(false)
     if (sectionName === 'reports') setCollapseReports(false)
-    if (sectionName === 'promos') setCollapsePromos(false)
   }
 
   function scrollToTop() {
@@ -1539,71 +1493,6 @@ function App() {
     return Number(product?.stock_quantity || 0)
   }
 
-  function getPromoChoiceGroups(promo) {
-    const groups = promo?.product_choice_groups
-    if (Array.isArray(groups)) return groups
-    if (typeof groups === 'string' && groups.trim()) {
-      try {
-        const parsed = JSON.parse(groups)
-        return Array.isArray(parsed) ? parsed : []
-      } catch {
-        return []
-      }
-    }
-    return []
-  }
-
-  function getSelectedPromo() {
-    return promos.find((promo) => String(promo.id) === String(selectedPromoId))
-  }
-
-  function getActivePromos() {
-    const today = formatLocalDate(new Date())
-    return promos.filter((promo) => {
-      if (promo.active === false) return false
-      if (promo.valid_from && promo.valid_from > today) return false
-      if (promo.valid_to && promo.valid_to < today) return false
-      return true
-    })
-  }
-
-  function getPromoSelectedCartItems() {
-    const promo = getSelectedPromo()
-    if (!promo) return []
-    return getPromoChoiceGroups(promo).flatMap((group, groupIndex) => {
-      const productIds = promoProductChoices[groupIndex] || []
-      return productIds.map((productId) => {
-        const product = products.find((entry) => String(entry.id) === String(productId))
-        return product ? {
-          product_id: product.id,
-          product_name: product.name,
-          category: product.category,
-          price: 0,
-          quantity: 1,
-          stock_quantity: product.stock_quantity,
-          promo_name: promo.promo_name,
-          promo_group: group.group_name || `Group ${groupIndex + 1}`
-        } : null
-      }).filter(Boolean)
-    })
-  }
-
-  function getPromoProductChoiceErrors() {
-    const promo = getSelectedPromo()
-    if (!promo) return []
-    return getPromoChoiceGroups(promo).flatMap((group, groupIndex) => {
-      const selectedIds = promoProductChoices[groupIndex] || []
-      const requiredQuantity = Number(group.required_quantity || 1)
-      if (selectedIds.length < requiredQuantity) return [`Choose ${requiredQuantity} item(s) for ${group.group_name || `Group ${groupIndex + 1}`}.`]
-      return selectedIds.flatMap((productId) => {
-        const product = products.find((entry) => String(entry.id) === String(productId))
-        if (!product) return ['Selected promo product could not be found.']
-        if (getProductStockQuantity(product) <= 0) return [`${product.name} is out of stock.`]
-        return []
-      })
-    })
-  }
-
   function getProductStockStatus(product) {
     const stock = getProductStockQuantity(product)
     if (stock <= 0) return 'Out of stock'
@@ -1759,23 +1648,6 @@ function App() {
     setProductCart([])
   }
 
-  async function createStockMovement({ product, movementType, quantityChange, stockBefore, stockAfter, notes = '', sourceType = '', sourceId = null }) {
-    if (!product) return
-    const { error } = await supabase.from('StockMovements').insert({
-      product_id: product.id,
-      product_name: product.name,
-      movement_type: movementType,
-      quantity_change: quantityChange,
-      stock_before: stockBefore,
-      stock_after: stockAfter,
-      staff_name: getCurrentStaffUser()?.name || null,
-      notes: notes || null,
-      source_type: sourceType || null,
-      source_id: sourceId
-    })
-    if (error) console.log('Stock movement log skipped:', error)
-  }
-
   function addSelectedBookingProduct() {
     if (!requireStaffSignIn()) return
 
@@ -1823,10 +1695,10 @@ function App() {
     setBookingProductQuantity(1)
   }
 
-  async function recordProductSales({ paymentMethodForSale, customer = null, cartItems = productCart, sourceType = 'product_sale' }) {
-    if (cartItems.length === 0) return true
+  async function recordProductSales({ paymentMethodForSale, customer = null }) {
+    if (productCart.length === 0) return true
 
-    for (const item of cartItems) {
+    for (const item of productCart) {
       const product = products.find((entry) => entry.id === item.product_id)
       const quantity = Number(item.quantity || 0)
       const stock = getProductStockQuantity(product)
@@ -1840,7 +1712,7 @@ function App() {
       }
     }
 
-    const lowStockAfterSale = cartItems
+    const lowStockAfterSale = productCart
       .map((item) => {
         const product = products.find((entry) => entry.id === item.product_id)
         const stock = getProductStockQuantity(product)
@@ -1854,7 +1726,7 @@ function App() {
       if (!confirmed) return false
     }
 
-    const salesRows = cartItems.map((item) => ({
+    const salesRows = productCart.map((item) => ({
       product_id: item.product_id,
       product_name: item.product_name,
       category: item.category,
@@ -1874,24 +1746,14 @@ function App() {
       return false
     }
 
-    for (const item of cartItems) {
+    for (const item of productCart) {
       const product = products.find((entry) => entry.id === item.product_id)
       const stock = getProductStockQuantity(product)
       const quantity = Number(item.quantity || 0)
-      const nextStock = Math.max(0, stock - quantity)
-      await supabase.from('Products').update({ stock_quantity: nextStock }).eq('id', item.product_id)
-      await createStockMovement({
-        product,
-        movementType: sourceType === 'promo' ? 'promo_sale' : 'sale',
-        quantityChange: -quantity,
-        stockBefore: stock,
-        stockAfter: nextStock,
-        notes: item.promo_name ? `Promo: ${item.promo_name}${item.promo_group ? ` / ${item.promo_group}` : ''}` : 'Product sale.',
-        sourceType
-      })
+      await supabase.from('Products').update({ stock_quantity: Math.max(0, stock - quantity) }).eq('id', item.product_id)
     }
 
-    if (cartItems === productCart) clearProductCart()
+    clearProductCart()
     await getProducts()
     await getDailyTakings()
     return true
@@ -2738,20 +2600,15 @@ function App() {
     const topUpMinutesToAdd = showBookingTopUp && canTopUpCustomer ? Number(purchase.minutes || 0) : 0
     const topUpTotal = topUpMinutesToAdd > 0 ? Number(purchase.total.toFixed(2)) : 0
     const productsTotal = Number(getProductCartTotal().toFixed(2))
-    const promo = getSelectedPromo()
-    const promoTotal = promo ? Number(promo.promo_price || 0) : 0
-    const grandTotal = Number((topUpTotal + productsTotal + promoTotal).toFixed(2))
+    const grandTotal = Number((topUpTotal + productsTotal).toFixed(2))
 
     return {
       purchase,
-      promo,
       topUpMinutesToAdd,
       topUpTotal,
-      promoTotal,
       productsTotal,
       grandTotal,
       hasTopUp: topUpMinutesToAdd > 0,
-      hasPromo: Boolean(promo),
       hasProducts: productCart.length > 0
     }
   }
@@ -2762,8 +2619,6 @@ function App() {
     const hybridBalance = Number(customer?.hybrid_minutes_balance || 0)
     const addedStandard = summary.hasTopUp && summary.purchase.type !== 'hybrid' ? summary.topUpMinutesToAdd : 0
     const addedHybrid = summary.hasTopUp && summary.purchase.type === 'hybrid' ? summary.topUpMinutesToAdd : 0
-    const promoMinutes = summary.hasPromo ? Number(summary.promo?.included_minutes || 0) : 0
-    if (promoMinutes >= Number(selectedMinutes || 0)) return Number(selectedMinutes || 0)
 
     if (Number(bedId) === 2) return hybridBalance + addedHybrid
     return standardBalance + hybridBalance + addedStandard + addedHybrid
@@ -2796,12 +2651,6 @@ function App() {
       }
     }
 
-    const promoErrors = getPromoProductChoiceErrors()
-    if (promoErrors.length > 0) {
-      alert(promoErrors.join('\n'))
-      return false
-    }
-
     if (summary.grandTotal <= 0) return true
 
     const cashMessage = paymentMethod === 'cash'
@@ -2809,54 +2658,19 @@ function App() {
       : ''
 
     return window.confirm(
-      `Complete booking checkout?\n\nCustomer: ${customer?.name || 'Walk-in'}\nSession: ${selectedMinutes || 0} tanning mins\nPromo: ${summary.promo?.promo_name || 'None'}\nTop-up total: £${summary.topUpTotal.toFixed(2)}\nPromo total: £${summary.promoTotal.toFixed(2)}\nProducts total: £${summary.productsTotal.toFixed(2)}\nTotal to pay: £${summary.grandTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
+      `Complete booking checkout?\n\nCustomer: ${customer?.name || 'Walk-in'}\nSession: ${selectedMinutes || 0} tanning mins\nTop-up total: £${summary.topUpTotal.toFixed(2)}\nProducts total: £${summary.productsTotal.toFixed(2)}\nTotal to pay: £${summary.grandTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
     )
   }
 
   async function applySunbedCheckout(customer) {
     const summary = getSunbedCheckoutSummary(customer)
-    if (summary.grandTotal <= 0 && !summary.hasPromo && !summary.hasProducts && !summary.hasTopUp) return true
+    if (summary.grandTotal <= 0) return true
 
     const receiptProducts = getProductReceiptItems()
     const receiptCashReceived = Number(cashReceived || 0)
     let receiptItems = []
     let receiptType = 'sunbed_checkout'
     let nextCustomer = customer
-    const promoItems = getPromoSelectedCartItems()
-
-    if (summary.hasPromo) {
-      if (promoItems.length > 0) {
-        const promoProductsSaved = await recordProductSales({ paymentMethodForSale: paymentMethod, customer, cartItems: promoItems, sourceType: 'promo' })
-        if (!promoProductsSaved) return false
-      }
-
-      const { error: promoPaymentError } = await supabase.from('Payments').insert({
-        customer_id: customer.id,
-        customer_name: customer.name,
-        bed_type: `Promo - ${summary.promo.bed_type || 'any'} bed`,
-        minutes_added: Number(summary.promo.included_minutes || 0),
-        price_per_minute: 0,
-        total_amount: summary.promoTotal,
-        payment_method: paymentMethod,
-        package_type: 'promo',
-        package_name: summary.promo.promo_name,
-        notes: paymentNotes || summary.promo.staff_notes || null
-      })
-
-      if (promoPaymentError) {
-        alert('Promo payment was not saved. Please check the connection and try again.')
-        showDataLoadWarning('A promo payment failed to save. Please check the connection.', promoPaymentError)
-        console.log(promoPaymentError)
-        return false
-      }
-
-      receiptItems = [
-        ...receiptItems,
-        { name: summary.promo.promo_name, quantity: 1, minutes: Number(summary.promo.included_minutes || 0), total: summary.promoTotal },
-        ...promoItems.map((item) => ({ name: `${item.promo_group}: ${item.product_name}`, quantity: item.quantity, unit_price: 0, total: 0 }))
-      ]
-      receiptType = 'promo_sale'
-    }
 
     if (summary.hasProducts) {
       const productSalesReady = await recordProductSales({ paymentMethodForSale: paymentMethod, customer })
@@ -2941,9 +2755,9 @@ function App() {
         { name: summary.purchase.name, quantity: 1, minutes: summary.topUpMinutesToAdd, total: summary.topUpTotal },
         ...receiptItems
       ]
-      receiptType = summary.hasPromo ? 'promo_sale_with_topup' : summary.hasProducts ? 'sunbed_checkout_with_products' : 'minutes_topup'
+      receiptType = summary.hasProducts ? 'sunbed_checkout_with_products' : 'minutes_topup'
     } else if (summary.hasProducts) {
-      receiptType = summary.hasPromo ? 'promo_sale_with_products' : 'product_sale'
+      receiptType = 'product_sale'
     }
 
     await createReceipt({
@@ -2960,15 +2774,13 @@ function App() {
     showSaleReceipt({
       customerName: nextCustomer?.name || customer?.name || 'Walk-in',
       packageName: summary.hasTopUp ? summary.purchase.name : '',
-      minutes: summary.hasPromo ? Number(summary.promo?.included_minutes || 0) : summary.hasTopUp ? summary.topUpMinutesToAdd : 0,
-      products: [...promoItems, ...receiptProducts],
+      minutes: summary.hasTopUp ? summary.topUpMinutesToAdd : 0,
+      products: receiptProducts,
       method: paymentMethod,
       totalPaid: summary.grandTotal,
       cashAmount: receiptCashReceived
     })
     setTopUpMinutes(0)
-    setSelectedPromoId('')
-    setPromoProductChoices({})
     setPaymentNotes('')
     setCashReceived('')
     return true
@@ -3654,10 +3466,7 @@ function App() {
       if (!customer) return
     }
 
-    const selectedPromo = getSelectedPromo()
-    const promoCoversSession = selectedPromo && Number(selectedPromo.included_minutes || 0) >= Number(selectedMinutes || 0)
-
-    if (!isInternalShopTest && !promoCoversSession && getProjectedUsableMinutesForCheckout(customer, modalSlot.bedId) < Number(selectedMinutes || 0)) {
+    if (!isInternalShopTest && getProjectedUsableMinutesForCheckout(customer, modalSlot.bedId) < Number(selectedMinutes || 0)) {
       alert(`${customer.name} only has ${getUsableMinutesForBed(customer, modalSlot.bedId)} usable mins for this bed. Please top up before booking ${selectedMinutes} mins.`)
       return
     }
@@ -4402,8 +4211,6 @@ function App() {
     setPaymentMethod('card')
     setPaymentNotes('')
     setCashReceived('')
-    setSelectedPromoId('')
-    setPromoProductChoices({})
   }
 
   function openEmptySlot(time, bedId) {
@@ -5822,113 +5629,6 @@ function App() {
     getProducts()
   }
 
-  function clearPromoForm() {
-    setPromoEditingId('')
-    setPromoName('')
-    setPromoDescription('')
-    setPromoPrice('')
-    setPromoActive(true)
-    setPromoValidFrom('')
-    setPromoValidTo('')
-    setPromoIncludedMinutes('')
-    setPromoMinuteType('any')
-    setPromoBedType('any')
-    setPromoChoiceGroupsText('[]')
-    setPromoStaffNotes('')
-  }
-
-  function editPromo(promo) {
-    setPromoEditingId(String(promo.id))
-    setPromoName(promo.promo_name || '')
-    setPromoDescription(promo.promo_description || '')
-    setPromoPrice(promo.promo_price ?? '')
-    setPromoActive(promo.active !== false)
-    setPromoValidFrom(promo.valid_from || '')
-    setPromoValidTo(promo.valid_to || '')
-    setPromoIncludedMinutes(promo.included_minutes ?? '')
-    setPromoMinuteType(promo.minute_type || 'any')
-    setPromoBedType(promo.bed_type || 'any')
-    setPromoChoiceGroupsText(JSON.stringify(getPromoChoiceGroups(promo), null, 2))
-    setPromoStaffNotes(promo.staff_notes || '')
-  }
-
-  async function savePromo() {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to save promos:')) return
-    if (!promoName.trim()) {
-      alert('Enter a promo name.')
-      return
-    }
-    let groups = []
-    try {
-      groups = promoChoiceGroupsText.trim() ? JSON.parse(promoChoiceGroupsText) : []
-      if (!Array.isArray(groups)) throw new Error('Choice groups must be an array.')
-    } catch {
-      alert('Product choice groups must be valid JSON.')
-      return
-    }
-    const payload = {
-      promo_name: promoName.trim(),
-      promo_description: promoDescription || null,
-      promo_price: Number(promoPrice || 0),
-      active: promoActive,
-      valid_from: promoValidFrom || null,
-      valid_to: promoValidTo || null,
-      included_minutes: Number(promoIncludedMinutes || 0),
-      minute_type: promoMinuteType,
-      bed_type: promoBedType,
-      product_choice_groups: groups,
-      staff_notes: promoStaffNotes || null
-    }
-    const request = promoEditingId ? supabase.from('Promos').update(payload).eq('id', promoEditingId) : supabase.from('Promos').insert(payload)
-    const { error } = await request
-    if (error) {
-      alert('Promo was not saved. Check the Promos table.')
-      showDataLoadWarning('Promo save failed. Check the Promos table.', error)
-      console.log(error)
-      return
-    }
-    clearPromoForm()
-    await getPromos()
-  }
-
-  async function deletePromo(promo) {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to delete promos:')) return
-    if (!window.confirm(`Delete promo "${promo.promo_name}"?`)) return
-    const { error } = await supabase.from('Promos').delete().eq('id', promo.id)
-    if (error) {
-      alert('Promo was not deleted.')
-      console.log(error)
-      return
-    }
-    await getPromos()
-  }
-
-  async function adjustSelectedProductStock() {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to adjust stock:')) return
-    const product = products.find((entry) => String(entry.id) === String(selectedProductManagementId))
-    const quantity = Number(stockMovementQuantity || 0)
-    if (!product || quantity <= 0) {
-      alert('Select a product and enter a quantity.')
-      return
-    }
-    const stockBefore = getProductStockQuantity(product)
-    const signedQuantity = stockMovementType === 'restock' ? quantity : -quantity
-    const stockAfter = Math.max(0, stockBefore + signedQuantity)
-    const { error } = await supabase.from('Products').update({ stock_quantity: stockAfter }).eq('id', product.id)
-    if (error) {
-      alert('Stock was not updated.')
-      console.log(error)
-      return
-    }
-    await createStockMovement({ product, movementType: stockMovementType, quantityChange: stockAfter - stockBefore, stockBefore, stockAfter, notes: stockMovementNote, sourceType: 'manual' })
-    setStockMovementQuantity('')
-    setStockMovementNote('')
-    await getProducts()
-  }
-
   function renderCustomerSearchBox() {
     const selectedCustomer = getSelectedCustomer()
     const selectedStaff = getSelectedStaffAsCustomer()
@@ -6189,80 +5889,6 @@ function App() {
     )
   }
 
-  function renderBookingPromoSection() {
-    const selectedCustomer = getSelectedCustomer()
-    const selectedStaff = getSelectedStaffAsCustomer()
-    if (!selectedCustomer || selectedStaff || isShopTestCustomer(selectedCustomer)) return null
-    const activePromos = getActivePromos()
-    const promo = getSelectedPromo()
-
-    return (
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginTop: '12px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Apply Offer / Promo</label>
-        {promoLoadError && <p style={{ color: '#ffcc66' }}>Promos unavailable: {promoLoadError}</p>}
-        <select
-          value={selectedPromoId}
-          onChange={(event) => {
-            const nextId = event.target.value
-            setSelectedPromoId(nextId)
-            setPromoProductChoices({})
-            const nextPromo = promos.find((entry) => String(entry.id) === String(nextId))
-            if (nextPromo?.included_minutes) setSelectedMinutes(Number(nextPromo.included_minutes))
-          }}
-          style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-        >
-          <option value="">No offer / promo</option>
-          {activePromos.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.promo_name} - £{Number(entry.promo_price || 0).toFixed(2)}
-            </option>
-          ))}
-        </select>
-        {promo && (
-          <div style={{ marginTop: '10px' }}>
-            {promo.promo_description && <p style={{ color: '#aaa', marginTop: 0 }}>{promo.promo_description}</p>}
-            <p style={{ margin: '6px 0' }}>
-              Includes <strong>{Number(promo.included_minutes || 0)} mins</strong> / {formatStatus(promo.minute_type || 'any')} minutes / {formatStatus(promo.bed_type || 'any')} bed.
-            </p>
-            {getPromoChoiceGroups(promo).map((group, groupIndex) => {
-              const allowedIds = group.allowed_product_ids || []
-              const allowedProducts = products.filter((product) => allowedIds.map(String).includes(String(product.id)))
-              const selectedIds = promoProductChoices[groupIndex] || []
-              const requiredQuantity = Number(group.required_quantity || 1)
-              return (
-                <div key={`${promo.id}-${groupIndex}`} style={{ borderTop: '1px solid #333', paddingTop: '10px', marginTop: '10px' }}>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#d4a853' }}>
-                    {group.group_name || `Choice group ${groupIndex + 1}`} - choose {requiredQuantity}
-                  </label>
-                  {Array.from({ length: requiredQuantity }, (_, choiceIndex) => (
-                    <select
-                      key={`${groupIndex}-${choiceIndex}`}
-                      value={selectedIds[choiceIndex] || ''}
-                      onChange={(event) => {
-                        const nextChoices = [...selectedIds]
-                        nextChoices[choiceIndex] = event.target.value
-                        setPromoProductChoices((current) => ({ ...current, [groupIndex]: nextChoices.filter(Boolean) }))
-                      }}
-                      style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}
-                    >
-                      <option value="">Select product...</option>
-                      {allowedProducts.map((product) => (
-                        <option key={product.id} value={product.id}>
-                          {product.name} - Stock {getProductStockQuantity(product)} - {getProductStockStatus(product)}
-                        </option>
-                      ))}
-                    </select>
-                  ))}
-                  {allowedProducts.length === 0 && <p style={{ color: '#ffcc66' }}>No allowed products configured for this group.</p>}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   function renderTopUpSection() {
     const selectedCustomer = getSelectedCustomer()
     const selectedStaff = getSelectedStaffAsCustomer()
@@ -6319,7 +5945,6 @@ function App() {
         <h3 style={{ marginTop: 0 }}>Payment Summary</h3>
         <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
           <p style={{ margin: 0 }}>Selected tanning session: <strong>{Number(selectedMinutes || 0)} mins</strong></p>
-          {summary.hasPromo && <p style={{ margin: 0 }}>Offer / Promo: <strong>{summary.promo.promo_name}</strong> - £{summary.promoTotal.toFixed(2)}</p>}
           <p style={{ margin: 0 }}>Top-up minutes cost: <strong>£{summary.topUpTotal.toFixed(2)}</strong></p>
           <p style={{ margin: 0 }}>Products total: <strong>£{summary.productsTotal.toFixed(2)}</strong></p>
           <p style={{ margin: 0, color: '#d4a853', fontWeight: 'bold' }}>Grand total to pay: £{summary.grandTotal.toFixed(2)}</p>
@@ -6869,12 +6494,6 @@ function App() {
               { key: 'quantity', label: 'Qty sold' },
               { key: 'total', label: 'Revenue', format: money }
             ])}
-            {renderReportTable('Promo Sales Report', managerReportsData.promoSales, [
-              { key: 'promo_name', label: 'Promo' },
-              { key: 'count', label: 'Sales' },
-              { key: 'minutes', label: 'Minutes' },
-              { key: 'revenue', label: 'Revenue', format: money }
-            ])}
             {renderReportTable('Customer Spend Report', managerReportsData.customerSpend, [
               { key: 'customer_name', label: 'Customer' },
               { key: 'minutes_topups', label: 'Minutes', format: money },
@@ -7245,7 +6864,6 @@ function App() {
       { key: 'staff', label: 'Staff Management', isOpen: !collapseStaffManagement },
       { key: 'maintenance', label: 'Maintenance', isOpen: !collapseMaintenance },
       { key: 'products', label: 'Products', isOpen: !collapseProducts },
-      { key: 'promos', label: 'Offers / Promos', isOpen: !collapsePromos },
       { key: 'corrections', label: 'Booking / Payment Corrections', isOpen: !collapseCorrections },
       { key: 'wix', label: 'Wix Booking Sync', isOpen: !collapseWixSync },
       { key: 'receipts', label: 'Receipt History', isOpen: !collapseReceipts },
@@ -7815,20 +7433,6 @@ function App() {
                 <button onClick={saveProduct}>Save Product Changes</button>
                 <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
               </div>
-              <div style={{ marginTop: '12px', padding: '12px', background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px' }}>
-                <strong>Stock adjustment</strong>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginTop: '10px' }}>
-                  <select value={stockMovementType} onChange={(e) => setStockMovementType(e.target.value)} style={{ padding: '10px' }}>
-                    <option value="restock">Add stock / delivery</option>
-                    <option value="damaged">Damaged</option>
-                    <option value="lost">Lost</option>
-                    <option value="manual_remove">Manual remove</option>
-                  </select>
-                  <input type="number" placeholder="Quantity" value={stockMovementQuantity} onChange={(e) => setStockMovementQuantity(e.target.value)} style={{ padding: '10px' }} />
-                  <input placeholder="Restock/damage/loss note" value={stockMovementNote} onChange={(e) => setStockMovementNote(e.target.value)} style={{ padding: '10px' }} />
-                  <button onClick={adjustSelectedProductStock}>Save Stock Movement</button>
-                </div>
-              </div>
             </div>
           )}
         </div>
@@ -7876,77 +7480,6 @@ function App() {
           </div>
         )}
       </>
-    )
-  }
-
-  function renderPromosPanel() {
-    if (!showManagerView) return null
-
-    return renderCollapsibleSection(
-      'Offers / Promos',
-      collapsePromos,
-      setCollapsePromos,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        {promoLoadError && <p style={{ color: '#ffcc66' }}>Promos table not loaded: {promoLoadError}</p>}
-        <p style={{ color: '#aaa', marginTop: 0 }}>
-          Product choice groups are saved as JSON. Example: <code>{'[{"group_name":"Bronzer sachet","required_quantity":1,"allowed_product_ids":[1,2,3]}]'}</code>
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '10px' }}>
-          <input placeholder="Promo name" value={promoName} onChange={(e) => setPromoName(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="0.01" placeholder="Promo price" value={promoPrice} onChange={(e) => setPromoPrice(e.target.value)} style={{ padding: '10px' }} />
-          <input type="date" value={promoValidFrom} onChange={(e) => setPromoValidFrom(e.target.value)} style={{ padding: '10px' }} />
-          <input type="date" value={promoValidTo} onChange={(e) => setPromoValidTo(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" placeholder="Included minutes" value={promoIncludedMinutes} onChange={(e) => setPromoIncludedMinutes(e.target.value)} style={{ padding: '10px' }} />
-          <select value={promoMinuteType} onChange={(e) => setPromoMinuteType(e.target.value)} style={{ padding: '10px' }}>
-            <option value="any">Any minutes</option>
-            <option value="standard">Standard</option>
-            <option value="hybrid">Hybrid</option>
-          </select>
-          <select value={promoBedType} onChange={(e) => setPromoBedType(e.target.value)} style={{ padding: '10px' }}>
-            <option value="any">Any bed</option>
-            <option value="standard">Standard bed</option>
-            <option value="hybrid">Hybrid bed</option>
-          </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input type="checkbox" checked={promoActive} onChange={(e) => setPromoActive(e.target.checked)} />
-            Active
-          </label>
-        </div>
-        <textarea placeholder="Promo description" value={promoDescription} onChange={(e) => setPromoDescription(e.target.value)} style={{ width: '100%', minHeight: '60px', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }} />
-        <textarea value={promoChoiceGroupsText} onChange={(e) => setPromoChoiceGroupsText(e.target.value)} style={{ width: '100%', minHeight: '110px', padding: '10px', marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'monospace' }} />
-        <textarea placeholder="Staff notes" value={promoStaffNotes} onChange={(e) => setPromoStaffNotes(e.target.value)} style={{ width: '100%', minHeight: '60px', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }} />
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
-          <button onClick={savePromo}>{promoEditingId ? 'Save Promo' : 'Create Promo'}</button>
-          {promoEditingId && <button onClick={clearPromoForm}>Cancel Edit</button>}
-        </div>
-        <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '10px', marginBottom: '14px' }}>
-          <strong>Product IDs for choice groups</strong>
-          <div style={{ maxHeight: '150px', overflowY: 'auto', marginTop: '8px' }}>
-            {products.map((product) => (
-              <div key={product.id} style={{ borderTop: '1px solid #222', padding: '5px 0' }}>
-                ID {product.id}: {product.name} / {getProductCategoryLabel(product.category)} / Stock {getProductStockQuantity(product)}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: 'grid', gap: '10px' }}>
-          {promos.length === 0 ? <p style={{ color: '#aaa' }}>No promos found.</p> : promos.map((promo) => (
-            <div key={promo.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px' }}>
-              <strong>{promo.promo_name}</strong> - £{Number(promo.promo_price || 0).toFixed(2)} - {promo.active === false ? 'Inactive' : 'Active'}
-              <p style={{ color: '#aaa', margin: '6px 0' }}>{promo.promo_description || 'No description'}</p>
-              <p style={{ margin: '6px 0' }}>{Number(promo.included_minutes || 0)} mins / {formatStatus(promo.minute_type || 'any')} / {formatStatus(promo.bed_type || 'any')}</p>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button onClick={() => editPromo(promo)}>Edit</button>
-                <button onClick={async () => {
-                  await supabase.from('Promos').update({ active: promo.active === false }).eq('id', promo.id)
-                  await getPromos()
-                }}>{promo.active === false ? 'Activate' : 'Deactivate'}</button>
-                <button onClick={() => deletePromo(promo)}>Delete</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     )
   }
 
@@ -8358,7 +7891,6 @@ function App() {
       {showManagerView && renderStaffManagementPanel()}
       {showManagerView && renderMaintenancePanel()}
       {showManagerView && renderProductsManagementPanel()}
-      {showManagerView && renderPromosPanel()}
       {showManagerView && renderCorrectionsPanel()}
       {showManagerView && renderWixBookingSyncPanel()}
       {showManagerView && renderReceiptHistoryPanel()}
@@ -8490,7 +8022,6 @@ function App() {
                 {renderBookingMinutesControl()}
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
                 {renderBookingCheckoutActionRow()}
-                {renderBookingPromoSection()}
                 {renderTopUpSection()}
                 {renderBookingProductsSection()}
                 {renderSunbedCheckoutSummary()}
@@ -8516,7 +8047,6 @@ function App() {
                 {renderBookingMinutesControl()}
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
                 {renderBookingCheckoutActionRow()}
-                {renderBookingPromoSection()}
                 {renderTopUpSection()}
                 {renderBookingProductsSection()}
                 {renderSunbedCheckoutSummary()}
