@@ -1790,13 +1790,11 @@ function App() {
     }))
   }
 
-  function showSaleReceipt({ customerName, customerEmail = '', packageName = '', minutes = 0, products = [], method, totalPaid, cashAmount = 0 }) {
+  function showSaleReceipt({ customerName, packageName = '', minutes = 0, products = [], method, totalPaid, cashAmount = 0 }) {
     const paid = Number(totalPaid || 0)
     const cash = method === 'cash' ? Number(cashAmount || 0) : 0
-    const savedCustomer = customers.find((customer) => String(customer.name || '').trim().toLowerCase() === String(customerName || '').trim().toLowerCase())
     setSaleReceipt({
       customerName,
-      customerEmail: customerEmail || savedCustomer?.email || '',
       packageName,
       minutes: Number(minutes || 0),
       products,
@@ -1860,42 +1858,6 @@ function App() {
 
   function printReceipt() {
     window.print()
-  }
-
-  function emailSaleReceipt() {
-    if (!saleReceipt) return
-
-    const savedCustomer = customers.find((customer) => String(customer.name || '').trim().toLowerCase() === String(saleReceipt.customerName || '').trim().toLowerCase())
-    const customerEmail = saleReceipt.customerEmail || savedCustomer?.email || ''
-
-    if (!customerEmail) {
-      alert('Customer does not have an email address saved.')
-      return
-    }
-
-    const productsText = saleReceipt.products.length === 0
-      ? 'No products purchased.'
-      : saleReceipt.products.map((item) => `${item.product_name || item.name || 'Product'} x ${item.quantity || 1} - GBP ${Number(item.total_amount || item.total || 0).toFixed(2)}`).join('\n')
-
-    const body = [
-      'Glow Tanning',
-      'Receipt',
-      '',
-      `Date/time: ${new Date(saleReceipt.dateTime).toLocaleString('en-GB')}`,
-      `Staff: ${saleReceipt.staffName || ''}`,
-      `Customer: ${saleReceipt.customerName || ''}`,
-      '',
-      `Minutes/Package: ${saleReceipt.packageName || 'Minutes sale'}${saleReceipt.minutes ? ` - ${saleReceipt.minutes} mins` : ''}`,
-      `Products:\n${productsText}`,
-      `Payment method: ${formatStatus(saleReceipt.paymentMethod)}`,
-      `Total paid: GBP ${Number(saleReceipt.totalPaid || 0).toFixed(2)}`,
-      `Cash received: GBP ${Number(saleReceipt.cashReceived || 0).toFixed(2)}`,
-      `Change given: GBP ${Number(saleReceipt.changeGiven || 0).toFixed(2)}`,
-      '',
-      'Thank you for visiting Glow Tanning.'
-    ].join('\n')
-
-    window.location.href = `mailto:${encodeURIComponent(customerEmail)}?subject=${encodeURIComponent('Glow Tanning Receipt')}&body=${encodeURIComponent(body)}`
   }
 
   function addProductToCart(product) {
@@ -7786,7 +7748,6 @@ function App() {
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
             <button onClick={printReceipt}>Print Receipt</button>
-            <button onClick={emailSaleReceipt}>Email Receipt</button>
             <button onClick={() => setSaleReceipt(null)}>Close</button>
           </div>
         </div>
