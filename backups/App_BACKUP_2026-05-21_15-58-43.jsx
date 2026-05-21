@@ -42,12 +42,17 @@ const SPRAY_TAN_STATUSES = [
 
 const STAFF_SCHEDULE_TYPES = [
   { value: 'shift', label: 'Shift' },
+  { value: 'spray_tan_available', label: 'Spray Tan Available' },
   { value: 'holiday', label: 'Holiday' },
-  { value: 'spray_tan_available', label: 'Spray Tan Available' }
+  { value: 'time_off', label: 'Time Off' },
+  { value: 'shop_closed', label: 'Shop Closed' },
+  { value: 'training', label: 'Training' },
+  { value: 'other', label: 'Other' }
 ]
 
 const STAFF_SERVICE_TYPES = [
   { value: 'general', label: 'General' },
+  { value: 'sunbeds', label: 'Sunbeds' },
   { value: 'spraytan', label: 'Spray Tan' }
 ]
 
@@ -276,17 +281,6 @@ function App() {
   const [posCashReceived, setPosCashReceived] = useState('')
   const [productName, setProductName] = useState('')
   const [productCategory, setProductCategory] = useState('sachets')
-  const [productCategories, setProductCategories] = useState(() => {
-    try {
-      const savedCategories = localStorage.getItem('glow_product_categories')
-      const parsedCategories = savedCategories ? JSON.parse(savedCategories) : null
-      if (Array.isArray(parsedCategories) && parsedCategories.length > 0) return parsedCategories
-    } catch {
-      // Keep default categories if browser storage is unavailable.
-    }
-    return PRODUCT_CATEGORIES
-  })
-  const [newProductCategoryName, setNewProductCategoryName] = useState('')
   const [productPrice, setProductPrice] = useState('')
   const [productStockQuantity, setProductStockQuantity] = useState('')
   const [productIsActive, setProductIsActive] = useState(true)
@@ -351,30 +345,6 @@ function App() {
   useEffect(() => {
     autoCompleteFinishedSessions()
   }, [currentTime, bookings])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('glow_product_categories', JSON.stringify(productCategories))
-    } catch {
-      // Category persistence is a browser convenience; product rows remain saved in Supabase.
-    }
-  }, [productCategories])
-
-  useEffect(() => {
-    const discoveredCategories = products
-      .map((product) => product.category)
-      .filter(Boolean)
-      .map((category) => ({ value: String(category), label: formatStatus(category) }))
-
-    if (discoveredCategories.length === 0) return
-
-    setProductCategories((current) => {
-      const knownValues = new Set(current.map((category) => category.value))
-      const missingCategories = discoveredCategories.filter((category) => !knownValues.has(category.value))
-      if (missingCategories.length === 0) return current
-      return [...current, ...missingCategories]
-    })
-  }, [products])
 
   useEffect(() => {
     getDailyTakings()
@@ -470,11 +440,6 @@ function App() {
 
   function getStaffServiceTypeLabel(type) {
     return STAFF_SERVICE_TYPES.find((item) => item.value === type)?.label || formatStatus(type)
-  }
-
-  function formatStaffScheduleTime(time) {
-    if (!time) return '--:--'
-    return String(time).slice(0, 5)
   }
 
   function getCustomerWarningLevel(customer) {
@@ -837,8 +802,8 @@ function App() {
     setStaffScheduleEditingId(String(entry.id))
     setStaffScheduleStaffId(entry.staff_id ? String(entry.staff_id) : '')
     setStaffScheduleDate(entry.schedule_date || selectedDate)
-    setStaffScheduleStartTime(formatStaffScheduleTime(entry.start_time) === '--:--' ? '09:00' : formatStaffScheduleTime(entry.start_time))
-    setStaffScheduleEndTime(formatStaffScheduleTime(entry.end_time) === '--:--' ? '17:00' : formatStaffScheduleTime(entry.end_time))
+    setStaffScheduleStartTime(entry.start_time || '09:00')
+    setStaffScheduleEndTime(entry.end_time || '17:00')
     setStaffScheduleAllDay(String(entry.start_time || '').slice(0, 5) === '00:00' && String(entry.end_time || '').slice(0, 5) === '23:59')
     setStaffScheduleType(entry.schedule_type || 'shift')
     setStaffScheduleServiceType(entry.service_type || 'general')
@@ -920,12 +885,17 @@ function App() {
       return
     }
 
+    if (!isManager && staffScheduleType === 'shop_closed') {
+      alert('Only managers can add shop closures.')
+      return
+    }
+
     if (!staffScheduleDate) {
       alert('Choose a schedule date.')
       return
     }
 
-    if (!staffScheduleStaffId) {
+    if (staffScheduleType !== 'shop_closed' && !staffScheduleStaffId) {
       alert('Choose a staff member for this schedule entry.')
       return
     }
@@ -933,8 +903,8 @@ function App() {
     const selectedMember = staff.find((member) => String(member.id) === String(staffScheduleStaffId)) || currentStaff
     const approvalStatus = isManager ? staffScheduleApprovalStatus || 'approved' : 'pending'
     const payload = {
-      staff_id: Number(selectedMember?.id),
-      staff_name: selectedMember?.name || '',
+      staff_id: staffScheduleType === 'shop_closed' ? null : Number(selectedMember?.id),
+      staff_name: staffScheduleType === 'shop_closed' ? 'Shop Closed' : selectedMember?.name || '',
       schedule_date: staffScheduleDate,
       start_time: staffScheduleAllDay ? '00:00' : staffScheduleStartTime || null,
       end_time: staffScheduleAllDay ? '23:59' : staffScheduleEndTime || null,
@@ -996,7 +966,7 @@ function App() {
       approval_status: approvalStatus,
       approved_by: approvalStatus === 'approved' ? manager?.name || null : null,
       approved_at: approvalStatus === 'approved' ? new Date().toISOString() : null,
-      is_available: approvalStatus === 'approved' ? entry.schedule_type !== 'holiday' : false
+      is_available: approvalStatus === 'approved' ? !['holiday', 'time_off', 'shop_closed'].includes(entry.schedule_type) : false
     }
 
     const { error } = await supabase.from('StaffSchedule').update(updates).eq('id', entry.id)
@@ -1554,58 +1524,15 @@ function App() {
   }
 
   function getProductCategoryLabel(category) {
-    return productCategories.find((item) => item.value === category)?.label || formatStatus(category || 'other')
+    return PRODUCT_CATEGORIES.find((item) => item.value === category)?.label || formatStatus(category || 'other')
   }
 
   function normalizeProductCategory(category) {
     const value = category || 'other'
-    if (productCategories.some((item) => item.value === value)) return value
+    if (PRODUCT_CATEGORIES.some((item) => item.value === value)) return value
     if (['lip_balm', 'shots', 'other_accessories'].includes(value)) return 'other'
     if (value === 'tanning_lotion') return 'tanning_lotions'
     return 'other'
-  }
-
-  function makeProductCategoryValue(label) {
-    return String(label || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '') || 'other'
-  }
-
-  function addProductCategory() {
-    const label = newProductCategoryName.trim()
-    if (!label) {
-      alert('Enter a category name.')
-      return
-    }
-
-    const value = makeProductCategoryValue(label)
-    if (productCategories.some((category) => category.value === value)) {
-      alert('That category already exists.')
-      return
-    }
-
-    setProductCategories((current) => [...current, { value, label }])
-    setNewProductCategoryName('')
-  }
-
-  function deleteProductCategory(category) {
-    const assignedProducts = products.filter((product) => normalizeProductCategory(product.category) === category.value || product.category === category.value)
-    if (assignedProducts.length > 0) {
-      alert('This category is assigned to products. Reassign those products before deleting it.')
-      return
-    }
-
-    const confirmed = window.confirm(`Delete product category "${category.label}"?`)
-    if (!confirmed) return
-
-    setProductCategories((current) => {
-      const nextCategories = current.filter((item) => item.value !== category.value)
-      if (productCategory === category.value) setProductCategory(nextCategories[0]?.value || 'other')
-      if (bookingProductCategoryFilter === category.value) setBookingProductCategoryFilter('')
-      return nextCategories.length > 0 ? nextCategories : PRODUCT_CATEGORIES
-    })
   }
 
   function getProductStockQuantity(product) {
@@ -6193,7 +6120,7 @@ function App() {
                 style={{ width: '100%', minWidth: 0, padding: '10px', boxSizing: 'border-box' }}
               >
                 <option value="">All categories</option>
-                {productCategories.map((category) => (
+                {PRODUCT_CATEGORIES.map((category) => (
                   <option key={category.value} value={category.value}>{category.label}</option>
                 ))}
               </select>
@@ -7533,7 +7460,7 @@ function App() {
           </div>
         </div>
         <p style={{ margin: '4px 0', color: 'rgba(255,255,255,0.9)', fontSize: '12px' }}>
-          {formatStaffScheduleTime(entry.start_time)} - {formatStaffScheduleTime(entry.end_time)} - {getStaffScheduleTypeLabel(entry.schedule_type)} - {getStaffServiceTypeLabel(entry.service_type)}
+          {entry.start_time || '--:--'} - {entry.end_time || '--:--'} - {getStaffScheduleTypeLabel(entry.schedule_type)} - {getStaffServiceTypeLabel(entry.service_type)}
         </p>
         {entry.notes && <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.76)', fontSize: '11px' }}>{entry.notes}</p>}
         {(approval === 'pending' || canEditEntry) && (
@@ -7563,7 +7490,7 @@ function App() {
           {!isManager && <p style={{ color: '#ffcc66', marginTop: 0 }}>Staff requests save as pending until a manager approves them.</p>}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-            <select value={staffScheduleStaffId} onChange={(e) => setStaffScheduleStaffId(e.target.value)} style={{ padding: '10px' }}>
+            <select value={staffScheduleStaffId} onChange={(e) => setStaffScheduleStaffId(e.target.value)} disabled={staffScheduleType === 'shop_closed'} style={{ padding: '10px' }}>
               <option value="">Staff member</option>
               {staff.filter((member) => member.is_active !== false).map((member) => (
                 <option key={member.id} value={member.id}>{member.name}</option>
@@ -7585,7 +7512,7 @@ function App() {
               </>
             )}
             <select value={staffScheduleType} onChange={(e) => setStaffScheduleType(e.target.value)} style={{ padding: '10px' }}>
-              {STAFF_SCHEDULE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+              {STAFF_SCHEDULE_TYPES.filter((type) => isManager || type.value !== 'shop_closed').map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
             <select value={staffScheduleServiceType} onChange={(e) => setStaffScheduleServiceType(e.target.value)} style={{ padding: '10px' }}>
               {STAFF_SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
@@ -7682,6 +7609,19 @@ function App() {
                 })}
               </Fragment>
             ))}
+            {filteredEntries.filter((entry) => entry.schedule_type === 'shop_closed').length > 0 && (
+              <>
+                <div style={{ background: '#fffdf7', border: '1px solid rgba(122, 94, 45, 0.2)', borderRadius: '10px', padding: '10px', fontWeight: 'bold', color: '#1c1710' }}>Shop</div>
+                {weekDates.map((date) => {
+                  const dayEntries = filteredEntries.filter((entry) => entry.schedule_type === 'shop_closed' && entry.schedule_date === date)
+                  return (
+                    <div key={`shop-${date}`} style={{ background: '#fffdf8', border: '1px solid rgba(122, 94, 45, 0.16)', borderRadius: '10px', padding: '8px', minHeight: '74px' }}>
+                      {dayEntries.length === 0 ? <p style={{ color: '#666', margin: 0 }}>No entries</p> : dayEntries.map((entry) => renderStaffScheduleEntry(entry, isManager))}
+                    </div>
+                  )
+                })}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -7791,46 +7731,10 @@ function App() {
       <>
         {productLoadError && <p style={{ color: '#ff7875' }}>{productLoadError}</p>}
 
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '15px' }}>
-          <h3 style={{ marginTop: 0 }}>Product Categories</h3>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px' }}>
-            <input
-              placeholder="New category"
-              value={newProductCategoryName}
-              onChange={(e) => setNewProductCategoryName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') addProductCategory()
-              }}
-              style={{ flex: '1 1 220px', padding: '10px' }}
-            />
-            <button type="button" onClick={addProductCategory}>Add Category</button>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {productCategories.map((category) => {
-              const assignedCount = products.filter((product) => normalizeProductCategory(product.category) === category.value || product.category === category.value).length
-              return (
-                <span key={category.value} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', border: '1px solid rgba(212,168,83,0.35)', background: '#111', color: '#f3e6c3', padding: '7px 9px', borderRadius: '8px' }}>
-                  {category.label}
-                  {assignedCount > 0 && <small style={{ color: '#aaa' }}>{assignedCount}</small>}
-                  <button
-                    type="button"
-                    onClick={() => deleteProductCategory(category)}
-                    title={assignedCount > 0 ? 'Reassign products before deleting' : 'Delete category'}
-                    style={{ width: '18px', height: '18px', minWidth: '18px', padding: 0, borderRadius: '50%', border: '1px solid rgba(212,168,83,0.3)', background: '#080808', color: assignedCount > 0 ? '#777' : '#d4a853', boxShadow: 'none', lineHeight: '14px' }}
-                  >
-                    x
-                  </button>
-                </span>
-              )
-            })}
-          </div>
-          <p style={{ color: '#aaa', margin: '10px 0 0', fontSize: '13px' }}>Categories in use cannot be deleted until those products are reassigned.</p>
-        </div>
-
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '15px' }}>
           <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
           <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} style={{ padding: '10px' }}>
-            {productCategories.map((category) => (
+            {PRODUCT_CATEGORIES.map((category) => (
               <option key={category.value} value={category.value}>{category.label}</option>
             ))}
           </select>
@@ -7898,7 +7802,7 @@ function App() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
                 <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
                 <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} style={{ padding: '10px' }}>
-                  {productCategories.map((category) => (
+                  {PRODUCT_CATEGORIES.map((category) => (
                     <option key={category.value} value={category.value}>{category.label}</option>
                   ))}
                 </select>
