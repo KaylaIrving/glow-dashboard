@@ -304,13 +304,12 @@ function App() {
   const [promoValidFrom, setPromoValidFrom] = useState('')
   const [promoValidTo, setPromoValidTo] = useState('')
   const [promoIncludedMinutes, setPromoIncludedMinutes] = useState('')
+  const [promoMinuteType, setPromoMinuteType] = useState('any')
   const [promoBedType, setPromoBedType] = useState('any')
   const [promoChoiceGroupsText, setPromoChoiceGroupsText] = useState('[]')
   const [promoStaffNotes, setPromoStaffNotes] = useState('')
-  const [promoMinutesExpiryDays, setPromoMinutesExpiryDays] = useState('')
   const [selectedPromoId, setSelectedPromoId] = useState('')
   const [promoProductChoices, setPromoProductChoices] = useState({})
-  const [promoMinuteExpiryDisabled, setPromoMinuteExpiryDisabled] = useState(false)
 
   const [saleReceipt, setSaleReceipt] = useState(null)
   const [newCustomerTermsAccepted, setNewCustomerTermsAccepted] = useState(false)
@@ -352,11 +351,6 @@ function App() {
   useEffect(() => {
     autoCompleteFinishedSessions()
   }, [currentTime, bookings])
-
-  useEffect(() => {
-    const selectedCustomer = customers.find((customer) => customer.id === Number(selectedCustomerId || selectedManagerCustomerId))
-    if (selectedCustomer) removeExpiredPromoMinutesForCustomers([selectedCustomer])
-  }, [selectedCustomerId, selectedManagerCustomerId])
 
   useEffect(() => {
     try {
@@ -468,12 +462,6 @@ function App() {
       date.setDate(start.getDate() + index)
       return formatLocalDate(date)
     })
-  }
-
-  function moveSelectedWeek(direction) {
-    const date = new Date(`${selectedDate}T00:00:00`)
-    date.setDate(date.getDate() + direction * 7)
-    setSelectedDate(formatLocalDate(date))
   }
 
   function getStaffScheduleTypeLabel(type) {
@@ -606,18 +594,19 @@ function App() {
       return
     }
 
-    let customerRows = data || []
-    const shopTestCustomer = customerRows.find((customer) => isShopTestCustomer(customer))
+    const shopTestCustomer = (data || []).find((customer) => isShopTestCustomer(customer))
     if (!shopTestCustomer) {
       const ensuredShopTestCustomer = await ensureShopTestCustomer()
       if (ensuredShopTestCustomer) {
-        customerRows = [...customerRows, ensuredShopTestCustomer].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+        const customersWithShopTest = [...(data || []), ensuredShopTestCustomer].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+        clearDataLoadWarning()
+        setCustomers(customersWithShopTest)
+        return
       }
     }
 
-    customerRows = await removeExpiredPromoMinutesForCustomers(customerRows)
     clearDataLoadWarning()
-    setCustomers(customerRows)
+    setCustomers(data || [])
   }
 
   async function ensureShopTestCustomer() {
@@ -1675,7 +1664,7 @@ function App() {
   function getPromoProductChoiceErrors() {
     const promo = getSelectedPromo()
     if (!promo) return []
-    const errors = getPromoChoiceGroups(promo).flatMap((group, groupIndex) => {
+    return getPromoChoiceGroups(promo).flatMap((group, groupIndex) => {
       const selectedIds = promoProductChoices[groupIndex] || []
       const requiredQuantity = Number(group.required_quantity || 1)
       if (selectedIds.length < requiredQuantity) return [`Choose ${requiredQuantity} item(s) for ${group.group_name || `Group ${groupIndex + 1}`}.`]
@@ -1686,15 +1675,6 @@ function App() {
         return []
       })
     })
-    const selectedCounts = Object.values(promoProductChoices).flat().reduce((totals, productId) => {
-      totals.set(String(productId), Number(totals.get(String(productId)) || 0) + 1)
-      return totals
-    }, new Map())
-    for (const [productId, quantity] of selectedCounts.entries()) {
-      const product = products.find((entry) => String(entry.id) === String(productId))
-      if (product && quantity > getProductStockQuantity(product)) errors.push(`${product.name} only has ${getProductStockQuantity(product)} in stock.`)
-    }
-    return errors
   }
 
   function getProductStockStatus(product) {
@@ -1919,21 +1899,16 @@ function App() {
   async function recordProductSales({ paymentMethodForSale, customer = null, cartItems = productCart, sourceType = 'product_sale' }) {
     if (cartItems.length === 0) return true
 
-    const quantityByProductId = cartItems.reduce((totals, item) => {
-      const key = String(item.product_id)
-      totals.set(key, Number(totals.get(key) || 0) + Number(item.quantity || 0))
-      return totals
-    }, new Map())
-
-    for (const [productId, quantity] of quantityByProductId.entries()) {
-      const product = products.find((entry) => String(entry.id) === String(productId))
+    for (const item of cartItems) {
+      const product = products.find((entry) => entry.id === item.product_id)
+      const quantity = Number(item.quantity || 0)
       const stock = getProductStockQuantity(product)
       if (stock <= 0) {
-        alert(`${product?.name || 'This product'} is out of stock and cannot be sold.`)
+        alert(`${item.product_name} is out of stock and cannot be sold.`)
         return false
       }
       if (quantity > stock) {
-        alert(`${product?.name || 'This product'} only has ${stock} in stock.`)
+        alert(`${item.product_name} only has ${stock} in stock.`)
         return false
       }
     }
@@ -1972,13 +1947,11 @@ function App() {
       return false
     }
 
-    const remainingStockByProductId = new Map(products.map((product) => [String(product.id), getProductStockQuantity(product)]))
     for (const item of cartItems) {
-      const product = products.find((entry) => String(entry.id) === String(item.product_id))
-      const stock = Number(remainingStockByProductId.get(String(item.product_id)) || 0)
+      const product = products.find((entry) => entry.id === item.product_id)
+      const stock = getProductStockQuantity(product)
       const quantity = Number(item.quantity || 0)
       const nextStock = Math.max(0, stock - quantity)
-      remainingStockByProductId.set(String(item.product_id), nextStock)
       await supabase.from('Products').update({ stock_quantity: nextStock }).eq('id', item.product_id)
       await createStockMovement({
         product,
@@ -2930,25 +2903,18 @@ function App() {
         if (!promoProductsSaved) return false
       }
 
-      const promoMinutes = Number(summary.promo.included_minutes || 0)
-      const promoMinuteType = getPromoMinuteType(summary.promo)
-      const oldStandardBalance = Number(customer.standard_minutes_balance || 0)
-      const oldHybridBalance = Number(customer.hybrid_minutes_balance || 0)
-      const newStandardBalance = promoMinuteType === 'standard' ? oldStandardBalance + promoMinutes : oldStandardBalance
-      const newHybridBalance = promoMinuteType === 'hybrid' ? oldHybridBalance + promoMinutes : oldHybridBalance
-
-      const { data: promoPayment, error: promoPaymentError } = await supabase.from('Payments').insert({
+      const { error: promoPaymentError } = await supabase.from('Payments').insert({
         customer_id: customer.id,
         customer_name: customer.name,
         bed_type: `Promo - ${summary.promo.bed_type || 'any'} bed`,
-        minutes_added: promoMinutes,
+        minutes_added: Number(summary.promo.included_minutes || 0),
         price_per_minute: 0,
         total_amount: summary.promoTotal,
         payment_method: paymentMethod,
         package_type: 'promo',
         package_name: summary.promo.promo_name,
         notes: paymentNotes || summary.promo.staff_notes || null
-      }).select().single()
+      })
 
       if (promoPaymentError) {
         alert('Promo payment was not saved. Please check the connection and try again.')
@@ -2957,48 +2923,9 @@ function App() {
         return false
       }
 
-      if (promoMinutes > 0) {
-        const { error: promoBalanceError } = await supabase.from('Customers').update({
-          standard_minutes_balance: newStandardBalance,
-          hybrid_minutes_balance: newHybridBalance
-        }).eq('id', customer.id)
-
-        if (promoBalanceError) {
-          alert('Promo payment saved, but promo minutes were not added. Please check the connection before continuing.')
-          showDataLoadWarning('A promo minute balance update failed. Please check the connection.', promoBalanceError)
-          console.log(promoBalanceError)
-          return false
-        }
-
-        await createCustomerLog(customer, 'Promo minutes added', `${summary.promo.promo_name}: ${promoMinutes} ${promoMinuteType} mins added. Standard ${oldStandardBalance} -> ${newStandardBalance}. Hybrid ${oldHybridBalance} -> ${newHybridBalance}.`)
-        await logCustomerMinuteChanges(
-          customer,
-          oldStandardBalance,
-          newStandardBalance,
-          oldHybridBalance,
-          newHybridBalance,
-          'added',
-          `${summary.promo.promo_name}. Promo checkout payment ${formatStatus(paymentMethod)}. Total paid £${summary.promoTotal.toFixed(2)}.`
-        )
-        await recordPromoMinuteExpiry({
-          customer,
-          promo: summary.promo,
-          minutesAmount: promoMinutes,
-          minuteType: promoMinuteType,
-          sourceId: promoPayment?.id || null
-        })
-
-        nextCustomer = {
-          ...nextCustomer,
-          standard_minutes_balance: newStandardBalance,
-          hybrid_minutes_balance: newHybridBalance
-        }
-        setCustomers((prevCustomers) => prevCustomers.map((c) => c.id === customer.id ? nextCustomer : c))
-      }
-
       receiptItems = [
         ...receiptItems,
-        { name: summary.promo.promo_name, quantity: 1, minutes: promoMinutes, total: summary.promoTotal },
+        { name: summary.promo.promo_name, quantity: 1, minutes: Number(summary.promo.included_minutes || 0), total: summary.promoTotal },
         ...promoItems.map((item) => ({ name: `${item.promo_group}: ${item.product_name}`, quantity: item.quantity, unit_price: 0, total: 0 }))
       ]
       receiptType = 'promo_sale'
@@ -3021,13 +2948,12 @@ function App() {
     if (summary.hasTopUp) {
       const isHybridTopUp = summary.purchase.type === 'hybrid'
       const pricePerMinute = Number(summary.purchase.pricePerMinute)
-      const balanceCustomer = nextCustomer || customer
       const newStandardBalance = isHybridTopUp
-        ? Number(balanceCustomer.standard_minutes_balance || 0)
-        : Number(balanceCustomer.standard_minutes_balance || 0) + summary.topUpMinutesToAdd
+        ? Number(customer.standard_minutes_balance || 0)
+        : Number(customer.standard_minutes_balance || 0) + summary.topUpMinutesToAdd
       const newHybridBalance = isHybridTopUp
-        ? Number(balanceCustomer.hybrid_minutes_balance || 0) + summary.topUpMinutesToAdd
-        : Number(balanceCustomer.hybrid_minutes_balance || 0)
+        ? Number(customer.hybrid_minutes_balance || 0) + summary.topUpMinutesToAdd
+        : Number(customer.hybrid_minutes_balance || 0)
 
       const { error: paymentError } = await supabase.from('Payments').insert({
         customer_id: customer.id,
@@ -3064,16 +2990,16 @@ function App() {
       await createCustomerLog(customer, 'Top up added', `${summary.purchase.name}: ${summary.topUpMinutesToAdd} mins added during booking checkout. Standard ${customer.standard_minutes_balance || 0} → ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} → ${newHybridBalance}. Total paid £${summary.topUpTotal.toFixed(2)}.`)
       await logCustomerMinuteChanges(
         customer,
-        Number(balanceCustomer.standard_minutes_balance || 0),
+        Number(customer.standard_minutes_balance || 0),
         newStandardBalance,
-        Number(balanceCustomer.hybrid_minutes_balance || 0),
+        Number(customer.hybrid_minutes_balance || 0),
         newHybridBalance,
         'added',
         `${summary.purchase.name}. Booking checkout payment ${formatStatus(paymentMethod)}. Total paid £${summary.topUpTotal.toFixed(2)}.`
       )
 
       nextCustomer = {
-        ...balanceCustomer,
+        ...customer,
         standard_minutes_balance: newStandardBalance,
         hybrid_minutes_balance: newHybridBalance
       }
@@ -4233,8 +4159,6 @@ function App() {
       'used',
       `Booking ${booking.id || ''}: ${sessionMinutes} mins used on ${getBedName(booking.bed_id)}.`
     )
-    await consumePromoMinuteExpiries(customer, 'standard', standardBalance - newStandardBalance)
-    await consumePromoMinuteExpiries(customer, 'hybrid', hybridBalance - newHybridBalance)
     await getCustomers()
     return true
   }
@@ -5021,135 +4945,6 @@ function App() {
         .toLowerCase()
       return searchable.includes(query)
     })
-  }
-
-  function getPromoMinuteType(promoOrBedType) {
-    const bedType = typeof promoOrBedType === 'string' ? promoOrBedType : promoOrBedType?.bed_type
-    return bedType === 'standard' ? 'standard' : 'hybrid'
-  }
-
-  function getPromoExpiryDate(days) {
-    const expiryDays = Number(days || 0)
-    if (expiryDays <= 0) return null
-    const expiryDate = new Date()
-    expiryDate.setDate(expiryDate.getDate() + expiryDays)
-    return formatLocalDate(expiryDate)
-  }
-
-  async function recordPromoMinuteExpiry({ customer, promo, minutesAmount, minuteType, sourceId = null }) {
-    const expiryDate = getPromoExpiryDate(promo?.minutes_expiry_days)
-    const minutes = Number(minutesAmount || 0)
-    if (!customer || !promo || minutes <= 0 || !expiryDate || promoMinuteExpiryDisabled) return
-
-    const { error } = await supabase.from('CustomerMinuteExpiries').insert({
-      customer_id: customer.id,
-      customer_name: customer.name,
-      minute_type: minuteType,
-      minutes_amount: minutes,
-      minutes_remaining: minutes,
-      source_type: 'promo',
-      source_id: sourceId,
-      expiry_date: expiryDate,
-      expired: false,
-      notes: `${promo.promo_name || 'Promo'} minutes expire ${expiryDate}.`
-    })
-
-    if (error) {
-      setPromoMinuteExpiryDisabled(true)
-      console.log('Promo minute expiry allocation skipped:', error)
-    }
-  }
-
-  async function consumePromoMinuteExpiries(customer, minuteType, minutesUsed) {
-    const amountToUse = Number(minutesUsed || 0)
-    if (!customer || amountToUse <= 0 || promoMinuteExpiryDisabled) return
-
-    const { data, error } = await supabase
-      .from('CustomerMinuteExpiries')
-      .select('*')
-      .eq('customer_id', customer.id)
-      .eq('minute_type', minuteType)
-      .eq('expired', false)
-      .gt('minutes_remaining', 0)
-      .order('expiry_date', { ascending: true })
-
-    if (error) {
-      setPromoMinuteExpiryDisabled(true)
-      console.log('Promo minute expiry consume skipped:', error)
-      return
-    }
-
-    let remainingToUse = amountToUse
-    for (const allocation of data || []) {
-      if (remainingToUse <= 0) break
-      const currentRemaining = Number(allocation.minutes_remaining || 0)
-      const usedFromAllocation = Math.min(currentRemaining, remainingToUse)
-      remainingToUse -= usedFromAllocation
-      await supabase.from('CustomerMinuteExpiries').update({
-        minutes_remaining: Number((currentRemaining - usedFromAllocation).toFixed(2))
-      }).eq('id', allocation.id)
-    }
-  }
-
-  async function removeExpiredPromoMinutesForCustomers(customerRows = customers) {
-    if (promoMinuteExpiryDisabled) return customerRows
-    const today = formatLocalDate(new Date())
-    const { data, error } = await supabase
-      .from('CustomerMinuteExpiries')
-      .select('*')
-      .eq('expired', false)
-      .lte('expiry_date', today)
-      .gt('minutes_remaining', 0)
-
-    if (error) {
-      setPromoMinuteExpiryDisabled(true)
-      console.log('Promo minute expiry check skipped:', error)
-      return customerRows
-    }
-
-    if (!data || data.length === 0) return customerRows
-
-    const customersById = new Map(customerRows.map((customer) => [Number(customer.id), { ...customer }]))
-
-    for (const allocation of data) {
-      const customer = customersById.get(Number(allocation.customer_id))
-      if (!customer) continue
-
-      const minuteType = allocation.minute_type === 'standard' ? 'standard' : 'hybrid'
-      const balanceField = minuteType === 'standard' ? 'standard_minutes_balance' : 'hybrid_minutes_balance'
-      const balanceBefore = Number(customer[balanceField] || 0)
-      const minutesToRemove = Math.min(balanceBefore, Number(allocation.minutes_remaining || 0))
-      const balanceAfter = Number((balanceBefore - minutesToRemove).toFixed(2))
-
-      const { error: customerError } = await supabase.from('Customers').update({ [balanceField]: balanceAfter }).eq('id', customer.id)
-      if (customerError) {
-        console.log('Expired promo minute removal skipped:', customerError)
-        continue
-      }
-
-      await supabase.from('CustomerMinuteExpiries').update({
-        minutes_remaining: 0,
-        expired: true,
-        expired_at: new Date().toISOString()
-      }).eq('id', allocation.id)
-
-      if (minutesToRemove > 0) {
-        await createCustomerMinuteTransaction({
-          customer,
-          minuteType,
-          transactionType: 'adjusted',
-          minutesChanged: -minutesToRemove,
-          balanceBefore,
-          balanceAfter,
-          notes: `Expired promo minutes removed. Expiry date ${allocation.expiry_date}.`
-        })
-        await createCustomerLog(customer, 'Promo minutes expired', `${minutesToRemove} ${minuteType} mins expired on ${allocation.expiry_date}. Balance ${balanceBefore} -> ${balanceAfter}.`)
-      }
-
-      customersById.set(Number(customer.id), { ...customer, [balanceField]: balanceAfter })
-    }
-
-    return customerRows.map((customer) => customersById.get(Number(customer.id)) || customer)
   }
 
   async function createCustomerLog(customer, action, details) {
@@ -6109,10 +5904,10 @@ function App() {
     setPromoValidFrom('')
     setPromoValidTo('')
     setPromoIncludedMinutes('')
+    setPromoMinuteType('any')
     setPromoBedType('any')
     setPromoChoiceGroupsText('[]')
     setPromoStaffNotes('')
-    setPromoMinutesExpiryDays('')
   }
 
   function editPromo(promo) {
@@ -6124,10 +5919,10 @@ function App() {
     setPromoValidFrom(promo.valid_from || '')
     setPromoValidTo(promo.valid_to || '')
     setPromoIncludedMinutes(promo.included_minutes ?? '')
+    setPromoMinuteType(promo.minute_type || 'any')
     setPromoBedType(promo.bed_type || 'any')
     setPromoChoiceGroupsText(JSON.stringify(getPromoChoiceGroups(promo), null, 2))
     setPromoStaffNotes(promo.staff_notes || '')
-    setPromoMinutesExpiryDays(promo.minutes_expiry_days ?? '')
   }
 
   async function savePromo() {
@@ -6153,11 +5948,10 @@ function App() {
       valid_from: promoValidFrom || null,
       valid_to: promoValidTo || null,
       included_minutes: Number(promoIncludedMinutes || 0),
-      minute_type: getPromoMinuteType(promoBedType),
+      minute_type: promoMinuteType,
       bed_type: promoBedType,
       product_choice_groups: groups,
-      staff_notes: promoStaffNotes || null,
-      minutes_expiry_days: promoMinutesExpiryDays === '' ? null : Number(promoMinutesExpiryDays || 0)
+      staff_notes: promoStaffNotes || null
     }
     const request = promoEditingId ? supabase.from('Promos').update(payload).eq('id', promoEditingId) : supabase.from('Promos').insert(payload)
     const { error } = await request
@@ -6501,7 +6295,7 @@ function App() {
           <div style={{ marginTop: '10px' }}>
             {promo.promo_description && <p style={{ color: '#aaa', marginTop: 0 }}>{promo.promo_description}</p>}
             <p style={{ margin: '6px 0' }}>
-              Includes <strong>{Number(promo.included_minutes || 0)} mins</strong> / {formatStatus(promo.bed_type || 'any')} bed{promo.minutes_expiry_days ? ` / expires after ${promo.minutes_expiry_days} days` : ''}.
+              Includes <strong>{Number(promo.included_minutes || 0)} mins</strong> / {formatStatus(promo.minute_type || 'any')} minutes / {formatStatus(promo.bed_type || 'any')} bed.
             </p>
             {getPromoChoiceGroups(promo).map((group, groupIndex) => {
               const allowedIds = group.allowed_product_ids || []
@@ -6592,15 +6386,12 @@ function App() {
 
     const summary = getSunbedCheckoutSummary(selectedCustomer)
     const changeDue = Math.max(0, Number(cashReceived || 0) - summary.grandTotal)
-    const promoItems = getPromoSelectedCartItems()
 
     return (
       <div style={{ background: '#0b0b0b', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid rgba(212,168,83,0.45)' }}>
         <h3 style={{ marginTop: 0 }}>Payment Summary</h3>
         <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
           <p style={{ margin: 0 }}>Selected tanning session: <strong>{Number(selectedMinutes || 0)} mins</strong></p>
-          {summary.hasPromo && <p style={{ margin: 0 }}>Included minutes: <strong>{Number(summary.promo.included_minutes || 0)} mins</strong></p>}
-          {promoItems.length > 0 && <p style={{ margin: 0 }}>Included promo products: <strong>{promoItems.map((item) => `${item.product_name} x${item.quantity}`).join(', ')}</strong></p>}
           {summary.hasPromo && <p style={{ margin: 0 }}>Offer / Promo: <strong>{summary.promo.promo_name}</strong> - £{summary.promoTotal.toFixed(2)}</p>}
           <p style={{ margin: 0 }}>Top-up minutes cost: <strong>£{summary.topUpTotal.toFixed(2)}</strong></p>
           <p style={{ margin: 0 }}>Products total: <strong>£{summary.productsTotal.toFixed(2)}</strong></p>
@@ -7862,15 +7653,7 @@ function App() {
           </select>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
-          <h3 style={{ color: '#1c1710', margin: 0 }}>Weekly View</h3>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button type="button" onClick={() => moveSelectedWeek(-1)}>Previous Week</button>
-            <strong style={{ color: '#6b4b17' }}>{new Date(`${weekDates[0]}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} - {new Date(`${weekDates[6]}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
-            <button type="button" onClick={() => setSelectedDate(formatLocalDate(new Date()))}>Current Week</button>
-            <button type="button" onClick={() => moveSelectedWeek(1)}>Next Week</button>
-          </div>
-        </div>
+        <h3 style={{ color: '#1c1710' }}>Weekly View</h3>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ minWidth: '980px', display: 'grid', gridTemplateColumns: '160px repeat(7, minmax(120px, 1fr))', gap: '8px' }}>
             <div style={{ color: '#6b4b17', fontWeight: 'bold' }}>Staff</div>
@@ -8210,12 +7993,16 @@ function App() {
           <input type="date" value={promoValidFrom} onChange={(e) => setPromoValidFrom(e.target.value)} style={{ padding: '10px' }} />
           <input type="date" value={promoValidTo} onChange={(e) => setPromoValidTo(e.target.value)} style={{ padding: '10px' }} />
           <input type="number" placeholder="Included minutes" value={promoIncludedMinutes} onChange={(e) => setPromoIncludedMinutes(e.target.value)} style={{ padding: '10px' }} />
+          <select value={promoMinuteType} onChange={(e) => setPromoMinuteType(e.target.value)} style={{ padding: '10px' }}>
+            <option value="any">Any minutes</option>
+            <option value="standard">Standard</option>
+            <option value="hybrid">Hybrid</option>
+          </select>
           <select value={promoBedType} onChange={(e) => setPromoBedType(e.target.value)} style={{ padding: '10px' }}>
             <option value="any">Any bed</option>
             <option value="standard">Standard bed</option>
             <option value="hybrid">Hybrid bed</option>
           </select>
-          <input type="number" min="0" step="1" placeholder="Minutes expiry days" value={promoMinutesExpiryDays} onChange={(e) => setPromoMinutesExpiryDays(e.target.value)} style={{ padding: '10px' }} />
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <input type="checkbox" checked={promoActive} onChange={(e) => setPromoActive(e.target.checked)} />
             Active
@@ -8243,7 +8030,7 @@ function App() {
             <div key={promo.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px' }}>
               <strong>{promo.promo_name}</strong> - £{Number(promo.promo_price || 0).toFixed(2)} - {promo.active === false ? 'Inactive' : 'Active'}
               <p style={{ color: '#aaa', margin: '6px 0' }}>{promo.promo_description || 'No description'}</p>
-              <p style={{ margin: '6px 0' }}>{Number(promo.included_minutes || 0)} mins / {formatStatus(promo.bed_type || 'any')} bed / expires {promo.minutes_expiry_days ? `${promo.minutes_expiry_days} days` : 'never'}</p>
+              <p style={{ margin: '6px 0' }}>{Number(promo.included_minutes || 0)} mins / {formatStatus(promo.minute_type || 'any')} / {formatStatus(promo.bed_type || 'any')}</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button onClick={() => editPromo(promo)}>Edit</button>
                 <button onClick={async () => {
