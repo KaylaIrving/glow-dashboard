@@ -34,7 +34,6 @@ const SPRAY_TAN_COLUMNS = [
 const SPRAY_TAN_STATUSES = [
   'Pending Approval',
   'Approved',
-  'Deposit Not Paid',
   'Deposit Pending',
   'Deposit Paid',
   'Completed',
@@ -123,10 +122,7 @@ function App() {
   const [sprayTanNotes, setSprayTanNotes] = useState('')
   const [sprayTanDepositRequired, setSprayTanDepositRequired] = useState(15)
   const [sprayTanDepositPaid, setSprayTanDepositPaid] = useState('')
-  const [sprayTanDepositPaymentMethod, setSprayTanDepositPaymentMethod] = useState('card')
-  const [sprayTanDepositStatus, setSprayTanDepositStatus] = useState('not_paid')
-  const [sprayTanBalancePaymentAmount, setSprayTanBalancePaymentAmount] = useState('')
-  const [sprayTanBalancePaymentMethod, setSprayTanBalancePaymentMethod] = useState('card')
+  const [sprayTanDepositStatus, setSprayTanDepositStatus] = useState('pending')
   const [sprayTanPatchCompleted, setSprayTanPatchCompleted] = useState(false)
   const [sprayTanPatchTestDate, setSprayTanPatchTestDate] = useState('')
   const [sprayTanApprovalStatus, setSprayTanApprovalStatus] = useState('pending')
@@ -235,7 +231,6 @@ function App() {
   const [floatMovementType, setFloatMovementType] = useState('added')
   const [floatMovementAmount, setFloatMovementAmount] = useState('')
   const [floatMovementNote, setFloatMovementNote] = useState('')
-  const [floatMovementStaffId, setFloatMovementStaffId] = useState('')
   const [floatMovementEditingId, setFloatMovementEditingId] = useState('')
   const [floatMovementSaving, setFloatMovementSaving] = useState(false)
   const [showCashUpLockConfirm, setShowCashUpLockConfirm] = useState(false)
@@ -1074,7 +1069,6 @@ function App() {
     if (error) {
       setCashUpLoadError(error.message || 'Could not load CashUps table.')
       showDataLoadWarning('Cash-up record could not be loaded. Please check the connection.', error)
-      console.error('Cash-up load failed:', { table: 'CashUps', date: dateOverride, error })
       setCashUpExistingRecord(null)
       return
     }
@@ -1097,8 +1091,6 @@ function App() {
 
     if (error) {
       setFloatMovementLoadError(error.message || 'Could not load FloatMovements table.')
-      showDataLoadWarning('Float movements could not be loaded. Please check the connection.', error)
-      console.error('Float movements load failed:', { table: 'FloatMovements', date: dateOverride, error })
       setFloatMovements([])
       return
     }
@@ -2413,7 +2405,6 @@ function App() {
     setFloatMovementType('added')
     setFloatMovementAmount('')
     setFloatMovementNote('')
-    setFloatMovementStaffId('')
     setFloatMovementEditingId('')
   }
 
@@ -2422,13 +2413,6 @@ function App() {
     setFloatMovementType(movement.type || 'added')
     setFloatMovementAmount(movement.amount ?? '')
     setFloatMovementNote(movement.note || '')
-    const movementStaff = staff.find((member) => String(member.id) === String(movement.staff_id)) || staff.find((member) => String(member.name || '').trim().toLowerCase() === String(movement.staff_name || '').trim().toLowerCase())
-    setFloatMovementStaffId(movementStaff?.id ? String(movementStaff.id) : '')
-  }
-
-  function getSelectedFloatMovementStaff() {
-    if (floatMovementStaffId) return staff.find((member) => String(member.id) === String(floatMovementStaffId)) || null
-    return getCurrentStaffUser()
   }
 
   async function saveFloatMovement() {
@@ -2456,7 +2440,7 @@ function App() {
       return
     }
 
-    const staffUser = getSelectedFloatMovementStaff()
+    const staffUser = getCurrentStaffUser()
     const payload = {
       date: selectedDate,
       type: floatMovementType,
@@ -2466,32 +2450,24 @@ function App() {
       staff_name: staffUser?.name || null
     }
 
-    try {
-      setFloatMovementSaving(true)
-      const request = floatMovementEditingId
-        ? supabase.from('FloatMovements').update(payload).eq('id', floatMovementEditingId)
-        : supabase.from('FloatMovements').insert(payload)
+    setFloatMovementSaving(true)
+    const request = floatMovementEditingId
+      ? supabase.from('FloatMovements').update(payload).eq('id', floatMovementEditingId)
+      : supabase.from('FloatMovements').insert(payload)
 
-      const { error } = await request
+    const { error } = await request
+    setFloatMovementSaving(false)
 
-      if (error) {
-        alert('Float movement was not saved. Please check the FloatMovements table and connection.')
-        setFloatMovementLoadError(error.message || 'Float movement save failed.')
-        showDataLoadWarning('Float movement failed to save. Please check the connection.', error)
-        console.error('Float movement save failed:', { table: 'FloatMovements', payload, error })
-        return
-      }
-
-      clearFloatMovementForm()
-      await getFloatMovements()
-      alert('Float movement saved.')
-    } catch (error) {
-      alert('Float movement was not saved. Please check the connection.')
+    if (error) {
+      alert('Float movement was not saved. Please check the FloatMovements table and connection.')
       setFloatMovementLoadError(error.message || 'Float movement save failed.')
-      console.error('Float movement save threw:', error)
-    } finally {
-      setFloatMovementSaving(false)
+      console.log(error)
+      return
     }
+
+    clearFloatMovementForm()
+    await getFloatMovements()
+    alert('Float movement saved.')
   }
 
   async function deleteFloatMovement(movement) {
@@ -2527,6 +2503,8 @@ function App() {
       return
     }
 
+    setCashFloatSaving(true)
+
     const staffUser = getCurrentStaffUser()
     const existingActualCash = Number(cashUpExistingRecord?.actual_cash || 0)
     const summary = getDailyTakingsSummary()
@@ -2543,29 +2521,22 @@ function App() {
       cash_up_locked: Boolean(cashUpExistingRecord?.cash_up_locked)
     }
 
-    try {
-      setCashFloatSaving(true)
-      const request = cashUpExistingRecord?.id
-        ? supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
-        : supabase.from('CashUps').insert(payload)
+    const request = cashUpExistingRecord?.id
+      ? supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
+      : supabase.from('CashUps').insert(payload)
 
-      const { error } = await request
+    const { error } = await request
+    setCashFloatSaving(false)
 
-      if (error) {
-        alert('Start-of-day cash float was not saved. Please check the connection and try again.')
-        showDataLoadWarning('Start-of-day cash float failed to save. Please check the connection.', error)
-        console.error('Start day float save failed:', { table: 'CashUps', payload, existingId: cashUpExistingRecord?.id, error })
-        return
-      }
-
-      await getCashUpForSelectedDate()
-      alert('Start-of-day cash float saved.')
-    } catch (error) {
+    if (error) {
       alert('Start-of-day cash float was not saved. Please check the connection and try again.')
-      console.error('Start day float save threw:', error)
-    } finally {
-      setCashFloatSaving(false)
+      showDataLoadWarning('Start-of-day cash float failed to save. Please check the connection.', error)
+      console.log(error)
+      return
     }
+
+    await getCashUpForSelectedDate()
+    alert('Start-of-day cash float saved.')
   }
 
   function getCashUpCompletionValues() {
@@ -2618,6 +2589,8 @@ function App() {
 
     const { summary, startFloat, actualCash, variance, signOffName } = values
 
+    setCashUpCompleting(true)
+
     const now = new Date().toISOString()
     const payload = {
       cashup_date: selectedDate,
@@ -2632,30 +2605,24 @@ function App() {
       cash_up_locked_at: now
     }
 
-    try {
-      setCashUpCompleting(true)
-      const request = cashUpExistingRecord?.id
-        ? supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
-        : supabase.from('CashUps').insert(payload)
+    const request = cashUpExistingRecord?.id
+      ? supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
+      : supabase.from('CashUps').insert(payload)
 
-      const { error } = await request
+    const { error } = await request
 
-      if (error) {
-        alert('Cash-up was not saved. Please check the connection and try again.')
-        showDataLoadWarning('Cash-up failed to save. Please check the connection.', error)
-        console.error('Cash-up save failed:', { table: 'CashUps', payload, existingId: cashUpExistingRecord?.id, error })
-        return
-      }
+    setCashUpCompleting(false)
 
-      setShowCashUpLockConfirm(false)
-      await getCashUpForSelectedDate()
-      alert('End-of-day cash-up completed and locked.')
-    } catch (error) {
+    if (error) {
       alert('Cash-up was not saved. Please check the connection and try again.')
-      console.error('Cash-up save threw:', error)
-    } finally {
-      setCashUpCompleting(false)
+      showDataLoadWarning('Cash-up failed to save. Please check the connection.', error)
+      console.log(error)
+      return
     }
+
+    setShowCashUpLockConfirm(false)
+    await getCashUpForSelectedDate()
+    alert('End-of-day cash-up completed and locked.')
   }
 
   async function setCashUpLock(locked) {
@@ -3398,51 +3365,7 @@ function App() {
 
   function getSprayTanDepositStatus(serviceName, required, paid) {
     if (serviceName === 'Patch Test' || Number(required || 0) <= 0) return 'not_required'
-    if (Number(paid || 0) <= 0) return 'not_paid'
     return Number(paid || 0) >= Number(required || 0) ? 'paid' : 'pending'
-  }
-
-  function addMonthsToDate(dateValue, months) {
-    const date = new Date(dateValue)
-    if (Number.isNaN(date.getTime())) return null
-    date.setMonth(date.getMonth() + months)
-    return date
-  }
-
-  function getPatchExpiryWarning(customer) {
-    if (!customer?.patch_test_expiry_date) return ''
-    const expiry = new Date(`${customer.patch_test_expiry_date}T00:00:00`)
-    if (Number.isNaN(expiry.getTime())) return ''
-    const today = new Date()
-    const oneMonthFromNow = new Date()
-    oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1)
-    if (expiry < today) return `Patch test expired on ${expiry.toLocaleDateString('en-GB')}.`
-    if (expiry <= oneMonthFromNow) return `Patch test expires soon on ${expiry.toLocaleDateString('en-GB')}.`
-    return ''
-  }
-
-  async function recordSprayTanPayment({ bookingId = null, customer = null, customerName = '', amount = 0, paymentMethod = 'card', paymentType = 'spray_tan_payment', notes = '' }) {
-    const totalAmount = Number(amount || 0)
-    if (totalAmount <= 0) return true
-    const { error } = await supabase.from('Payments').insert({
-      customer_id: customer?.id || null,
-      customer_name: customer?.name || customerName || 'Spray tan customer',
-      bed_type: 'Spray Tan',
-      minutes_added: 0,
-      price_per_minute: 0,
-      total_amount: Number(totalAmount.toFixed(2)),
-      payment_method: paymentMethod,
-      package_type: paymentType,
-      package_name: formatStatus(paymentType),
-      notes
-    })
-    if (error) {
-      alert('Spray tan payment was not saved. Please check the Payments table and connection.')
-      showDataLoadWarning('Spray tan payment failed to save.', error)
-      console.error('Spray tan payment save failed:', { table: 'Payments', bookingId, customer, amount: totalAmount, paymentMethod, paymentType, notes, error })
-      return false
-    }
-    return true
   }
 
   function getLatestCustomerPatchTestDate(customerId) {
@@ -3466,8 +3389,6 @@ function App() {
 
   function getPatchTestWarning(customer, appointmentDateTime, serviceName) {
     if (!customer || serviceName === 'Patch Test') return ''
-    const expiryWarning = getPatchExpiryWarning(customer)
-    if (expiryWarning) return expiryWarning
     const latestPatchTestDate = getLatestCustomerPatchTestDate(customer.id)
     if (!latestPatchTestDate) return 'No patch test recorded for this customer.'
     const hoursBeforeAppointment = (appointmentDateTime - latestPatchTestDate) / (60 * 60 * 1000)
@@ -3480,7 +3401,6 @@ function App() {
     if (status === 'completed') return 'Completed'
     if (status === 'cancelled' || status === 'canceled') return 'Cancelled'
     if (String(booking?.approval_status || '').toLowerCase() === 'pending') return 'Pending Approval'
-    if (String(booking?.deposit_status || '').toLowerCase() === 'not_paid') return 'Deposit Not Paid'
     if (String(booking?.deposit_status || '').toLowerCase() === 'paid') return 'Deposit Paid'
     if (Number(booking?.deposit_required || 0) > Number(booking?.deposit_paid || 0)) return 'Deposit Pending'
     return 'Approved'
@@ -3490,7 +3410,6 @@ function App() {
     const colours = {
       'Pending Approval': '#8a6420',
       Approved: '#3d5368',
-      'Deposit Not Paid': '#7a3f2b',
       'Deposit Pending': '#b56a22',
       'Deposit Paid': '#2f7a4b',
       Completed: '#2f7a4b',
@@ -3510,8 +3429,7 @@ function App() {
 
   function getSprayTanStatusFields(statusLabel, depositStatus = sprayTanDepositStatus) {
     if (statusLabel === 'Pending Approval') return { status: 'booked', approval_status: 'pending', deposit_status: depositStatus || 'pending' }
-    if (statusLabel === 'Approved') return { status: 'booked', approval_status: 'approved', deposit_status: depositStatus || 'not_paid' }
-    if (statusLabel === 'Deposit Not Paid') return { status: 'booked', approval_status: 'approved', deposit_status: 'not_paid' }
+    if (statusLabel === 'Approved') return { status: 'booked', approval_status: 'approved', deposit_status: 'not_required' }
     if (statusLabel === 'Deposit Pending') return { status: 'booked', approval_status: 'approved', deposit_status: 'pending' }
     if (statusLabel === 'Deposit Paid') return { status: 'booked', approval_status: 'approved', deposit_status: 'paid' }
     if (statusLabel === 'Completed') return { status: 'completed', approval_status: 'approved', deposit_status: depositStatus || 'paid' }
@@ -4920,7 +4838,7 @@ function App() {
     setSprayTanService(serviceName)
     const defaultDeposit = getDefaultSprayTanDeposit(serviceName)
     setSprayTanDepositRequired(defaultDeposit)
-    setSprayTanDepositStatus(defaultDeposit > 0 ? 'not_paid' : 'not_required')
+    setSprayTanDepositStatus(defaultDeposit > 0 ? 'pending' : 'not_required')
     if (serviceName === 'Patch Test') {
       setSprayTanColumn('patch_test')
       setSprayTanDuration(10)
@@ -4948,10 +4866,7 @@ function App() {
     setSprayTanNotes('')
     setSprayTanDepositRequired(getDefaultSprayTanDeposit(defaultService))
     setSprayTanDepositPaid(column === 'patch_test' ? 0 : '')
-    setSprayTanDepositPaymentMethod('card')
-    setSprayTanDepositStatus(column === 'patch_test' ? 'not_required' : 'not_paid')
-    setSprayTanBalancePaymentAmount('')
-    setSprayTanBalancePaymentMethod('card')
+    setSprayTanDepositStatus(column === 'patch_test' ? 'not_required' : 'pending')
     setSprayTanPatchCompleted(column === 'patch_test')
     setSprayTanPatchTestDate('')
     setSprayTanApprovalStatus('pending')
@@ -4980,10 +4895,7 @@ function App() {
     setSprayTanNotes(booking.notes || '')
     setSprayTanDepositRequired(Number(booking.deposit_required || 0))
     setSprayTanDepositPaid(Number(booking.deposit_paid || 0))
-    setSprayTanDepositPaymentMethod(booking.spraytan_deposit_payment_method || 'card')
     setSprayTanDepositStatus(booking.deposit_status || getSprayTanDepositStatus(booking.spraytan_service, booking.deposit_required, booking.deposit_paid))
-    setSprayTanBalancePaymentAmount('')
-    setSprayTanBalancePaymentMethod(booking.spraytan_balance_payment_method || 'card')
     setSprayTanPatchCompleted(Boolean(booking.patch_test_completed))
     setSprayTanPatchTestDate(booking.patch_test_date ? formatLocalDate(new Date(booking.patch_test_date)) : '')
     setSprayTanApprovalStatus(booking.approval_status || 'approved')
@@ -5009,10 +4921,7 @@ function App() {
     setSprayTanNotes('')
     setSprayTanDepositRequired(15)
     setSprayTanDepositPaid('')
-    setSprayTanDepositPaymentMethod('card')
-    setSprayTanDepositStatus('not_paid')
-    setSprayTanBalancePaymentAmount('')
-    setSprayTanBalancePaymentMethod('card')
+    setSprayTanDepositStatus('pending')
     setSprayTanPatchCompleted(false)
     setSprayTanPatchTestDate('')
     setSprayTanApprovalStatus('pending')
@@ -5054,11 +4963,10 @@ function App() {
     }
 
     const servicePrice = getSprayTanServicePrice(sprayTanService)
-    const depositRequired = getDefaultSprayTanDeposit(sprayTanService)
+    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || getDefaultSprayTanDeposit(sprayTanService))
     const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
     const balanceDue = Math.max(0, servicePrice - depositPaid)
-    const calculatedDepositStatus = getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid)
-    const statusFields = getSprayTanStatusFields(sprayTanStatusControl, calculatedDepositStatus)
+    const statusFields = getSprayTanStatusFields(sprayTanStatusControl, sprayTanDepositStatus || getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid))
     const patchWarning = getPatchTestWarning(customer, appointmentDateTime, sprayTanService)
 
     if (depositPaid > servicePrice) {
@@ -5087,10 +4995,6 @@ function App() {
       deposit_required: depositRequired,
       deposit_paid: depositPaid,
       deposit_status: statusFields.deposit_status,
-      spraytan_deposit_payment_method: depositPaid > 0 ? sprayTanDepositPaymentMethod : null,
-      spraytan_balance_paid: 0,
-      spraytan_balance_payment_method: null,
-      spraytan_balance_paid_at: null,
       patch_test_required: sprayTanService !== 'Patch Test',
       patch_test_completed: sprayTanService === 'Patch Test' ? true : sprayTanPatchCompleted,
       patch_test_date: sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || null,
@@ -5113,33 +5017,20 @@ function App() {
     if (sprayTanService === 'Patch Test' || sprayTanPatchCompleted) {
       const patchDate = sprayTanService === 'Patch Test'
         ? appointmentDateTime.toISOString()
-        : sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || new Date().toISOString()
-      const patchExpiry = addMonthsToDate(patchDate, 12)
-      await supabase.from('Customers').update({
-        last_patch_test_date: patchDate,
-        patch_test_expiry_date: patchExpiry ? formatLocalDate(patchExpiry) : null
-      }).eq('id', customer.id)
+        : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || new Date().toISOString()
+      await supabase.from('Customers').update({ last_patch_test_date: patchDate }).eq('id', customer.id)
       await createCustomerLog(customer, 'Patch test recorded', `Patch test recorded from spray tan booking. Date: ${new Date(patchDate).toLocaleString('en-GB')}.`)
     }
 
     await createCustomerLog(customer, 'Spray tan booking created', `${sprayTanService} booked for ${appointmentDateTime.toLocaleString('en-GB')}. Deposit required £${depositRequired.toFixed(2)}, paid £${depositPaid.toFixed(2)}.`)
     if (depositPaid > 0) {
-      const paymentSaved = await recordSprayTanPayment({
-        bookingId: data?.id,
-        customer,
-        amount: depositPaid,
-        paymentMethod: sprayTanDepositPaymentMethod,
-        paymentType: 'spray_tan_deposit',
-        notes: `Deposit recorded for spray tan booking ${data?.id || ''}.`
-      })
-      if (!paymentSaved) return
       await createReceipt({
         customer,
         receiptType: 'spray_tan_deposit',
         items: [{ name: sprayTanService, quantity: 1, total: depositPaid }],
         subtotal: depositPaid,
         total: depositPaid,
-        paymentMethod: sprayTanDepositPaymentMethod,
+        paymentMethod: 'not_recorded',
         notes: `Deposit recorded for spray tan booking ${data?.id || ''}.`
       })
     }
@@ -5165,22 +5056,14 @@ function App() {
 
     const servicePrice = getSprayTanServicePrice(sprayTanService)
     const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
-    const depositRequired = getDefaultSprayTanDeposit(sprayTanService)
-    const previousBalancePaid = Number(sprayTanEditingBooking.spraytan_balance_paid || 0)
-    const balancePaymentAmount = Number(sprayTanBalancePaymentAmount || 0)
-    const newBalancePaid = previousBalancePaid + balancePaymentAmount
+    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || getDefaultSprayTanDeposit(sprayTanService))
     if (depositPaid > servicePrice) {
       alert('Deposit paid cannot be more than the service price.')
       return
     }
-    if (balancePaymentAmount < 0 || depositPaid + newBalancePaid > servicePrice) {
-      alert('Balance payment cannot be negative or more than the balance due.')
-      return
-    }
 
     const statusFields = getSprayTanStatusFields(sprayTanStatusControl, sprayTanDepositStatus)
-    const balanceDue = Math.max(0, servicePrice - depositPaid - newBalancePaid)
-    const nextDepositStatus = balanceDue <= 0 && servicePrice > 0 ? 'paid' : statusFields.deposit_status
+    const balanceDue = Math.max(0, servicePrice - depositPaid)
     const patchDate = sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : null
     const customerName = sprayTanCustomerName.trim() || customerSearch.trim() || sprayTanEditingBooking.customer_name || 'Spray tan customer'
 
@@ -5194,11 +5077,7 @@ function App() {
       spraytan_duration_minutes: Number(sprayTanDuration || 0),
       deposit_required: depositRequired,
       deposit_paid: depositPaid,
-      deposit_status: nextDepositStatus,
-      spraytan_deposit_payment_method: depositPaid > 0 ? sprayTanDepositPaymentMethod : null,
-      spraytan_balance_paid: Number(newBalancePaid.toFixed(2)),
-      spraytan_balance_payment_method: balancePaymentAmount > 0 ? sprayTanBalancePaymentMethod : sprayTanEditingBooking.spraytan_balance_payment_method || null,
-      spraytan_balance_paid_at: balancePaymentAmount > 0 ? new Date().toISOString() : sprayTanEditingBooking.spraytan_balance_paid_at || null,
+      deposit_status: statusFields.deposit_status,
       approval_status: statusFields.approval_status,
       approved_by: statusFields.approval_status === 'approved' && sprayTanEditingBooking.approval_status !== 'approved' ? getCurrentStaffUser()?.name || null : sprayTanEditingBooking.approved_by || null,
       approved_at: statusFields.approval_status === 'approved' && sprayTanEditingBooking.approval_status !== 'approved' ? new Date().toISOString() : sprayTanEditingBooking.approved_at || null,
@@ -5221,28 +5100,13 @@ function App() {
     if ((sprayTanService === 'Patch Test' || sprayTanPatchCompleted) && sprayTanEditingBooking.customer_id) {
       const customerPatchDate = sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : patchDate
       if (customerPatchDate) {
-        const patchExpiry = addMonthsToDate(customerPatchDate, 12)
-        await supabase.from('Customers').update({
-          last_patch_test_date: customerPatchDate,
-          patch_test_expiry_date: patchExpiry ? formatLocalDate(patchExpiry) : null
-        }).eq('id', sprayTanEditingBooking.customer_id)
+        await supabase.from('Customers').update({ last_patch_test_date: customerPatchDate }).eq('id', sprayTanEditingBooking.customer_id)
       }
     }
 
     const previousDepositPaid = Number(sprayTanEditingBooking.deposit_paid || 0)
     const depositIncrease = depositPaid - previousDepositPaid
     if (depositIncrease > 0) {
-      const paymentMethodForIncrease = previousDepositPaid >= depositRequired ? sprayTanBalancePaymentMethod : sprayTanDepositPaymentMethod
-      const paymentSaved = await recordSprayTanPayment({
-        bookingId: sprayTanEditingBooking.id,
-        customer: sprayTanEditingBooking.customer_id ? { id: sprayTanEditingBooking.customer_id, name: customerName } : null,
-        customerName,
-        amount: depositIncrease,
-        paymentMethod: paymentMethodForIncrease,
-        paymentType: previousDepositPaid >= depositRequired ? 'spray_tan_balance_payment' : 'spray_tan_deposit',
-        notes: `Additional payment recorded for spray tan booking ${sprayTanEditingBooking.id}.`
-      })
-      if (!paymentSaved) return
       await createReceipt({
         customer: sprayTanEditingBooking.customer_id ? { id: sprayTanEditingBooking.customer_id, name: customerName } : null,
         customerName,
@@ -5250,31 +5114,8 @@ function App() {
         items: [{ name: sprayTanService, quantity: 1, total: depositIncrease }],
         subtotal: depositIncrease,
         total: depositIncrease,
-        paymentMethod: paymentMethodForIncrease,
+        paymentMethod: 'not_recorded',
         notes: `Additional payment recorded for spray tan booking ${sprayTanEditingBooking.id}.`
-      })
-    }
-
-    if (balancePaymentAmount > 0) {
-      const paymentSaved = await recordSprayTanPayment({
-        bookingId: sprayTanEditingBooking.id,
-        customer: sprayTanEditingBooking.customer_id ? { id: sprayTanEditingBooking.customer_id, name: customerName } : null,
-        customerName,
-        amount: balancePaymentAmount,
-        paymentMethod: sprayTanBalancePaymentMethod,
-        paymentType: 'spray_tan_balance_payment',
-        notes: `Balance payment recorded for spray tan booking ${sprayTanEditingBooking.id}.`
-      })
-      if (!paymentSaved) return
-      await createReceipt({
-        customer: sprayTanEditingBooking.customer_id ? { id: sprayTanEditingBooking.customer_id, name: customerName } : null,
-        customerName,
-        receiptType: 'spray_tan_balance_payment',
-        items: [{ name: `${sprayTanService} balance`, quantity: 1, total: balancePaymentAmount }],
-        subtotal: balancePaymentAmount,
-        total: balancePaymentAmount,
-        paymentMethod: sprayTanBalancePaymentMethod,
-        notes: `Balance payment recorded for spray tan booking ${sprayTanEditingBooking.id}.`
       })
     }
 
@@ -7804,24 +7645,13 @@ function App() {
               onChange={(e) => setFloatMovementNote(e.target.value)}
               style={{ padding: '10px' }}
             />
-            <select
-              value={floatMovementStaffId || getCurrentStaffUser()?.id || ''}
-              disabled={!canEditCashUp || (floatMovementEditingId && !showManagerView)}
-              onChange={(e) => setFloatMovementStaffId(e.target.value)}
-              style={{ padding: '10px' }}
-            >
-              <option value="">Select staff member</option>
-              {staff.filter((member) => member.is_active !== false).map((member) => (
-                <option key={member.id} value={member.id}>{member.name}</option>
-              ))}
-            </select>
             <button onClick={saveFloatMovement} disabled={floatMovementSaving || !canEditCashUp || (floatMovementEditingId && !showManagerView)}>
               {floatMovementSaving ? 'Saving...' : floatMovementEditingId ? 'Save Movement' : 'Add Float Movement'}
             </button>
             {floatMovementEditingId && <button onClick={clearFloatMovementForm}>Cancel Edit</button>}
           </div>
           <p style={{ color: '#aaa', marginBottom: '8px' }}>
-            Float movement staff: <strong>{getSelectedFloatMovementStaff()?.name || 'Not signed in'}</strong>
+            Staff: <strong>{getCurrentStaffUser()?.name || 'Not signed in'}</strong>
           </p>
           <div style={{ maxHeight: '190px', overflowY: 'auto', border: '1px solid #333', borderRadius: '10px' }}>
             {floatMovements.length === 0 ? (
@@ -8486,15 +8316,6 @@ function App() {
             <p>Tube target: <strong>{getBedTargetHours(bed)} hours</strong></p>
             <p>Hours remaining: <strong>{getBedHoursRemaining(bed).toFixed(2)}</strong></p>
             <p>Last tube change: {bed.last_tube_change_date ? new Date(bed.last_tube_change_date).toLocaleDateString('en-GB') : 'Not recorded'}</p>
-            <label style={{ display: 'grid', gap: '5px', color: '#ddd', marginBottom: '8px' }}>
-              Last tube change date
-              <input
-                type="date"
-                defaultValue={bed.last_tube_change_date || ''}
-                onBlur={(e) => updateBedMaintenance(bed.id, { last_tube_change_date: e.target.value || null })}
-                style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-              />
-            </label>
             <textarea defaultValue={bed.maintenance_notes || ''} placeholder="Maintenance notes" onBlur={(e) => updateBedMaintenance(bed.id, { maintenance_notes: e.target.value })} style={{ width: '100%', minHeight: '70px', padding: '10px', background: '#0b0b0b', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box' }} />
             <input type="number" defaultValue={getBedTargetHours(bed)} onBlur={(e) => updateBedMaintenance(bed.id, { next_tube_change_hours: Number(e.target.value) })} style={{ width: '100%', padding: '10px', marginTop: '8px', boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
@@ -9059,11 +8880,9 @@ function App() {
     const customer = getSelectedCustomer()
     const selectedStaff = getSelectedStaffAsCustomer()
     const servicePrice = getSprayTanServicePrice(sprayTanService)
-    const depositRequired = getDefaultSprayTanDeposit(sprayTanService)
+    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || getDefaultSprayTanDeposit(sprayTanService))
     const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
-    const existingBalancePaid = Number(sprayTanEditingBooking?.spraytan_balance_paid || 0)
-    const balancePaymentAmount = Number(sprayTanBalancePaymentAmount || 0)
-    const balanceDue = Math.max(0, servicePrice - depositPaid - existingBalancePaid - balancePaymentAmount)
+    const balanceDue = Math.max(0, servicePrice - depositPaid)
     const appointmentDateTime = new Date(`${sprayTanDate}T${sprayTanTime}`)
     const patchWarning = customer ? getPatchTestWarning(customer, appointmentDateTime, sprayTanService) : ''
     const latestPatchTestDate = customer ? getLatestCustomerPatchTestDate(customer.id) : null
@@ -9112,40 +8931,15 @@ function App() {
             <div><label>Time</label><input type="time" value={sprayTanTime} onChange={(e) => setSprayTanTime(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Duration</label><input type="number" min="5" value={sprayTanDuration} onChange={(e) => setSprayTanDuration(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Artist</label><input value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} placeholder="Artist name" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit due</label><input type="number" step="0.01" value={depositRequired} disabled style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit paid</label><input type="number" step="0.01" value={depositPaid} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
-              setSprayTanDepositPaid(e.target.value)
-              setSprayTanDepositStatus(getSprayTanDepositStatus(sprayTanService, depositRequired, Number(e.target.value || 0)))
-            }} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit payment method</label>
-              <select value={sprayTanDepositPaymentMethod} onChange={(e) => setSprayTanDepositPaymentMethod(e.target.value)} disabled={sprayTanService === 'Patch Test' || depositPaid <= 0} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="bank_transfer">BACS / Bank Transfer</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
+            <div><label>Deposit required</label><input type="number" step="0.01" value={depositRequired} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanDepositRequired(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
+            <div><label>Deposit paid</label><input type="number" step="0.01" value={depositPaid} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanDepositPaid(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Deposit status</label>
               <select value={sprayTanDepositStatus} onChange={(e) => setSprayTanDepositStatus(e.target.value)} disabled={sprayTanService === 'Patch Test'} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                <option value="not_paid">Deposit Not Paid</option>
                 <option value="pending">Deposit Pending</option>
                 <option value="paid">Deposit Paid</option>
                 <option value="not_required">Not Required</option>
               </select>
             </div>
-            {sprayTanEditingBooking && (
-              <>
-                <div><label>Take Balance Payment</label><input type="number" min="0" step="0.01" value={sprayTanBalancePaymentAmount} onChange={(e) => setSprayTanBalancePaymentAmount(e.target.value)} placeholder="Amount paid now" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-                <div><label>Balance payment method</label>
-                  <select value={sprayTanBalancePaymentMethod} onChange={(e) => setSprayTanBalancePaymentMethod(e.target.value)} disabled={Number(sprayTanBalancePaymentAmount || 0) <= 0} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="bank_transfer">BACS / Bank Transfer</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-              </>
-            )}
             <div><label>Booking status</label>
               <select
                 value={sprayTanStatusControl}
@@ -9161,12 +8955,11 @@ function App() {
                 {SPRAY_TAN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
               </select>
             </div>
-            <div><label>Patch test date due / completed</label><input type="date" value={sprayTanPatchTestDate} onChange={(e) => setSprayTanPatchTestDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
+            <div><label>Patch test date</label><input type="date" value={sprayTanPatchTestDate} onChange={(e) => setSprayTanPatchTestDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
           </div>
 
           <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
             <p style={{ margin: '0 0 6px' }}>Service price: <strong>£{servicePrice.toFixed(2)}</strong></p>
-            <p style={{ margin: '0 0 6px' }}>Balance already paid: <strong>£{existingBalancePaid.toFixed(2)}</strong></p>
             <p style={{ margin: '0 0 6px' }}>Balance due: <strong>£{balanceDue.toFixed(2)}</strong></p>
             <p style={{ margin: 0 }}>Deposit status: <strong>{formatStatus(sprayTanDepositStatus || getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid))}</strong></p>
           </div>
