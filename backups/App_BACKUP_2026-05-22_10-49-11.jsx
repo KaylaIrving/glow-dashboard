@@ -211,7 +211,6 @@ function App() {
   const [managerCorrectionMoneyAmount, setManagerCorrectionMoneyAmount] = useState('')
   const [managerCorrectionPaymentMethod, setManagerCorrectionPaymentMethod] = useState('card')
   const [managerCorrectionReason, setManagerCorrectionReason] = useState('')
-  const [managerCorrectionCustomerSearch, setManagerCorrectionCustomerSearch] = useState('')
 
   const [dailyTakings, setDailyTakings] = useState([])
   const [dailyProductSales, setDailyProductSales] = useState([])
@@ -339,8 +338,6 @@ function App() {
   const [managerReportsData, setManagerReportsData] = useState(null)
   const [managerReportsLoading, setManagerReportsLoading] = useState(false)
   const [managerReportsError, setManagerReportsError] = useState('')
-  const [exportFromDate, setExportFromDate] = useState(formatLocalDate(new Date()))
-  const [exportToDate, setExportToDate] = useState(formatLocalDate(new Date()))
 
   useEffect(() => {
     getBeds()
@@ -2347,7 +2344,6 @@ function App() {
     }
 
     setManagerCorrectionCustomerId('')
-    setManagerCorrectionCustomerSearch('')
     setManagerCorrectionAmount('')
     setManagerCorrectionMoneyAmount('')
     setManagerCorrectionReason('')
@@ -2711,20 +2707,18 @@ function App() {
   }
 
   function exportSelectedDateTable(tableName) {
-    const fromDate = exportFromDate || selectedDate
-    const toDate = exportToDate || fromDate
-    const dayStart = new Date(`${fromDate}T00:00:00`)
-    const dayEnd = new Date(`${toDate}T23:59:59.999`)
+    const dayStart = new Date(`${selectedDate}T00:00:00`)
+    const dayEnd = new Date(`${selectedDate}T23:59:59.999`)
 
     exportTableRows({
       tableName,
-      filename: `glow_${tableName}_${fromDate}_to_${toDate}.csv`,
+      filename: `glow_${tableName}_${selectedDate}.csv`,
       queryBuilder: (query) => {
         if (tableName === 'Bookings') {
           return query.select('*').gte('appointment_time', dayStart.toISOString()).lte('appointment_time', dayEnd.toISOString()).order('appointment_time', { ascending: true })
         }
         if (tableName === 'CashUps') {
-          return query.select('*').gte('cashup_date', fromDate).lte('cashup_date', toDate).order('cashup_date', { ascending: false })
+          return query.select('*').eq('cashup_date', selectedDate)
         }
         return query.select('*').gte('created_at', dayStart.toISOString()).lte('created_at', dayEnd.toISOString()).order('created_at', { ascending: false })
       }
@@ -6292,10 +6286,6 @@ function App() {
       return
     }
 
-    const currentProduct = products.find((product) => String(product.id) === String(productEditingId))
-    const updatedProduct = { ...currentProduct, ...payload, id: productEditingId }
-    setProducts((current) => current.map((product) => String(product.id) === String(productEditingId) ? { ...product, ...payload } : product))
-    editProduct(updatedProduct)
     await getProducts()
   }
 
@@ -7332,10 +7322,6 @@ function App() {
 
   function renderCorrectionsPanel() {
     if (!showManagerView) return null
-    const correctionCustomerMatches = managerCorrectionCustomerSearch.trim()
-      ? customers.filter((customer) => String(customer.name || '').toLowerCase().includes(managerCorrectionCustomerSearch.trim().toLowerCase())).slice(0, 20)
-      : []
-    const selectedCorrectionCustomer = customers.find((customer) => String(customer.id) === String(managerCorrectionCustomerId))
 
     return renderCollapsibleSection(
       'Booking / Payment Corrections',
@@ -7347,32 +7333,6 @@ function App() {
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-          <div style={{ display: 'grid', gap: '8px' }}>
-            <input
-              placeholder="Search customer name..."
-              value={managerCorrectionCustomerSearch}
-              onChange={(e) => setManagerCorrectionCustomerSearch(e.target.value)}
-              style={{ padding: '10px' }}
-            />
-            {selectedCorrectionCustomer && <span style={{ color: '#d4a853' }}>Selected: {selectedCorrectionCustomer.name}</span>}
-            {correctionCustomerMatches.length > 0 && (
-              <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', maxHeight: '170px', overflowY: 'auto' }}>
-                {correctionCustomerMatches.map((customer) => (
-                  <button
-                    key={customer.id}
-                    type="button"
-                    onClick={() => {
-                      setManagerCorrectionCustomerId(String(customer.id))
-                      setManagerCorrectionCustomerSearch(customer.name || '')
-                    }}
-                    style={{ width: '100%', textAlign: 'left', borderRadius: 0, border: 'none', borderBottom: '1px solid #222', background: '#111', color: '#fff', boxShadow: 'none' }}
-                  >
-                    {customer.name} - Standard {customer.standard_minutes_balance || 0} / Hybrid {customer.hybrid_minutes_balance || 0}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           <select value={managerCorrectionCustomerId} onChange={(e) => setManagerCorrectionCustomerId(e.target.value)} style={{ padding: '10px' }}>
             <option value="">Select customer</option>
             {customers.map((customer) => (
@@ -7764,7 +7724,7 @@ function App() {
   function renderExportsPanel() {
     if (!showManagerView) return null
 
-    const dateLabel = `${new Date(`${exportFromDate}T00:00:00`).toLocaleDateString('en-GB')} to ${new Date(`${exportToDate || exportFromDate}T00:00:00`).toLocaleDateString('en-GB')}`
+    const dateLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')
     const exportButtonStyle = { textAlign: 'left', padding: '12px' }
 
     return renderCollapsibleSection(
@@ -7776,18 +7736,7 @@ function App() {
           Export CSV backups without changing salon data. Manager View access is required.
         </p>
 
-        <h3 style={{ marginTop: 0 }}>Selected Date Range - {dateLabel}</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
-            Export from date
-            <input type="date" value={exportFromDate} onChange={(e) => setExportFromDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
-            Export to date
-            <input type="date" value={exportToDate} onChange={(e) => setExportToDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-        </div>
-
+        <h3 style={{ marginTop: 0 }}>Selected Date — {dateLabel}</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
           <button style={exportButtonStyle} onClick={() => exportSelectedDateTable('Bookings')}>Export Bookings CSV</button>
           <button style={exportButtonStyle} onClick={() => exportSelectedDateTable('Payments')}>Export Payments CSV</button>
@@ -8397,24 +8346,21 @@ function App() {
           <p style={{ color: '#aaa', margin: '10px 0 0', fontSize: '13px' }}>Categories in use cannot be deleted until those products are reassigned.</p>
         </div>
 
-        <div style={{ background: '#10100f', border: '1px solid rgba(212,168,83,0.45)', borderRadius: '14px', padding: '14px', marginBottom: '15px' }}>
-          <h3 style={{ marginTop: 0, color: '#d4a853' }}>Add New Product</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-            <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
-            <select value={productCategory} onChange={(e) => { setProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setProductSubcategories([]) }} style={{ padding: '10px' }}>
-              {productCategories.map((category) => (
-                <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
-              ))}
-            </select>
-            {renderSubcategoryControls({ category: productCategory, selected: productSubcategories, setSelected: setProductSubcategories })}
-            <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
-            <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-              <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
-              Active
-            </label>
-            <button onClick={saveProduct}>Add Product</button>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '15px' }}>
+          <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
+          <select value={productCategory} onChange={(e) => { setProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setProductSubcategories([]) }} style={{ padding: '10px' }}>
+            {productCategories.map((category) => (
+              <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
+            ))}
+          </select>
+          {renderSubcategoryControls({ category: productCategory, selected: productSubcategories, setSelected: setProductSubcategories })}
+          <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
+          <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
+            <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
+            Active
+          </label>
+          <button onClick={saveProduct}>Add Product</button>
         </div>
 
         <button onClick={() => { if (requireStaffSignIn()) setShowStandalonePOS(true) }} style={{ marginBottom: '15px' }}>Products / POS</button>
@@ -8445,8 +8391,8 @@ function App() {
           )}
         </div>
 
-        <div style={{ background: '#14120f', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '14px', padding: '14px' }}>
-          <h3 style={{ marginTop: 0, color: '#f0d28a' }}>Manage Existing Product</h3>
+        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Manage existing product</label>
           <select
             value={selectedProductManagementId}
             onChange={(e) => selectProductForManagement(e.target.value)}
@@ -8482,7 +8428,7 @@ function App() {
                   <input type="checkbox" checked={editProductIsActive} onChange={(e) => setEditProductIsActive(e.target.checked)} />
                   Active
                 </label>
-                <button onClick={saveProductChanges} style={{ minWidth: '190px', fontSize: '13px', whiteSpace: 'normal' }}>Save Product Changes</button>
+                <button onClick={saveProductChanges}>Save Product Changes</button>
                 <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
                 <button onClick={() => deleteProduct(selectedProduct)} style={{ borderColor: 'rgba(255,120,117,0.5)', color: '#ffaaa6' }}>Delete Product</button>
               </div>
@@ -8562,14 +8508,8 @@ function App() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '10px' }}>
           <input placeholder="Promo name" value={promoName} onChange={(e) => setPromoName(e.target.value)} style={{ padding: '10px' }} />
           <input type="number" step="0.01" placeholder="Promo price" value={promoPrice} onChange={(e) => setPromoPrice(e.target.value)} style={{ padding: '10px' }} />
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
-            Offer starting
-            <input type="date" value={promoValidFrom} onChange={(e) => setPromoValidFrom(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
-            Offer finishing
-            <input type="date" value={promoValidTo} onChange={(e) => setPromoValidTo(e.target.value)} style={{ padding: '10px' }} />
-          </label>
+          <input type="date" value={promoValidFrom} onChange={(e) => setPromoValidFrom(e.target.value)} style={{ padding: '10px' }} />
+          <input type="date" value={promoValidTo} onChange={(e) => setPromoValidTo(e.target.value)} style={{ padding: '10px' }} />
           <input type="number" placeholder="Included minutes" value={promoIncludedMinutes} onChange={(e) => setPromoIncludedMinutes(e.target.value)} style={{ padding: '10px' }} />
           <select value={promoBedType} onChange={(e) => setPromoBedType(e.target.value)} style={{ padding: '10px' }}>
             <option value="any">Any bed</option>
