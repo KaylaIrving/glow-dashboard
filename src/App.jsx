@@ -47,6 +47,26 @@ const STAFF_SCHEDULE_TYPES = [
   { value: 'spray_tan_available', label: 'Spray Tan Available' }
 ]
 
+const CASH_DENOMINATIONS = [
+  { key: 'note50', label: '£50 notes', value: 50 },
+  { key: 'note20', label: '£20 notes', value: 20 },
+  { key: 'note10', label: '£10 notes', value: 10 },
+  { key: 'note5', label: '£5 notes', value: 5 },
+  { key: 'coin2', label: '£2 coins', value: 2 },
+  { key: 'coin1', label: '£1 coins', value: 1 },
+  { key: 'coin50p', label: '50p', value: 0.5 },
+  { key: 'coin20p', label: '20p', value: 0.2 },
+  { key: 'coin10p', label: '10p', value: 0.1 },
+  { key: 'coin5p', label: '5p', value: 0.05 },
+  { key: 'coin2p', label: '2p', value: 0.02 },
+  { key: 'coin1p', label: '1p', value: 0.01 }
+]
+
+const EMPTY_CASH_DENOMINATIONS = CASH_DENOMINATIONS.reduce((totals, denomination) => {
+  totals[denomination.key] = ''
+  return totals
+}, {})
+
 const PRODUCT_CATEGORIES = [
   { value: 'tanning_lotions', label: 'Tanning Lotions' },
   { value: 'sachets', label: 'Sachets' },
@@ -236,6 +256,7 @@ function App() {
   const [cashUpStartFloat, setCashUpStartFloat] = useState('')
   const [cashUpExistingRecord, setCashUpExistingRecord] = useState(null)
   const [cashUpLoadError, setCashUpLoadError] = useState('')
+  const [cashDenominations, setCashDenominations] = useState(EMPTY_CASH_DENOMINATIONS)
   const [floatMovements, setFloatMovements] = useState([])
   const [floatMovementLoadError, setFloatMovementLoadError] = useState('')
   const [floatMovementType, setFloatMovementType] = useState('added')
@@ -408,14 +429,40 @@ function App() {
   }, [selectedDate])
 
   const dailyTakingsSummary = useMemo(() => {
-    const base = { totalRevenue: 0, cardTotal: 0, cashTotal: 0, bankTransferTotal: 0, otherTotal: 0, totalMinutes: 0, paymentCount: 0, productRevenue: 0, minutesRevenue: 0 }
+    const base = {
+      totalRevenue: 0,
+      cardTotal: 0,
+      cashTotal: 0,
+      bankTransferTotal: 0,
+      otherTotal: 0,
+      totalMinutes: 0,
+      paymentCount: 0,
+      productRevenue: 0,
+      minutesRevenue: 0,
+      promoRevenue: 0,
+      sprayTanRevenue: 0,
+      sprayTanDepositRevenue: 0,
+      sprayTanBalanceRevenue: 0,
+      sunbedPackageRevenue: 0
+    }
     for (const payment of dailyTakings) {
       const amount = Number(payment.total_amount || 0)
       const minutes = Number(payment.minutes_added || 0)
+      const packageType = String(payment.package_type || '').toLowerCase()
+      const packageName = String(payment.package_name || payment.bed_type || '').toLowerCase()
       base.totalRevenue += amount
-      base.minutesRevenue += amount
       base.totalMinutes += minutes
       base.paymentCount += 1
+      if (packageType === 'promo' || packageName.includes('promo')) {
+        base.promoRevenue += amount
+      } else if (packageType.includes('spray_tan') || packageName.includes('spray tan')) {
+        base.sprayTanRevenue += amount
+        if (packageType.includes('deposit')) base.sprayTanDepositRevenue += amount
+        else if (packageType.includes('balance')) base.sprayTanBalanceRevenue += amount
+      } else {
+        base.minutesRevenue += amount
+        base.sunbedPackageRevenue += amount
+      }
       if (payment.payment_method === 'card') base.cardTotal += amount
       else if (payment.payment_method === 'cash') base.cashTotal += amount
       else if (payment.payment_method === 'bank_transfer') base.bankTransferTotal += amount
@@ -433,6 +480,12 @@ function App() {
     }
     return base
   }, [dailyTakings, dailyProductSales])
+
+  const cashDenominationTotal = useMemo(() => {
+    return CASH_DENOMINATIONS.reduce((total, denomination) => {
+      return total + (Number(cashDenominations[denomination.key] || 0) * denomination.value)
+    }, 0)
+  }, [cashDenominations])
 
   const floatMovementTotals = useMemo(() => {
     return floatMovements.reduce((totals, movement) => {
@@ -872,8 +925,7 @@ function App() {
   }
 
   function startStaffScheduleEntryForCell(member, date) {
-    const currentStaff = getCurrentStaffUser()
-    if (!currentStaff) return
+    if (!requireStaffSignIn()) return
 
     setStaffScheduleEditingId('')
     setStaffScheduleStaffId(String(member.id))
@@ -2474,6 +2526,17 @@ function App() {
     return cashUpStartFloat === '' ? 0 : Number(cashUpStartFloat || 0)
   }
 
+  function updateCashDenomination(key, value) {
+    setCashDenominations((current) => {
+      const next = { ...current, [key]: value }
+      const calculated = CASH_DENOMINATIONS.reduce((total, denomination) => {
+        return total + (Number(next[denomination.key] || 0) * denomination.value)
+      }, 0)
+      setCashUpActualCash(calculated > 0 ? calculated.toFixed(2) : '')
+      return next
+    })
+  }
+
   function isCashUpLocked() {
     return Boolean(cashUpExistingRecord?.cash_up_locked)
   }
@@ -3473,6 +3536,28 @@ function App() {
     return `${String(bookingTime.getHours()).padStart(2, '0')}:${String(bookingTime.getMinutes()).padStart(2, '0')}`
   }
 
+  function getBookingCalendarDisplayInterval(booking) {
+    if (!booking?.appointment_time) return null
+    const appointmentStart = new Date(booking.appointment_time)
+    if (Number.isNaN(appointmentStart.getTime())) return null
+    const liveEnd = booking.booking_end ? new Date(booking.booking_end) : null
+    const plannedEnd = new Date(appointmentStart.getTime() + getTotalBlockMinutes(booking) * 60000)
+    const end = liveEnd && !Number.isNaN(liveEnd.getTime()) && liveEnd > plannedEnd ? liveEnd : plannedEnd
+    return { start: appointmentStart, end }
+  }
+
+  function getCalendarDisplayStartTimeString(booking) {
+    const interval = getBookingCalendarDisplayInterval(booking)
+    if (!interval) return ''
+    return `${String(interval.start.getHours()).padStart(2, '0')}:${String(interval.start.getMinutes()).padStart(2, '0')}`
+  }
+
+  function getCalendarDisplaySlotCount(booking) {
+    const interval = getBookingCalendarDisplayInterval(booking)
+    if (!interval) return getTotalSlotCount(booking)
+    return Math.max(1, Math.ceil((interval.end - interval.start) / (SLOT_MINUTES * 60000)))
+  }
+
   function getSlotDateTime(time) {
     return new Date(`${selectedDate}T${time}`)
   }
@@ -3581,6 +3666,11 @@ function App() {
     if (expiryWarning) return expiryWarning
     const latestPatchTestDate = getLatestCustomerPatchTestDate(customer.id)
     if (!latestPatchTestDate) return 'No patch test recorded for this customer.'
+    const twelveMonthsAfterPatch = addMonthsToDate(latestPatchTestDate, 12)
+    if (twelveMonthsAfterPatch && twelveMonthsAfterPatch < new Date()) return `Patch test expired on ${twelveMonthsAfterPatch.toLocaleDateString('en-GB')}.`
+    const oneMonthFromNow = new Date()
+    oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1)
+    if (twelveMonthsAfterPatch && twelveMonthsAfterPatch <= oneMonthFromNow) return `Patch test expires soon on ${twelveMonthsAfterPatch.toLocaleDateString('en-GB')}.`
     const hoursBeforeAppointment = (appointmentDateTime - latestPatchTestDate) / (60 * 60 * 1000)
     if (hoursBeforeAppointment < 24) return 'Patch test should be at least 24 hours before a paid spray tan where possible.'
     return ''
@@ -4921,17 +5011,17 @@ function App() {
   }
 
   function getCalendarBookingStartingAt(time, bedId) {
-    return getBookingsForSelectedDate().find((booking) => getBookingStartTimeString(booking) === time && Number(booking.bed_id) === Number(bedId))
+    return getBookingsForSelectedDate().find((booking) => getCalendarDisplayStartTimeString(booking) === time && Number(booking.bed_id) === Number(bedId))
   }
 
   function isSlotCoveredByEarlierBooking(time, bedId) {
     const slotTime = getSlotDateTime(time)
     return getBookingsForSelectedDate().some((booking) => {
       if (Number(booking.bed_id) !== Number(bedId)) return false
-      if (getBookingStartTimeString(booking) === time) return false
-      const start = new Date(booking.appointment_time)
-      const end = new Date(start.getTime() + getTotalBlockMinutes(booking) * 60000)
-      return slotTime > start && slotTime < end
+      if (getCalendarDisplayStartTimeString(booking) === time) return false
+      const interval = getBookingCalendarDisplayInterval(booking)
+      if (!interval) return false
+      return slotTime > interval.start && slotTime < interval.end
     })
   }
 
@@ -5145,10 +5235,8 @@ function App() {
 
     let customer = getSelectedCustomer()
     const selectedStaff = getSelectedStaffAsCustomer()
-    if (selectedStaff) {
-      alert('Please select a customer for spray tan bookings, not a staff free-minutes account.')
-      return
-    }
+    const sprayTanStaffCustomer = selectedStaff ? { id: null, name: `${selectedStaff.name} - Staff`, phone: null, email: null } : null
+    if (sprayTanStaffCustomer) customer = sprayTanStaffCustomer
 
     if (!customer && customerSearch.trim()) {
       const shouldCreate = window.confirm(`Create new customer "${customerSearch.trim()}"?`)
@@ -5161,7 +5249,7 @@ function App() {
       return
     }
 
-    if (blockIfCustomerBanned(customer)) return
+    if (!sprayTanStaffCustomer && blockIfCustomerBanned(customer)) return
 
     const appointmentDateTime = new Date(`${sprayTanDate}T${sprayTanTime}`)
     if (Number.isNaN(appointmentDateTime.getTime())) {
@@ -5175,7 +5263,7 @@ function App() {
     const balanceDue = Math.max(0, servicePrice - depositPaid)
     const calculatedDepositStatus = getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid)
     const statusFields = getSprayTanStatusFields(sprayTanStatusControl, calculatedDepositStatus)
-    const patchWarning = getPatchTestWarning(customer, appointmentDateTime, sprayTanService)
+    const patchWarning = sprayTanStaffCustomer ? '' : getPatchTestWarning(customer, appointmentDateTime, sprayTanService)
     const assignedArtist = staff.find((member) => String(member.name || '').trim().toLowerCase() === String(sprayTanArtist || '').trim().toLowerCase())
 
     if (depositPaid > servicePrice) {
@@ -5190,7 +5278,7 @@ function App() {
 
     setSprayTanSaving(true)
     const { error, data } = await supabase.from('Bookings').insert({
-      customer_id: customer.id,
+      customer_id: sprayTanStaffCustomer ? null : customer.id,
       customer_name: customer.name,
       customer_phone: customer.phone || null,
       customer_email: customer.email || null,
@@ -5212,7 +5300,7 @@ function App() {
       spraytan_balance_paid_at: null,
       patch_test_required: sprayTanService !== 'Patch Test',
       patch_test_completed: sprayTanService === 'Patch Test' ? true : sprayTanPatchCompleted,
-      patch_test_date: sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || null,
+      patch_test_date: sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : sprayTanStaffCustomer ? null : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || null,
       approval_status: statusFields.approval_status,
       approved_by: statusFields.approval_status === 'approved' ? getCurrentStaffUser()?.name || null : null,
       approved_at: statusFields.approval_status === 'approved' ? new Date().toISOString() : null,
@@ -5230,7 +5318,7 @@ function App() {
       return
     }
 
-    if (sprayTanService === 'Patch Test' || sprayTanPatchCompleted) {
+    if (!sprayTanStaffCustomer && (sprayTanService === 'Patch Test' || sprayTanPatchCompleted)) {
       const patchDate = sprayTanService === 'Patch Test'
         ? appointmentDateTime.toISOString()
         : sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : getLatestCustomerPatchTestDate(customer.id)?.toISOString() || new Date().toISOString()
@@ -5628,7 +5716,7 @@ function App() {
   }
 
   async function createCustomerLog(customer, action, details) {
-    if (!customer) return
+    if (!customer?.id) return
     await supabase.from('CustomerLogs').insert({ customer_id: customer.id, customer_name: customer.name, action, details })
   }
 
@@ -6838,7 +6926,8 @@ function App() {
     await getProducts()
   }
 
-  function renderCustomerSearchBox() {
+  function renderCustomerSearchBox(options = {}) {
+    const isSprayTanContext = options.context === 'spraytan'
     const selectedCustomer = getSelectedCustomer()
     const selectedStaff = getSelectedStaffAsCustomer()
     const filteredOptions = getFilteredCustomerAndStaffOptions()
@@ -6951,10 +7040,19 @@ function App() {
           <div style={{ background: '#111', padding: '12px', borderRadius: '10px' }}>
             <strong>{selectedStaff.name} - Staff</strong>
             <div style={{ background: '#0b0b0b', padding: '15px', borderRadius: '10px', marginTop: '12px', border: '1px solid #333', textAlign: 'center' }}>
-              <p style={{ margin: '5px 0' }}>Weekly free balance: <strong>{selectedStaff.weekly_free_minutes_balance || 0} mins</strong></p>
-              <p style={{ marginTop: '12px', fontSize: '18px' }}>Usable on any bed: <strong>{getStaffUsableMinutes(selectedStaff)} mins</strong></p>
+              {isSprayTanContext ? (
+                <>
+                  <p style={{ margin: '5px 0', color: '#d4a853', fontWeight: 'bold' }}>Staff spray tan booking</p>
+                  <p style={{ margin: '5px 0' }}>Manager/staff can record this as free or paid with the deposit/payment fields.</p>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: '5px 0' }}>Weekly free balance: <strong>{selectedStaff.weekly_free_minutes_balance || 0} mins</strong></p>
+                  <p style={{ marginTop: '12px', fontSize: '18px' }}>Usable on any bed: <strong>{getStaffUsableMinutes(selectedStaff)} mins</strong></p>
+                </>
+              )}
             </div>
-            {!staffHasEnoughMinutes(selectedStaff, selectedMinutes) && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Not enough staff free minutes for this booking.</p>}
+            {!isSprayTanContext && !staffHasEnoughMinutes(selectedStaff, selectedMinutes) && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Not enough staff free minutes for this booking.</p>}
           </div>
         )}
       </div>
@@ -7895,6 +7993,30 @@ function App() {
           Use this when staff sell the wrong minutes, need to reverse a top-up, move minutes, or record a refund/correction. Original payment records are not deleted.
         </p>
 
+        <div style={{ display: 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0 }}>Correction Details</h3>
+            <strong style={{ color: '#d4a853' }}>Use the fields below to choose the correction customer and action.</strong>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px' }}>
+            {false && CASH_DENOMINATIONS.map((denomination) => (
+              <label key={denomination.key} style={{ display: 'grid', gap: '4px', color: '#ddd', fontSize: '13px' }}>
+                {denomination.label}
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cashDenominations[denomination.key]}
+                  disabled={!canEditCashUp}
+                  onChange={(e) => updateCashDenomination(denomination.key, e.target.value)}
+                  style={{ padding: '9px' }}
+                />
+              </label>
+            ))}
+          </div>
+          <p style={{ color: '#aaa', marginBottom: 0 }}>The counted total fills Actual cash counted automatically. Managers can still override the actual cash field if needed.</p>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
           <div style={{ display: 'grid', gap: '8px' }}>
             <input
@@ -8251,11 +8373,39 @@ function App() {
           <div style={itemStyle}><span>Card total</span><h2>£{summary.cardTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Cash total</span><h2>£{summary.cashTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Bank transfer</span><h2>£{summary.bankTransferTotal.toFixed(2)}</h2></div>
-          <div style={itemStyle}><span>Other total</span><h2>£{summary.otherTotal.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Other payment total / manual adjustments</span><h2>£{summary.otherTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Product sales</span><h2>£{summary.productRevenue.toFixed(2)}</h2></div>
-          <div style={itemStyle}><span>Minutes sales</span><h2>GBP {summary.minutesRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Sunbed minutes/package sales</span><h2>£{summary.sunbedPackageRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Promo sales</span><h2>£{summary.promoRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Spray tan sales</span><h2>£{summary.sprayTanRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Deposits</span><h2>£{summary.sprayTanDepositRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Balances</span><h2>£{summary.sprayTanBalanceRevenue.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Total revenue</span><h2>£{summary.totalRevenue.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Expected cash in till</span><h2>£{expectedCash.toFixed(2)}</h2></div>
+        </div>
+
+        <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0 }}>Cash Denomination Counter</h3>
+            <strong style={{ color: '#d4a853' }}>Counted total: £{cashDenominationTotal.toFixed(2)}</strong>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px' }}>
+            {CASH_DENOMINATIONS.map((denomination) => (
+              <label key={denomination.key} style={{ display: 'grid', gap: '4px', color: '#ddd', fontSize: '13px' }}>
+                {denomination.label}
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cashDenominations[denomination.key]}
+                  disabled={!canEditCashUp}
+                  onChange={(e) => updateCashDenomination(denomination.key, e.target.value)}
+                  style={{ padding: '9px' }}
+                />
+              </label>
+            ))}
+          </div>
+          <p style={{ color: '#aaa', marginBottom: 0 }}>The counted total fills Actual cash counted automatically. Managers can still override the actual cash field if needed.</p>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
@@ -9494,8 +9644,8 @@ function App() {
                 style={{ width: '100%', padding: '12px', marginTop: '5px', boxSizing: 'border-box' }}
               />
             </div>
-          ) : renderCustomerSearchBox()}
-          {selectedStaff && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Spray tan bookings must be linked to a customer, not a staff free-minutes account.</p>}
+          ) : renderCustomerSearchBox({ context: 'spraytan' })}
+          {selectedStaff && <p style={{ color: '#d4a853', fontWeight: 'bold' }}>Staff selected for spray tan booking. Use deposit/payment fields if this visit is paid, or leave payment at 0 if free.</p>}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
             <div>
@@ -9596,7 +9746,7 @@ function App() {
             <input type="checkbox" checked={sprayTanPatchCompleted} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanPatchCompleted(e.target.checked)} style={{ marginRight: '8px' }} />
             Patch test completed
           </label>
-          {latestPatchTestDate && <p style={{ color: '#aaa', marginTop: 0 }}>Last patch test: {latestPatchTestDate.toLocaleDateString('en-GB')}</p>}
+          {latestPatchTestDate && <p style={{ color: patchWarning ? '#ffcc66' : '#9ccfae', marginTop: 0 }}>Existing patch test: {latestPatchTestDate.toLocaleDateString('en-GB')}{!patchWarning ? ' (valid)' : ''}</p>}
           {patchWarning && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>{patchWarning}</p>}
 
           <textarea
@@ -9792,7 +9942,7 @@ function App() {
                     if (isSlotCoveredByEarlierBooking(time, bed.id)) return null
                     const booking = getCalendarBookingStartingAt(time, bed.id)
                     return (
-                      <td key={bed.id} className={booking ? 'calendar-booking-cell' : 'calendar-empty-cell'} rowSpan={booking ? getTotalSlotCount(booking) : 1} onClick={() => booking ? openBooking(booking) : openEmptySlot(time, bed.id)} style={{ border: currentRow ? '2px solid #ff4d4f' : '1px solid #444', padding: '8px', minHeight: '40px', background: getCalendarCellBackground(booking, bed.id), cursor: 'pointer', verticalAlign: 'top' }}>
+                      <td key={bed.id} className={booking ? 'calendar-booking-cell' : 'calendar-empty-cell'} rowSpan={booking ? getCalendarDisplaySlotCount(booking) : 1} onClick={() => booking ? openBooking(booking) : openEmptySlot(time, bed.id)} style={{ border: currentRow ? '2px solid #ff4d4f' : '1px solid #444', padding: '8px', minHeight: '40px', background: getCalendarCellBackground(booking, bed.id), cursor: 'pointer', verticalAlign: 'top' }}>
                         {booking ? (
                           <div>
                             <strong>{booking.customer_name}</strong><br />
@@ -9909,44 +10059,45 @@ function App() {
                     This bed is currently in use or cooling down. Please wait until it is available before starting another session.
                   </p>
                 )}
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '20px' }}>
-                  {modalBooking.customer_id && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
-                    <button onClick={() => openCustomerManagementFromBooking(modalBooking)}>View/Edit Customer</button>
-                  )}
-                  {modalBooking.customer_id && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
-                    <button onClick={() => emailBookingReceipt(modalBooking)}>Email Receipt</button>
-                  )}
+                {!modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
+                  <button
+                    onClick={() => startSession(modalBooking)}
+                    disabled={modalStartBlocked}
+                    style={{ width: '100%', marginTop: '18px', padding: '14px 18px', fontSize: '17px', fontWeight: 'bold', border: '1px solid rgba(212,168,83,0.75)' }}
+                  >
+                    Start Session
+                  </button>
+                )}
 
-                  {!modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
-                    <button
-                      onClick={() => startSession(modalBooking)}
-                      disabled={modalStartBlocked}
-                    >
-                      Send Time / Start Undress
-                    </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                  {modalBooking.customer_id && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
+                    <button onClick={() => openCustomerManagementFromBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>View/Edit Customer</button>
+                  )}
+                  {modalBooking.customer_id && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
+                    <button onClick={() => emailBookingReceipt(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Email Receipt</button>
                   )}
 
                   {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !modalBooking.booking_start && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
-                    <button onClick={() => setEditMode(true)}>Edit</button>
+                    <button onClick={() => setEditMode(true)} style={{ padding: '8px 10px', fontSize: '13px' }}>Edit</button>
                   )}
 
                   {['undressing', 'running', 'cooldown', 'active', 'time_sent', 'sent', 'customer_started', 'waiting_to_start', 'in_use'].includes(String(modalBooking.status || '').toLowerCase()) && (
-                    <button onClick={() => forceStop(modalBooking)}>Force Stop</button>
+                    <button onClick={() => forceStop(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Force Stop</button>
                   )}
 
                   {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !modalBooking.booking_start && (
-                    <button onClick={() => updateBookingStatus(modalBooking.id, 'no_show')}>No Show</button>
+                    <button onClick={() => updateBookingStatus(modalBooking.id, 'no_show')} style={{ padding: '8px 10px', fontSize: '13px' }}>No Show</button>
                   )}
 
                   {['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
-                    <button onClick={() => managerResetBooking(modalBooking)}>Manager Reset</button>
+                    <button onClick={() => managerResetBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Manager Reset</button>
                   )}
 
                   {!modalBooking.booking_start && (
-                    <button onClick={() => deleteBooking(modalBooking)}>Delete</button>
+                    <button onClick={() => deleteBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Delete</button>
                   )}
 
-                  <button onClick={closeModal}>Close</button>
+                  <button onClick={closeModal} style={{ padding: '8px 10px', fontSize: '13px' }}>Close</button>
                 </div>
               </>
             )}
