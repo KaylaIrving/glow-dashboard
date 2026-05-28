@@ -103,7 +103,6 @@ function App() {
   const [paymentMethod, setPaymentMethod] = useState('card')
   const [paymentNotes, setPaymentNotes] = useState('')
   const [cashReceived, setCashReceived] = useState('')
-  const [commissionStaffId, setCommissionStaffId] = useState('')
   const [selectedMinutes, setSelectedMinutes] = useState(12)
   const [shopTestFreeUse, setShopTestFreeUse] = useState(true)
   const [editTime, setEditTime] = useState('')
@@ -342,11 +341,6 @@ function App() {
   const [reportsStartDate, setReportsStartDate] = useState(formatLocalDate(new Date()))
   const [reportsEndDate, setReportsEndDate] = useState(formatLocalDate(new Date()))
   const [reportsCommissionPercent, setReportsCommissionPercent] = useState('10')
-  const [reportsStaffFilter, setReportsStaffFilter] = useState('')
-  const [reportsProductCommissionPercent, setReportsProductCommissionPercent] = useState('10')
-  const [reportsSprayTanCommissionPercent, setReportsSprayTanCommissionPercent] = useState('10')
-  const [reportsPromoCommissionPercent, setReportsPromoCommissionPercent] = useState('10')
-  const [reportsFlatServiceCommission, setReportsFlatServiceCommission] = useState('0')
   const [managerReportsData, setManagerReportsData] = useState(null)
   const [managerReportsLoading, setManagerReportsLoading] = useState(false)
   const [managerReportsError, setManagerReportsError] = useState('')
@@ -1236,7 +1230,7 @@ function App() {
     const productSalesByStaffMap = new Map()
     const productSummaryMap = new Map()
     for (const sale of productSales) {
-      const staffName = sale.commission_staff_name || sale.sold_by_staff_name || sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
+      const staffName = sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
       const productName = sale.product_name || 'Unknown product'
       const category = sale.category || 'Uncategorised'
       const quantity = Number(sale.quantity || 0)
@@ -1245,38 +1239,10 @@ function App() {
       addGroupedAmount(productSummaryMap, `${productName}__${category}`, amount, { product_name: productName, category, quantity })
     }
 
-    const productCommissionRate = Number(reportsProductCommissionPercent || reportsCommissionPercent || 0)
-    const sprayTanCommissionRate = Number(reportsSprayTanCommissionPercent || reportsCommissionPercent || 0)
-    const promoCommissionRate = Number(reportsPromoCommissionPercent || reportsCommissionPercent || 0)
-    const flatServiceCommission = Number(reportsFlatServiceCommission || 0)
-    const staffFilter = reportsStaffFilter.trim().toLowerCase()
-    const staffCommissionMap = new Map()
-    const getCommissionRow = (staffName) => {
-      const name = staffName || 'Unknown staff'
-      if (!staffCommissionMap.has(name)) {
-        staffCommissionMap.set(name, {
-          staff_name: name,
-          sunbed_minutes_sold: 0,
-          sunbed_packages_total: 0,
-          product_sales_total: 0,
-          promo_sales_total: 0,
-          spray_tan_sales_total: 0,
-          deposits_taken: 0,
-          balances_taken: 0,
-          total_revenue: 0,
-          estimated_commission: 0
-        })
-      }
-      return staffCommissionMap.get(name)
-    }
-
+    const productTotalsByStaff = new Map()
     for (const sale of productSales) {
-      const staffName = sale.commission_staff_name || sale.sold_by_staff_name || sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
-      const amount = Number(sale.total_amount || 0)
-      const row = getCommissionRow(staffName)
-      row.product_sales_total += amount
-      row.total_revenue += amount
-      row.estimated_commission += amount * productCommissionRate / 100
+      const staffName = sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
+      productTotalsByStaff.set(staffName, (productTotalsByStaff.get(staffName) || 0) + Number(sale.total_amount || 0))
     }
 
     const customerSpendMap = new Map()
@@ -1316,29 +1282,6 @@ function App() {
       row.revenue += Number(payment.total_amount || 0)
     }
 
-    for (const payment of payments) {
-      const staffName = payment.commission_staff_name || payment.taken_by_staff_name || payment.staff_name || payment.created_by || 'Unknown staff'
-      const row = getCommissionRow(staffName)
-      const amount = Number(payment.total_amount || 0)
-      const packageType = String(payment.package_type || '').toLowerCase()
-      const packageName = String(payment.package_name || '').toLowerCase()
-      if (packageType === 'promo' || packageName.includes('promo')) {
-        row.promo_sales_total += amount
-        row.total_revenue += amount
-        row.estimated_commission += amount * promoCommissionRate / 100
-      } else if (packageType.includes('spray_tan') || packageName.includes('spray tan')) {
-        row.spray_tan_sales_total += amount
-        if (packageType.includes('deposit')) row.deposits_taken += amount
-        if (packageType.includes('balance')) row.balances_taken += amount
-        row.total_revenue += amount
-        row.estimated_commission += amount * sprayTanCommissionRate / 100 + flatServiceCommission
-      } else {
-        row.sunbed_minutes_sold += Number(payment.minutes_added || 0)
-        row.sunbed_packages_total += amount
-        row.total_revenue += amount
-      }
-    }
-
     const sprayTanMap = new Map()
     for (const booking of reportBookings.filter((booking) => booking.booking_type === 'spraytan')) {
       const service = booking.spraytan_service || 'Unknown service'
@@ -1355,12 +1298,12 @@ function App() {
 
     const staffActivityMap = new Map()
     for (const booking of reportBookings) {
-      const staffName = booking.created_by_staff_name || booking.staff_name || booking.created_by || 'Unknown staff'
+      const staffName = booking.staff_name || booking.created_by || 'Unknown staff'
       if (!staffActivityMap.has(staffName)) staffActivityMap.set(staffName, { staff_name: staffName, bookings: 0, product_sales: 0, cash_ups: 0, corrections: 0 })
       staffActivityMap.get(staffName).bookings += 1
     }
     for (const sale of productSales) {
-      const staffName = sale.sold_by_staff_name || sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
+      const staffName = sale.staff_name || sale.staff || sale.created_by || 'Unknown staff'
       if (!staffActivityMap.has(staffName)) staffActivityMap.set(staffName, { staff_name: staffName, bookings: 0, product_sales: 0, cash_ups: 0, corrections: 0 })
       staffActivityMap.get(staffName).product_sales += Number(sale.total_amount || 0)
     }
@@ -1377,10 +1320,7 @@ function App() {
 
     setManagerReportsData({
       productSalesByStaff: Array.from(productSalesByStaffMap.values()).sort((a, b) => b.total - a.total),
-      staffCommission: Array.from(staffCommissionMap.values())
-        .filter((row) => !staffFilter || row.staff_name.toLowerCase().includes(staffFilter))
-        .map((row) => ({ ...row, estimated_commission: Number(row.estimated_commission.toFixed(2)), total_revenue: Number(row.total_revenue.toFixed(2)) }))
-        .sort((a, b) => b.total_revenue - a.total_revenue),
+      staffCommission: Array.from(productTotalsByStaff.entries()).map(([staffName, total]) => ({ staff_name: staffName, product_sales_total: total, commission_percent: Number(reportsCommissionPercent || 0), commission_due: total * Number(reportsCommissionPercent || 0) / 100 })).sort((a, b) => b.product_sales_total - a.product_sales_total),
       productSummary: Array.from(productSummaryMap.values()).sort((a, b) => b.quantity - a.quantity),
       customerSpend: Array.from(customerSpendMap.values()).sort((a, b) => b.total - a.total).slice(0, 20),
       minutesSales,
@@ -1502,44 +1442,6 @@ function App() {
 
   function getCurrentStaffUser() {
     return staff.find((member) => String(member.id) === String(currentStaffUserId))
-  }
-
-  function getCurrentStaffAttribution() {
-    const staffUser = getCurrentStaffUser()
-    return {
-      staffId: staffUser?.id || null,
-      staffName: staffUser?.name || null
-    }
-  }
-
-  function getCreatedByStaffFields() {
-    const { staffId, staffName } = getCurrentStaffAttribution()
-    return {
-      created_by_staff_id: staffId,
-      created_by_staff_name: staffName
-    }
-  }
-
-  function getPaymentStaffFields() {
-    const { staffId, staffName } = getCurrentStaffAttribution()
-    const commissionStaff = commissionStaffId ? staff.find((member) => String(member.id) === String(commissionStaffId)) : null
-    return {
-      taken_by_staff_id: staffId,
-      taken_by_staff_name: staffName,
-      commission_staff_id: commissionStaff?.id || staffId,
-      commission_staff_name: commissionStaff?.name || staffName
-    }
-  }
-
-  function getProductSaleStaffFields() {
-    const { staffId, staffName } = getCurrentStaffAttribution()
-    const commissionStaff = commissionStaffId ? staff.find((member) => String(member.id) === String(commissionStaffId)) : null
-    return {
-      sold_by_staff_id: staffId,
-      sold_by_staff_name: staffName,
-      commission_staff_id: commissionStaff?.id || staffId,
-      commission_staff_name: commissionStaff?.name || staffName
-    }
   }
 
   function requireStaffSignIn() {
@@ -2249,7 +2151,6 @@ function App() {
       if (!confirmed) return false
     }
 
-    const saleStaffFields = getProductSaleStaffFields()
     const salesRows = cartItems.map((item) => ({
       product_id: item.product_id,
       product_name: item.product_name,
@@ -2259,8 +2160,7 @@ function App() {
       total_amount: Number((Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)),
       payment_method: paymentMethodForSale,
       customer_id: customer?.id || null,
-      customer_name: customer?.name || null,
-      ...saleStaffFields
+      customer_name: customer?.name || null
     }))
 
     const { error } = await supabase.from('ProductSales').insert(salesRows)
@@ -2909,7 +2809,6 @@ function App() {
         cashAmount
       })
       setPosCashReceived('')
-      setCommissionStaffId('')
     }
   }
 
@@ -3090,8 +2989,7 @@ function App() {
       payment_method: paymentMethod,
       package_type: purchase.type,
       package_name: purchase.name,
-      notes: paymentNotes || null,
-      ...getPaymentStaffFields()
+      notes: paymentNotes || null
     })
 
     if (paymentError) {
@@ -3278,8 +3176,7 @@ function App() {
         payment_method: paymentMethod,
         package_type: 'promo',
         package_name: summary.promo.promo_name,
-        notes: paymentNotes || summary.promo.staff_notes || null,
-        ...getPaymentStaffFields()
+        notes: paymentNotes || summary.promo.staff_notes || null
       }).select().single()
 
       if (promoPaymentError) {
@@ -3371,8 +3268,7 @@ function App() {
         payment_method: paymentMethod,
         package_type: summary.purchase.type,
         package_name: summary.purchase.name,
-        notes: paymentNotes || null,
-        ...getPaymentStaffFields()
+        notes: paymentNotes || null
       })
 
       if (paymentError) {
@@ -3451,7 +3347,6 @@ function App() {
     setPromoProductChoices({})
     setPaymentNotes('')
     setCashReceived('')
-    setCommissionStaffId('')
     return true
   }
 
@@ -3539,8 +3434,7 @@ function App() {
       payment_method: paymentMethod,
       package_type: paymentType,
       package_name: formatStatus(paymentType),
-      notes,
-      ...getPaymentStaffFields()
+      notes
     })
     if (error) {
       alert('Spray tan payment was not saved. Please check the Payments table and connection.')
@@ -4129,8 +4023,7 @@ function App() {
       appointment_time: appointmentDateTime.toISOString(),
       status: 'booked',
       source: 'shop_test',
-      booking_source: 'dashboard',
-      ...getCreatedByStaffFields()
+      booking_source: 'dashboard'
     })
 
     if (error) {
@@ -4221,8 +4114,7 @@ function App() {
       appointment_time: appointmentDateTime.toISOString(),
       status: 'booked',
       source: isInternalShopTest ? 'shop_test' : 'calendar',
-      booking_source: 'dashboard',
-      ...getCreatedByStaffFields()
+      booking_source: 'dashboard'
     })
     if (!error) {
       if (!isInternalShopTest) {
@@ -4284,8 +4176,7 @@ function App() {
       appointment_time: appointmentDateTime.toISOString(),
       status: 'booked',
       source: `staff_free:${member.id}`,
-      booking_source: 'dashboard',
-      ...getCreatedByStaffFields()
+      booking_source: 'dashboard'
     })
 
     if (error) {
@@ -4483,7 +4374,7 @@ function App() {
   async function resetBedRuntime(bed) {
     if (!requireStaffSignIn()) return
 
-    const confirmed = window.confirm(`Reset runtime for ${getBedName(bed.id)}? Use this after a tube change.`)
+    const confirmed = window.confirm(`Reset runtime for ${bed.name}? Use this after a tube change.`)
     if (!confirmed) return
     if (!requireManagerAccess('Manager PIN required:')) return
     await updateBedMaintenance(bed.id, {
@@ -4752,7 +4643,6 @@ function App() {
 
   function getBedName(bedId) {
     const bed = beds.find((b) => Number(b.id) === Number(bedId))
-    if (Number(bedId) === 2) return 'Collagen Lay Down'
     return bed ? bed.name : `Bed ${bedId}`
   }
 
@@ -5128,7 +5018,6 @@ function App() {
     setSprayTanApprovalStatus('pending')
     setSprayTanStatusControl('Pending Approval')
     setSprayTanSaving(false)
-    setCommissionStaffId('')
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')
     setCustomerSearch('')
@@ -5171,7 +5060,6 @@ function App() {
     const calculatedDepositStatus = getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid)
     const statusFields = getSprayTanStatusFields(sprayTanStatusControl, calculatedDepositStatus)
     const patchWarning = getPatchTestWarning(customer, appointmentDateTime, sprayTanService)
-    const assignedArtist = staff.find((member) => String(member.name || '').trim().toLowerCase() === String(sprayTanArtist || '').trim().toLowerCase())
 
     if (depositPaid > servicePrice) {
       alert('Deposit paid cannot be more than the service price.')
@@ -5196,8 +5084,6 @@ function App() {
       spraytan_column: sprayTanColumn,
       spraytan_service: sprayTanService,
       spraytan_artist: sprayTanArtist || null,
-      assigned_artist_id: assignedArtist?.id || null,
-      assigned_artist_name: sprayTanArtist || null,
       deposit_required: depositRequired,
       deposit_paid: depositPaid,
       deposit_status: statusFields.deposit_status,
@@ -5213,8 +5099,7 @@ function App() {
       approved_at: statusFields.approval_status === 'approved' ? new Date().toISOString() : null,
       spraytan_duration_minutes: Number(sprayTanDuration || 0),
       spraytan_balance_due: balanceDue,
-      notes: sprayTanNotes || null,
-      ...getCreatedByStaffFields()
+      notes: sprayTanNotes || null
     }).select().single()
     setSprayTanSaving(false)
 
@@ -5298,7 +5183,6 @@ function App() {
     const nextDepositStatus = balanceDue <= 0 && servicePrice > 0 ? 'paid' : statusFields.deposit_status
     const patchDate = sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : null
     const customerName = sprayTanCustomerName.trim() || customerSearch.trim() || sprayTanEditingBooking.customer_name || 'Spray tan customer'
-    const assignedArtist = staff.find((member) => String(member.name || '').trim().toLowerCase() === String(sprayTanArtist || '').trim().toLowerCase())
 
     setSprayTanSaving(true)
     const { error } = await supabase.from('Bookings').update({
@@ -5307,8 +5191,6 @@ function App() {
       spraytan_column: sprayTanColumn,
       spraytan_service: sprayTanService,
       spraytan_artist: sprayTanArtist || null,
-      assigned_artist_id: assignedArtist?.id || sprayTanEditingBooking.assigned_artist_id || null,
-      assigned_artist_name: sprayTanArtist || null,
       spraytan_duration_minutes: Number(sprayTanDuration || 0),
       deposit_required: depositRequired,
       deposit_paid: depositPaid,
@@ -7188,14 +7070,6 @@ function App() {
           <option value="bank_transfer">Bank Transfer</option>
           <option value="other">Other</option>
         </select>
-        {showManagerView && (
-          <select value={commissionStaffId} onChange={(e) => setCommissionStaffId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
-            <option value="">Commission staff: signed-in staff</option>
-            {staff.filter((member) => member.is_active !== false).map((member) => (
-              <option key={member.id} value={member.id}>{member.name}</option>
-            ))}
-          </select>
-        )}
         <input placeholder="Payment notes optional" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
         {paymentMethod === 'cash' && summary.grandTotal > 0 && (
           <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginTop: '4px' }}>
@@ -7727,6 +7601,7 @@ function App() {
   function renderManagerReportsPanel() {
     if (!showManagerView) return null
     const money = (value) => `GBP ${Number(value || 0).toFixed(2)}`
+    const percent = Number(reportsCommissionPercent || 0)
 
     return renderCollapsibleSection(
       'Reports',
@@ -7736,15 +7611,7 @@ function App() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
           <input type="date" value={reportsStartDate} onChange={(e) => setReportsStartDate(e.target.value)} style={{ padding: '10px' }} />
           <input type="date" value={reportsEndDate} onChange={(e) => setReportsEndDate(e.target.value)} style={{ padding: '10px' }} />
-          <select value={reportsStaffFilter} onChange={(e) => setReportsStaffFilter(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All staff</option>
-            {staff.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
-          </select>
-          <input type="number" step="0.1" placeholder="Fallback commission %" value={reportsCommissionPercent} onChange={(e) => setReportsCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="0.1" placeholder="Product commission %" value={reportsProductCommissionPercent} onChange={(e) => setReportsProductCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="0.1" placeholder="Spray tan commission %" value={reportsSprayTanCommissionPercent} onChange={(e) => setReportsSprayTanCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="0.1" placeholder="Promo commission %" value={reportsPromoCommissionPercent} onChange={(e) => setReportsPromoCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="0.01" placeholder="Flat commission/service" value={reportsFlatServiceCommission} onChange={(e) => setReportsFlatServiceCommission(e.target.value)} style={{ padding: '10px' }} />
+          <input type="number" step="0.1" placeholder="Commission %" value={reportsCommissionPercent} onChange={(e) => setReportsCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
           <button onClick={generateManagerReports} disabled={managerReportsLoading}>{managerReportsLoading ? 'Generating...' : 'Generate Reports'}</button>
           <button onClick={exportManagerReports}>Export Reports CSV</button>
         </div>
@@ -7762,15 +7629,9 @@ function App() {
             ])}
             {renderReportTable('Staff Commission Report', managerReportsData.staffCommission, [
               { key: 'staff_name', label: 'Staff' },
-              { key: 'sunbed_minutes_sold', label: 'Sunbed mins' },
-              { key: 'sunbed_packages_total', label: 'Sunbed/packages', format: money },
               { key: 'product_sales_total', label: 'Product sales', format: money },
-              { key: 'promo_sales_total', label: 'Promo sales', format: money },
-              { key: 'spray_tan_sales_total', label: 'Spray tans', format: money },
-              { key: 'deposits_taken', label: 'Deposits', format: money },
-              { key: 'balances_taken', label: 'Balances', format: money },
-              { key: 'total_revenue', label: 'Attributed revenue', format: money },
-              { key: 'estimated_commission', label: 'Est. commission', format: money }
+              { key: 'commission_percent', label: 'Commission %', format: () => `${percent}%` },
+              { key: 'commission_due', label: 'Commission due', format: money }
             ])}
             {renderReportTable('Product Sales Summary', managerReportsData.productSummary, [
               { key: 'product_name', label: 'Product' },
@@ -8619,7 +8480,7 @@ function App() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
         {beds.map((bed) => (
           <div key={bed.id} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-            <h3>{getBedName(bed.id)}</h3>
+            <h3>{bed.name}</h3>
             {bed.is_out_of_service && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>OUT OF SERVICE</p>}
             <p>Runtime: <strong>{getBedRuntimeHours(bed).toFixed(2)} hours</strong></p>
             <p>Tube target: <strong>{getBedTargetHours(bed)} hours</strong></p>
@@ -8839,14 +8700,6 @@ function App() {
                 <option value="bank_transfer">Bank Transfer</option>
                 <option value="other">Other</option>
               </select>
-              {showManagerView && (
-                <select value={commissionStaffId} onChange={(e) => setCommissionStaffId(e.target.value)} style={{ width: '100%', padding: '10px', margin: '8px 0' }}>
-                  <option value="">Commission staff: signed-in staff</option>
-                  {staff.filter((member) => member.is_active !== false).map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
-                  ))}
-                </select>
-              )}
               {posPaymentMethod === 'cash' && (
                 <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '10px' }}>
                   <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>Cash received</label>
@@ -8868,7 +8721,7 @@ function App() {
                 </div>
               )}
               <button onClick={sellProductsOnly}>Record Product Sale</button>
-              <button onClick={() => { setShowStandalonePOS(false); clearProductCart(); setPosCashReceived(''); setCommissionStaffId('') }} style={{ marginLeft: '10px' }}>Close</button>
+              <button onClick={() => { setShowStandalonePOS(false); clearProductCart(); setPosCashReceived('') }} style={{ marginLeft: '10px' }}>Close</button>
             </div>
           </div>
         )}
@@ -9293,16 +9146,6 @@ function App() {
                 </div>
               </>
             )}
-            {showManagerView && (
-              <div><label>Commission staff</label>
-                <select value={commissionStaffId} onChange={(e) => setCommissionStaffId(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                  <option value="">Signed-in staff</option>
-                  {staff.filter((member) => member.is_active !== false).map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
             <div><label>Booking status</label>
               <select
                 value={sprayTanStatusControl}
@@ -9469,8 +9312,8 @@ function App() {
 
           return (
             <div key={bed.id} className="bed-card premium-bed-card" style={{ background: getBedColour(bed.id), padding: '25px', borderRadius: '20px' }}>
-              <h2>{getBedName(bed.id)}</h2>
-              <p>Room: {bed.tmax_room}</p>
+              <h2>{bed.name}</h2>
+              <p>T-Max Room: {bed.tmax_room}</p>
               {bed.is_out_of_service && <h2>OUT OF SERVICE</h2>}
               {booking ? (
                 <>
@@ -9501,7 +9344,7 @@ function App() {
           <thead>
             <tr>
               <th style={{ border: '1px solid #444', padding: '10px' }}>Time</th>
-              {beds.map((bed) => <th key={bed.id} style={{ border: '1px solid #444', padding: '10px' }}>{getBedName(bed.id)}</th>)}
+              {beds.map((bed) => <th key={bed.id} style={{ border: '1px solid #444', padding: '10px' }}>{bed.name}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -9519,7 +9362,7 @@ function App() {
                     background: isShopPrepTime ? 'rgba(212,168,83,0.08)' : 'transparent'
                   }}
                 >
-                  <td style={{ border: '1px solid #444', padding: '8px', fontWeight: 'bold', width: '90px', background: currentRow ? '#ff4d4f' : isShopPrepTime ? 'rgba(212,168,83,0.18)' : 'transparent', color: currentRow ? 'white' : '#1f1710' }}>
+                  <td style={{ border: '1px solid #444', padding: '8px', fontWeight: 'bold', width: '90px', background: currentRow ? '#ff4d4f' : isShopPrepTime ? 'rgba(212,168,83,0.18)' : 'transparent', color: 'white' }}>
                     {time}
                     {isShopPrepTime && <><br /><span style={{ fontSize: '11px', color: '#d4a853' }}>SHOP PREP</span></>}
                     {currentRow && <><br /><span style={{ fontSize: '12px' }}>NOW</span></>}
@@ -9596,7 +9439,7 @@ function App() {
                   {generateTimeSlots().map((time) => <option key={time} value={time}>{time}</option>)}
                 </select>
                 <select value={editBedId} onChange={(e) => setEditBedId(e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '12px', boxSizing: 'border-box' }}>
-                  {beds.map((bed) => <option key={bed.id} value={bed.id}>{getBedName(bed.id)}</option>)}
+                  {beds.map((bed) => <option key={bed.id} value={bed.id}>{bed.name}</option>)}
                 </select>
                 {renderBookingMinutesControl()}
                 <p>Total blocked time: <strong>{Number(selectedMinutes) + 6} mins</strong></p>
