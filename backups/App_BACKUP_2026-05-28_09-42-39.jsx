@@ -164,8 +164,6 @@ function App() {
   const [managerGender, setManagerGender] = useState('')
   const [managerSprayTanNotes, setManagerSprayTanNotes] = useState('')
   const [managerLastPatchTestDate, setManagerLastPatchTestDate] = useState('')
-  const [managerMarketingConsent, setManagerMarketingConsent] = useState(false)
-  const [managerHealthNotes, setManagerHealthNotes] = useState('')
   const [managerNotes, setManagerNotes] = useState('')
   const [managerStandardBalance, setManagerStandardBalance] = useState(0)
   const [managerHybridBalance, setManagerHybridBalance] = useState(0)
@@ -204,9 +202,6 @@ function App() {
   const [customerLogs, setCustomerLogs] = useState([])
   const [customerMinuteTransactions, setCustomerMinuteTransactions] = useState([])
   const [customerReceipts, setCustomerReceipts] = useState([])
-  const [customerBookingsHistory, setCustomerBookingsHistory] = useState([])
-  const [customerProductSalesHistory, setCustomerProductSalesHistory] = useState([])
-  const [customerMinuteExpiries, setCustomerMinuteExpiries] = useState([])
 
   const [showMinuteCorrection, setShowMinuteCorrection] = useState(false)
   const [correctionType, setCorrectionType] = useState('move_standard_to_hybrid')
@@ -5685,39 +5680,12 @@ function App() {
       setCustomerLogs([])
       setCustomerMinuteTransactions([])
       setCustomerReceipts([])
-      setCustomerBookingsHistory([])
-      setCustomerProductSalesHistory([])
-      setCustomerMinuteExpiries([])
       return
     }
-    const { data: paymentsData } = await supabase.from('Payments').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(100)
+    const { data: paymentsData } = await supabase.from('Payments').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(10)
     setCustomerPayments(paymentsData || [])
-    const { data: logsData } = await supabase.from('CustomerLogs').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(100)
+    const { data: logsData } = await supabase.from('CustomerLogs').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(10)
     setCustomerLogs(logsData || [])
-    const { data: bookingsData, error: bookingsError } = await supabase
-      .from('Bookings')
-      .select('*')
-      .eq('customer_id', customerId)
-      .order('appointment_time', { ascending: false })
-      .limit(150)
-    if (bookingsError) {
-      setCustomerBookingsHistory([])
-      showDataLoadWarning('Customer booking history could not be loaded.', bookingsError)
-    } else {
-      setCustomerBookingsHistory(bookingsData || [])
-    }
-    const { data: productSalesData, error: productSalesError } = await supabase
-      .from('ProductSales')
-      .select('*')
-      .eq('customer_id', customerId)
-      .order('created_at', { ascending: false })
-      .limit(100)
-    if (productSalesError) {
-      setCustomerProductSalesHistory([])
-      showDataLoadWarning('Customer product purchase history could not be loaded.', productSalesError)
-    } else {
-      setCustomerProductSalesHistory(productSalesData || [])
-    }
     const { data: minuteTransactionsData, error: minuteTransactionsError } = await supabase
       .from('CustomerMinuteTransactions')
       .select('*')
@@ -5741,17 +5709,6 @@ function App() {
       showDataLoadWarning('Customer receipt history could not be loaded.', receiptError)
     } else {
       setCustomerReceipts(receiptData || [])
-    }
-    const { data: expiryData, error: expiryError } = await supabase
-      .from('CustomerMinuteExpiries')
-      .select('*')
-      .eq('customer_id', customerId)
-      .order('expiry_date', { ascending: true })
-      .limit(100)
-    if (expiryError) {
-      setCustomerMinuteExpiries([])
-    } else {
-      setCustomerMinuteExpiries(expiryData || [])
     }
   }
 
@@ -5799,8 +5756,6 @@ function App() {
     setManagerGender(customer.gender || '')
     setManagerSprayTanNotes(customer.spraytan_notes || '')
     setManagerLastPatchTestDate(customer.last_patch_test_date ? formatLocalDate(new Date(customer.last_patch_test_date)) : '')
-    setManagerMarketingConsent(Boolean(customer.marketing_consent))
-    setManagerHealthNotes(customer.health_notes || customer.medical_notes || '')
     setManagerNotes(customer.notes || '')
     setManagerStandardBalance(Number(customer.standard_minutes_balance || 0))
     setManagerHybridBalance(Number(customer.hybrid_minutes_balance || 0))
@@ -5828,8 +5783,6 @@ function App() {
     setManagerGender('')
     setManagerSprayTanNotes('')
     setManagerLastPatchTestDate('')
-    setManagerMarketingConsent(false)
-    setManagerHealthNotes('')
     setManagerNotes('')
     setManagerStandardBalance(0)
     setManagerHybridBalance(0)
@@ -5844,9 +5797,6 @@ function App() {
     setCustomerLogs([])
     setCustomerMinuteTransactions([])
     setCustomerReceipts([])
-    setCustomerBookingsHistory([])
-    setCustomerProductSalesHistory([])
-    setCustomerMinuteExpiries([])
   }
 
   function clearAddCustomerForm() {
@@ -6385,8 +6335,6 @@ function App() {
       gender: managerGender || null,
       spraytan_notes: managerSprayTanNotes || null,
       last_patch_test_date: managerLastPatchTestDate || null,
-      marketing_consent: managerMarketingConsent,
-      health_notes: managerHealthNotes || null,
       notes: managerNotes || null,
       standard_minutes_balance: newStandard,
       hybrid_minutes_balance: newHybrid,
@@ -6419,8 +6367,6 @@ function App() {
       'adjusted',
       'Manual balance edit from Customer Management.'
     )
-    if ((customer.notes || '') !== (managerNotes || '')) await createCustomerLog(customer, 'Notes changed', `Customer notes changed by ${staffUser?.name || 'staff'}.`)
-    if ((customer.health_notes || customer.medical_notes || '') !== (managerHealthNotes || '')) await createCustomerLog(customer, 'Health notes changed', `Health/allergy/medication notes changed by ${staffUser?.name || 'staff'}.`)
     if (managerTermsAccepted && !oldTermsAccepted) await createCustomerLog(customer, 'Salon terms accepted', `Terms accepted by ${staffUser?.name || 'staff'} in Customer Management.`)
     if (managerIdChecked && !oldIdChecked) await createCustomerLog(customer, 'ID checked', `ID checked by ${staffUser?.name || 'staff'} in Customer Management.`)
     await getCustomers()
@@ -7274,205 +7220,6 @@ function App() {
     )
   }
 
-  function getCustomerProfileStats(customer) {
-    const allHistory = customerBookingsHistory || []
-    const sunbedHistory = allHistory.filter(isSunbedBooking)
-    const completedVisits = allHistory.filter((booking) => ['completed', 'force_stopped'].includes(String(booking.status || '').toLowerCase()))
-    const noShows = allHistory.filter((booking) => String(booking.status || '').toLowerCase() === 'no_show')
-    const activeExpiries = (customerMinuteExpiries || []).filter((entry) => !entry.expired && Number(entry.minutes_remaining || 0) > 0)
-    const soon = new Date()
-    soon.setDate(soon.getDate() + 30)
-    const minutesExpiringSoon = activeExpiries.filter((entry) => {
-      if (!entry.expiry_date) return false
-      const expiry = new Date(`${entry.expiry_date}T00:00:00`)
-      return !Number.isNaN(expiry.getTime()) && expiry <= soon
-    })
-
-    return {
-      lastTanDate: customer?.last_tan_date || sunbedHistory[0]?.appointment_time || null,
-      lastVisitDate: customer?.last_visit_date || completedVisits[0]?.appointment_time || allHistory[0]?.appointment_time || null,
-      totalVisits: Number(customer?.total_visits || 0) || completedVisits.length,
-      noShowCount: Number(customer?.no_show_count || 0) || noShows.length,
-      minutesExpiringSoon
-    }
-  }
-
-  function renderProfileBadge(label, tone = 'warning') {
-    const colours = {
-      warning: { background: '#241b0c', border: '#9b6a20', color: '#ffd27a' },
-      danger: { background: '#2a0f12', border: '#8f2b35', color: '#ff9a9a' },
-      good: { background: '#0f2418', border: '#2f7d4c', color: '#9be2b5' },
-      info: { background: '#111c28', border: '#365f8a', color: '#a8d4ff' },
-      muted: { background: '#171717', border: '#444', color: '#bbb' }
-    }
-    const style = colours[tone] || colours.warning
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${style.border}`, background: style.background, color: style.color, padding: '5px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold' }}>
-        {label}
-      </span>
-    )
-  }
-
-  function renderCustomerProfilePanel(customer) {
-    if (!customer) return null
-    const stats = getCustomerProfileStats(customer)
-    const age = customer.date_of_birth ? calculateAge(customer.date_of_birth) : null
-    const patchWarning = getPatchExpiryWarning(customer)
-    const medicalNotes = customer.health_notes || customer.medical_notes || managerHealthNotes || ''
-    const noShowWarning = stats.noShowCount >= 2
-    const activeSunbedHistory = (customerBookingsHistory || []).filter(isSunbedBooking).slice(0, 30)
-    const sprayTanHistory = (customerBookingsHistory || []).filter(isSprayTanBooking).slice(0, 30)
-    const emailCustomerReceipt = (receipt) => {
-      if (!customer.email) {
-        alert('Customer does not have an email address saved.')
-        return
-      }
-      const subject = encodeURIComponent('Glow Tanning Receipt')
-      const body = encodeURIComponent(buildReceiptText(receipt))
-      window.location.href = `mailto:${encodeURIComponent(customer.email)}?subject=${subject}&body=${body}`
-    }
-    const quickActionStyle = { padding: '9px 10px', fontSize: '13px' }
-    const sectionStyle = { background: '#0b0b0b', border: '1px solid #2f2a20', borderRadius: '10px', padding: '12px', minHeight: '220px' }
-    const statStyle = { background: '#0b0b0b', border: '1px solid #2f2a20', borderRadius: '10px', padding: '10px' }
-    const rowStyle = { borderBottom: '1px solid #28231b', padding: '8px 0', color: '#ddd' }
-
-    return (
-      <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.35)', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: '12px' }}>
-          <div>
-            <h3 style={{ margin: '0 0 4px', color: '#d4a853' }}>{customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Customer Profile'}</h3>
-            <div style={{ color: '#ccc', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-              <span>{customer.phone || 'No phone'}</span>
-              <span>{customer.email || 'No email'}</span>
-              <span>DOB: {customer.date_of_birth || 'Not recorded'}{age !== null ? ` / Age ${age}` : ''}</span>
-            </div>
-            <div style={{ color: '#aaa', marginTop: '4px' }}>{[customer.address, customer.postcode].filter(Boolean).join(', ') || 'No address recorded'}</div>
-          </div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {!customer.terms_accepted && renderProfileBadge('Terms not accepted', 'warning')}
-            {!customer.id_checked && renderProfileBadge('ID not checked', 'warning')}
-            {patchWarning && renderProfileBadge(patchWarning, patchWarning.includes('expired') ? 'danger' : 'warning')}
-            {medicalNotes && renderProfileBadge('Medical warning', 'danger')}
-            {noShowWarning && renderProfileBadge('No-show warning', 'warning')}
-            {stats.minutesExpiringSoon.length > 0 && renderProfileBadge('Minutes expiring soon', 'warning')}
-            {customer.warning_flag && renderProfileBadge(formatStatus(getCustomerWarningLevel(customer)), getCustomerWarningLevel(customer) === 'banned' ? 'danger' : 'warning')}
-            {customer.is_active === false && renderProfileBadge('Inactive', 'muted')}
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '8px', marginBottom: '12px' }}>
-          <div style={statStyle}><strong>ID checked</strong><br /><span style={{ color: customer.id_checked ? '#9be2b5' : '#ffd27a' }}>{customer.id_checked ? 'Yes' : 'No'}</span></div>
-          <div style={statStyle}><strong>Terms accepted</strong><br /><span style={{ color: customer.terms_accepted ? '#9be2b5' : '#ffd27a' }}>{customer.terms_accepted ? 'Yes' : 'No'}</span></div>
-          <div style={statStyle}><strong>Marketing consent</strong><br /><span>{customer.marketing_consent ? 'Yes' : 'No'}</span></div>
-          <div style={statStyle}><strong>Last tan date</strong><br /><span>{stats.lastTanDate ? new Date(stats.lastTanDate).toLocaleString('en-GB') : 'None recorded'}</span></div>
-          <div style={statStyle}><strong>Last visit</strong><br /><span>{stats.lastVisitDate ? new Date(stats.lastVisitDate).toLocaleString('en-GB') : 'None recorded'}</span></div>
-          <div style={statStyle}><strong>Total visits</strong><br /><span>{stats.totalVisits}</span></div>
-          <div style={statStyle}><strong>No-shows</strong><br /><span>{stats.noShowCount}</span></div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <div style={sectionStyle}>
-            <h4 style={{ marginTop: 0 }}>Notes / Warnings</h4>
-            {customer.warning_flag && <p style={{ color: getCustomerWarningStyle(getCustomerWarningLevel(customer)).color, fontWeight: 'bold' }}>{customer.warning_note || formatStatus(getCustomerWarningLevel(customer))}</p>}
-            <p style={{ whiteSpace: 'pre-wrap', color: '#ccc' }}>{customer.notes || 'No customer notes.'}</p>
-            <p style={{ whiteSpace: 'pre-wrap', color: medicalNotes ? '#ffb3b3' : '#aaa' }}><strong>Allergies / medication / health:</strong><br />{medicalNotes || 'None recorded.'}</p>
-          </div>
-          <div style={sectionStyle}>
-            <h4 style={{ marginTop: 0 }}>Quick Actions</h4>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button type="button" style={quickActionStyle} onClick={() => { setSelectedCustomerId(String(customer.id)); setCustomerSearch(customer.name || ''); setDashboardView('sunbeds'); setShowCustomerManagement(false); scrollToTop() }}>Create sunbed booking</button>
-              <button type="button" style={quickActionStyle} onClick={() => { setSelectedCustomerId(String(customer.id)); setCustomerSearch(customer.name || ''); setSprayTanCustomerName(customer.name || ''); setDashboardView('spraytan'); setShowCustomerManagement(false); scrollToTop() }}>Create spray tan booking</button>
-              <button type="button" style={quickActionStyle} onClick={() => { setSelectedCustomerId(String(customer.id)); setCustomerSearch(customer.name || ''); setShowBookingTopUp(true); setDashboardView('sunbeds'); scrollToTop() }}>Add / top up minutes</button>
-              <button type="button" style={quickActionStyle} onClick={() => { if (requireStaffSignIn()) setShowStandalonePOS(true) }}>Add product sale</button>
-              <button type="button" style={quickActionStyle} onClick={() => customerReceipts[0] ? emailCustomerReceipt(customerReceipts[0]) : alert('No receipt found for this customer.')}>Email receipt</button>
-              <button type="button" style={quickActionStyle} onClick={() => setManagerNotes(`${managerNotes ? `${managerNotes}\n` : ''}${new Date().toLocaleString('en-GB')} - `)}>Add note</button>
-              <button type="button" style={quickActionStyle} onClick={() => setManagerIdChecked(true)}>Mark ID checked</button>
-              <button type="button" style={quickActionStyle} onClick={() => setManagerTermsAccepted(true)}>Mark terms accepted</button>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Sunbed History</h4>
-            {activeSunbedHistory.length === 0 ? <p style={{ color: '#aaa' }}>No sunbed history.</p> : activeSunbedHistory.map((booking) => (
-              <div key={`sunbed-profile-${booking.id}`} style={rowStyle}>
-                <strong>{booking.appointment_time ? new Date(booking.appointment_time).toLocaleString('en-GB') : 'No date'}</strong><br />
-                {getBedName(booking.bed_id)} / Room {booking.bed_id || '-'} / {booking.minutes || 0} mins booked / {booking.minutes_used || booking.runtime_minutes || booking.minutes || 0} used<br />
-                <span style={{ color: '#aaa' }}>{formatStatus(booking.status)} / Booked by {booking.created_by_staff_name || booking.staff_name || 'Unknown'} / Started by {booking.started_by_staff_name || 'Unknown'} / {formatStatus(booking.payment_method)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Minutes / Packages</h4>
-            <p>Standard balance: <strong>{customer.standard_minutes_balance || 0}</strong></p>
-            <p>Collagen/hybrid balance: <strong>{customer.hybrid_minutes_balance || 0}</strong></p>
-            {(customerMinuteExpiries || []).length === 0 ? <p style={{ color: '#aaa' }}>No promo minute expiry allocations found.</p> : customerMinuteExpiries.map((entry) => (
-              <div key={`expiry-profile-${entry.id}`} style={rowStyle}>
-                <strong>{formatStatus(entry.source_type || 'Package / promo')}</strong><br />
-                {formatStatus(entry.minute_type)} / Bought {Number(entry.minutes_amount || 0)} / Remaining {Number(entry.minutes_remaining || 0)}<br />
-                <span style={{ color: entry.expired ? '#ff9a9a' : '#aaa' }}>Expiry: {entry.expiry_date || 'No expiry'} {entry.expired ? '/ Expired' : ''}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Product Purchases</h4>
-            {(customerProductSalesHistory || []).length === 0 ? <p style={{ color: '#aaa' }}>No product purchases.</p> : customerProductSalesHistory.slice(0, 40).map((sale) => (
-              <div key={`product-profile-${sale.id}`} style={rowStyle}>
-                <strong>{sale.created_at ? new Date(sale.created_at).toLocaleString('en-GB') : 'No date'}</strong><br />
-                {sale.product_name || 'Product'} x {sale.quantity || 1} / GBP {Number(sale.total_amount || sale.total || 0).toFixed(2)}<br />
-                <span style={{ color: '#aaa' }}>{sale.sold_by_staff_name || sale.staff_name || 'Unknown staff'}{sale.is_promo_item || sale.promo_name ? ' / Promo or free product' : ''}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Spray Tan History</h4>
-            {sprayTanHistory.length === 0 ? <p style={{ color: '#aaa' }}>No spray tan history.</p> : sprayTanHistory.map((booking) => (
-              <div key={`spray-profile-${booking.id}`} style={rowStyle}>
-                <strong>{booking.spraytan_service || 'Spray tan'} / {booking.appointment_time ? new Date(booking.appointment_time).toLocaleString('en-GB') : 'No date'}</strong><br />
-                Artist: {booking.assigned_artist_name || booking.spraytan_artist || 'Unassigned'} / Deposit {Number(booking.deposit_paid || 0).toFixed(2)} / Balance {Number(booking.spraytan_balance_paid || 0).toFixed(2)}<br />
-                <span style={{ color: '#aaa' }}>Patch test: {booking.patch_test_completed ? 'Completed' : 'Not recorded'} / {getSprayTanStatusLabel(booking)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Payments / Receipts</h4>
-            {customerReceipts.length === 0 && customerPayments.length === 0 ? <p style={{ color: '#aaa' }}>No payments or receipts.</p> : null}
-            {customerReceipts.slice(0, 30).map((receipt) => (
-              <div key={`profile-receipt-${receipt.id}`} style={rowStyle}>
-                <strong>{receipt.created_at ? new Date(receipt.created_at).toLocaleString('en-GB') : 'No date'} / GBP {Number(receipt.total || 0).toFixed(2)}</strong><br />
-                {formatStatus(receipt.receipt_type)} / {formatStatus(receipt.payment_method)} / {receipt.staff_name || 'Unknown staff'}<br />
-                <button type="button" onClick={() => alert(buildReceiptText(receipt))} style={{ marginTop: '6px', marginRight: '6px', padding: '6px 8px' }}>View Receipt</button>
-                {customer.email && <button type="button" onClick={() => emailCustomerReceipt(receipt)} style={{ marginTop: '6px', padding: '6px 8px' }}>Email Receipt</button>}
-              </div>
-            ))}
-            {customerPayments.slice(0, 20).map((payment) => (
-              <div key={`profile-payment-${payment.id}`} style={rowStyle}>
-                <strong>{payment.created_at ? new Date(payment.created_at).toLocaleString('en-GB') : 'No date'} / GBP {Number(payment.total_amount || payment.amount || 0).toFixed(2)}</strong><br />
-                {payment.package_name || payment.payment_for || payment.bed_type || 'Payment'} / {formatStatus(payment.payment_method)} / {payment.taken_by_staff_name || payment.staff_name || 'Unknown staff'}
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Logs / Audit Trail</h4>
-            {customerLogs.length === 0 ? <p style={{ color: '#aaa' }}>No logs found.</p> : customerLogs.slice(0, 60).map((log) => (
-              <div key={`profile-log-${log.id}`} style={rowStyle}>
-                <strong>{log.action || 'Log'}</strong><br />
-                <span>{log.details || log.notes || ''}</span><br />
-                <span style={{ color: '#aaa' }}>{log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : ''}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   function renderCustomerImportPanel() {
     if (!showCustomerImport) return null
 
@@ -7723,8 +7470,6 @@ function App() {
 
         {selectedCustomer && (
           <div>
-            {renderCustomerProfilePanel(selectedCustomer)}
-
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '15px' }}>
               <div><label>First name</label><input value={managerFirstName} onChange={(e) => setManagerFirstName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Last name</label><input value={managerLastName} onChange={(e) => setManagerLastName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
@@ -7757,10 +7502,6 @@ function App() {
                 <input type="checkbox" checked={managerActive} onChange={(e) => setManagerActive(e.target.checked)} style={{ marginRight: '8px' }} />
                 Active customer
               </label>
-              <label style={{ display: 'block', marginTop: '8px' }}>
-                <input type="checkbox" checked={managerMarketingConsent} onChange={(e) => setManagerMarketingConsent(e.target.checked)} style={{ marginRight: '8px' }} />
-                Marketing consent
-              </label>
             </div>
 
             <div style={{ background: '#0b0b0b', border: `1px solid ${getCustomerWarningStyle(managerWarningLevel).border}`, borderRadius: '12px', padding: '12px', marginBottom: '15px' }}>
@@ -7786,11 +7527,6 @@ function App() {
             <div style={{ marginBottom: '15px' }}>
               <label>Notes</label>
               <textarea value={managerNotes} onChange={(e) => setManagerNotes(e.target.value)} style={{ width: '100%', minHeight: '80px', padding: '10px', marginTop: '5px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '12px', fontFamily: 'inherit' }} />
-            </div>
-
-            <div style={{ marginBottom: '15px' }}>
-              <label>Allergies / medication / health notes</label>
-              <textarea value={managerHealthNotes} onChange={(e) => setManagerHealthNotes(e.target.value)} style={{ width: '100%', minHeight: '80px', padding: '10px', marginTop: '5px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '12px', fontFamily: 'inherit' }} />
             </div>
 
             <div style={{ marginBottom: '15px' }}>
