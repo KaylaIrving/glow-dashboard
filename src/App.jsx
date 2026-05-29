@@ -227,6 +227,11 @@ function App() {
   const [customerBookingsHistory, setCustomerBookingsHistory] = useState([])
   const [customerProductSalesHistory, setCustomerProductSalesHistory] = useState([])
   const [customerMinuteExpiries, setCustomerMinuteExpiries] = useState([])
+  const [customerProfileTab, setCustomerProfileTab] = useState('summary')
+  const [customerProfileBookingFilter, setCustomerProfileBookingFilter] = useState('all')
+  const [customerProfileNotes, setCustomerProfileNotes] = useState([])
+  const [customerProfileNoteText, setCustomerProfileNoteText] = useState('')
+  const [customerProfileNoteEditingId, setCustomerProfileNoteEditingId] = useState('')
 
   const [showMinuteCorrection, setShowMinuteCorrection] = useState(false)
   const [correctionType, setCorrectionType] = useState('move_standard_to_hybrid')
@@ -4847,7 +4852,9 @@ function App() {
 
   function getBedName(bedId) {
     const bed = beds.find((b) => Number(b.id) === Number(bedId))
+    if (Number(bedId) === 1) return 'Tone & Tan Stand Up'
     if (Number(bedId) === 2) return 'Collagen Lay Down'
+    if (Number(bedId) === 3) return 'Prestige Lay Down'
     return bed ? bed.name : `Bed ${bedId}`
   }
 
@@ -5720,6 +5727,62 @@ function App() {
     await supabase.from('CustomerLogs').insert({ customer_id: customer.id, customer_name: customer.name, action, details })
   }
 
+  async function saveCustomerProfileNote(customer) {
+    if (!requireStaffSignIn()) return
+    if (!customer?.id) return
+    const noteText = customerProfileNoteText.trim()
+    if (!noteText) {
+      alert('Enter a note first.')
+      return
+    }
+    const staffUser = getCurrentStaffUser()
+    const payload = {
+      customer_id: customer.id,
+      customer_name: customer.name || null,
+      staff_name: staffUser?.name || null,
+      note: noteText,
+      updated_at: new Date().toISOString()
+    }
+    const request = customerProfileNoteEditingId
+      ? supabase.from('CustomerNotes').update(payload).eq('id', customerProfileNoteEditingId)
+      : supabase.from('CustomerNotes').insert({ ...payload, created_at: new Date().toISOString() })
+    const { error } = await request
+    if (error) {
+      alert('Customer note was not saved. Check the CustomerNotes table.')
+      showDataLoadWarning('Customer note could not be saved.', error)
+      console.log(error)
+      return
+    }
+    await createCustomerLog(customer, customerProfileNoteEditingId ? 'Customer note edited' : 'Customer note added', `Note saved by ${staffUser?.name || 'staff'}.`)
+    setCustomerProfileNoteText('')
+    setCustomerProfileNoteEditingId('')
+    await loadCustomerHistory(customer.id)
+  }
+
+  function editCustomerProfileNote(note) {
+    setCustomerProfileNoteEditingId(String(note.id))
+    setCustomerProfileNoteText(note.note || '')
+    setCustomerProfileTab('notes')
+  }
+
+  async function deleteCustomerProfileNote(customer, note) {
+    if (!requireStaffSignIn()) return
+    if (!window.confirm('Delete this customer note?')) return
+    const { error } = await supabase.from('CustomerNotes').delete().eq('id', note.id)
+    if (error) {
+      alert('Customer note was not deleted. Check the CustomerNotes table.')
+      showDataLoadWarning('Customer note could not be deleted.', error)
+      console.log(error)
+      return
+    }
+    await createCustomerLog(customer, 'Customer note deleted', `Note deleted by ${getCurrentStaffUser()?.name || 'staff'}.`)
+    if (String(customerProfileNoteEditingId) === String(note.id)) {
+      setCustomerProfileNoteEditingId('')
+      setCustomerProfileNoteText('')
+    }
+    await loadCustomerHistory(customer.id)
+  }
+
   async function createCustomerMinuteTransaction({ customer, minuteType, transactionType, minutesChanged, balanceBefore, balanceAfter, notes }) {
     if (!customer || !minuteType || Number(minutesChanged || 0) === 0) return
     const staffUser = getCurrentStaffUser()
@@ -5776,6 +5839,7 @@ function App() {
       setCustomerBookingsHistory([])
       setCustomerProductSalesHistory([])
       setCustomerMinuteExpiries([])
+      setCustomerProfileNotes([])
       return
     }
     const { data: paymentsData } = await supabase.from('Payments').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(100)
@@ -5841,6 +5905,17 @@ function App() {
     } else {
       setCustomerMinuteExpiries(expiryData || [])
     }
+    const { data: notesData, error: notesError } = await supabase
+      .from('CustomerNotes')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    if (notesError) {
+      setCustomerProfileNotes([])
+    } else {
+      setCustomerProfileNotes(notesData || [])
+    }
   }
 
   async function searchReceipts() {
@@ -5898,6 +5973,9 @@ function App() {
     setManagerWarningFlag(Boolean(customer.warning_flag))
     setManagerWarningLevel(customer.warning_level || 'none')
     setManagerWarningNote(customer.warning_note || '')
+    setCustomerProfileTab('summary')
+    setCustomerProfileNoteText('')
+    setCustomerProfileNoteEditingId('')
     clearMinuteCorrection()
     loadCustomerHistory(customer.id)
   }
@@ -5935,6 +6013,10 @@ function App() {
     setCustomerBookingsHistory([])
     setCustomerProductSalesHistory([])
     setCustomerMinuteExpiries([])
+    setCustomerProfileNotes([])
+    setCustomerProfileTab('summary')
+    setCustomerProfileNoteText('')
+    setCustomerProfileNoteEditingId('')
   }
 
   function clearAddCustomerForm() {
@@ -7413,160 +7495,227 @@ function App() {
 
   function renderCustomerProfilePanel(customer) {
     if (!customer) return null
+    const tabs = [
+      ['summary', 'Summary'],
+      ['balances', 'Balances'],
+      ['booking_history', 'Booking History'],
+      ['purchases', 'Purchases'],
+      ['spray_tans', 'Spray Tans'],
+      ['registration', 'Registration'],
+      ['notes', 'Notes']
+    ]
+    const splitName = splitCustomerName(customer)
     const stats = getCustomerProfileStats(customer)
     const age = customer.date_of_birth ? calculateAge(customer.date_of_birth) : null
+    const now = new Date()
+    const lastVisitDate = stats.lastVisitDate ? new Date(stats.lastVisitDate) : null
+    const nextBooking = customerBookingsHistory
+      .filter((booking) => booking.appointment_time && new Date(booking.appointment_time) >= now && !['cancelled', 'canceled', 'deleted', 'no_show'].includes(String(booking.status || '').toLowerCase()))
+      .sort((a, b) => new Date(a.appointment_time) - new Date(b.appointment_time))[0]
+    const inactive = lastVisitDate ? ((now - lastVisitDate) / (1000 * 60 * 60 * 24)) >= 60 : false
+    const statusLabel = customer.is_active === false ? 'Inactive' : stats.totalVisits === 0 ? 'New Customer' : inactive ? 'Inactive (60+ days)' : 'Active'
+    const statusTone = customer.is_active === false || inactive ? 'muted' : stats.totalVisits === 0 ? 'info' : 'good'
+    const sunbedBookings = customerBookingsHistory.filter(isSunbedBooking)
+    const sprayBookings = customerBookingsHistory.filter(isSprayTanBooking)
+    const filteredSunbedBookings = sunbedBookings.filter((booking) => {
+      if (customerProfileBookingFilter === 'all') return true
+      if (!booking.appointment_time) return false
+      const date = new Date(booking.appointment_time)
+      const ageDays = (now - date) / (1000 * 60 * 60 * 24)
+      if (customerProfileBookingFilter === 'today') return formatLocalDate(date) === formatLocalDate(now)
+      if (customerProfileBookingFilter === 'week') return ageDays <= 7
+      if (customerProfileBookingFilter === 'month') return ageDays <= 31
+      return true
+    })
+    const totalMinutesUsed = sunbedBookings.reduce((total, booking) => total + Number(booking.minutes_used || booking.runtime_minutes || booking.minutes || 0), 0)
+    const favouriteBed = Object.entries(sunbedBookings.reduce((totals, booking) => {
+      const name = getBedName(booking.bed_id)
+      totals[name] = Number(totals[name] || 0) + 1
+      return totals
+    }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None yet'
+    const lifetimeMinutesPurchased = customerMinuteTransactions.filter((row) => ['added', 'refunded'].includes(String(row.transaction_type || '').toLowerCase())).reduce((total, row) => total + Math.max(0, Number(row.minutes_changed || 0)), 0)
+    const lifetimeMinutesUsed = customerMinuteTransactions.filter((row) => Number(row.minutes_changed || 0) < 0).reduce((total, row) => total + Math.abs(Number(row.minutes_changed || 0)), 0)
+    const lastMinutesPurchase = customerMinuteTransactions.find((row) => ['added', 'refunded'].includes(String(row.transaction_type || '').toLowerCase()))
+    const purchaseRows = [
+      ...customerPayments.map((payment) => ({ id: `payment-${payment.id}`, date: payment.created_at, type: payment.package_type || 'Minutes', description: payment.package_name || payment.bed_type || 'Payment', amount: Number(payment.total_amount || 0), paymentMethod: payment.payment_method, staff: payment.taken_by_staff_name || payment.staff_name })),
+      ...customerProductSalesHistory.map((sale) => ({ id: `product-${sale.id}`, date: sale.created_at, type: 'Products', description: `${sale.product_name || 'Product'} x ${sale.quantity || 1}`, amount: Number(sale.total_amount || 0), paymentMethod: sale.payment_method, staff: sale.sold_by_staff_name || sale.staff_name }))
+    ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+    const lifetimeSpend = purchaseRows.reduce((total, row) => total + Number(row.amount || 0), 0)
+    const sunbedRevenue = customerPayments.filter((payment) => !String(payment.package_type || '').includes('spray_tan') && !String(payment.package_name || '').toLowerCase().includes('spray tan')).reduce((total, payment) => total + Number(payment.total_amount || 0), 0)
+    const sprayTanRevenue = customerPayments.filter((payment) => String(payment.package_type || '').includes('spray_tan') || String(payment.package_name || '').toLowerCase().includes('spray tan')).reduce((total, payment) => total + Number(payment.total_amount || 0), 0)
+    const productRevenue = customerProductSalesHistory.reduce((total, sale) => total + Number(sale.total_amount || 0), 0)
+    const totalAvailableMinutes = Number(customer.standard_minutes_balance || 0) + Number(customer.hybrid_minutes_balance || 0) + Number(customer.weekly_minutes_balance || 0) + Number(customer.free_minutes_balance || 0)
     const patchWarning = getPatchExpiryWarning(customer)
-    const medicalNotes = customer.health_notes || customer.medical_notes || managerHealthNotes || ''
-    const noShowWarning = stats.noShowCount >= 2
-    const activeSunbedHistory = (customerBookingsHistory || []).filter(isSunbedBooking).slice(0, 30)
-    const sprayTanHistory = (customerBookingsHistory || []).filter(isSprayTanBooking).slice(0, 30)
+    const panelStyle = { background: '#0b0b0b', border: '1px solid #2f2a20', borderRadius: '10px', padding: '12px' }
+    const tableWrapStyle = { maxHeight: '340px', overflow: 'auto', border: '1px solid #2f2a20', borderRadius: '10px' }
+    const tableStyle = { width: '100%', borderCollapse: 'collapse', minWidth: '760px' }
+    const thStyle = { textAlign: 'left', color: '#d4a853', padding: '9px', borderBottom: '1px solid #333', background: '#111', position: 'sticky', top: 0 }
+    const tdStyle = { padding: '9px', borderBottom: '1px solid #222', color: '#ddd', verticalAlign: 'top' }
+    const statStyle = { background: '#0b0b0b', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }
     const emailCustomerReceipt = (receipt) => {
       if (!customer.email) {
         alert('Customer does not have an email address saved.')
         return
       }
-      const subject = encodeURIComponent('Glow Tanning Receipt')
-      const body = encodeURIComponent(buildReceiptText(receipt))
-      window.location.href = `mailto:${encodeURIComponent(customer.email)}?subject=${subject}&body=${body}`
+      window.location.href = `mailto:${encodeURIComponent(customer.email)}?subject=${encodeURIComponent('Glow Tanning Receipt')}&body=${encodeURIComponent(buildReceiptText(receipt))}`
     }
-    const quickActionStyle = { padding: '9px 10px', fontSize: '13px' }
-    const sectionStyle = { background: '#0b0b0b', border: '1px solid #2f2a20', borderRadius: '10px', padding: '12px', minHeight: '220px' }
-    const statStyle = { background: '#0b0b0b', border: '1px solid #2f2a20', borderRadius: '10px', padding: '10px' }
-    const rowStyle = { borderBottom: '1px solid #28231b', padding: '8px 0', color: '#ddd' }
+    const renderTable = (headers, rows, renderRow, emptyText) => (
+      <div style={tableWrapStyle}>
+        <table style={tableStyle}>
+          <thead><tr>{headers.map((header) => <th key={header} style={thStyle}>{header}</th>)}</tr></thead>
+          <tbody>{rows.length === 0 ? <tr><td colSpan={headers.length} style={tdStyle}>{emptyText}</td></tr> : rows.map(renderRow)}</tbody>
+        </table>
+      </div>
+    )
 
     return (
       <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.35)', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: '12px' }}>
           <div>
-            <h3 style={{ margin: '0 0 4px', color: '#d4a853' }}>{customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Customer Profile'}</h3>
-            <div style={{ color: '#ccc', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-              <span>{customer.phone || 'No phone'}</span>
-              <span>{customer.email || 'No email'}</span>
-              <span>DOB: {customer.date_of_birth || 'Not recorded'}{age !== null ? ` / Age ${age}` : ''}</span>
-            </div>
-            <div style={{ color: '#aaa', marginTop: '4px' }}>{[customer.address, customer.postcode].filter(Boolean).join(', ') || 'No address recorded'}</div>
-          </div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {!customer.terms_accepted && renderProfileBadge('Terms not accepted', 'warning')}
-            {!customer.id_checked && renderProfileBadge('ID not checked', 'warning')}
-            {patchWarning && renderProfileBadge(patchWarning, patchWarning.includes('expired') ? 'danger' : 'warning')}
-            {medicalNotes && renderProfileBadge('Medical warning', 'danger')}
-            {noShowWarning && renderProfileBadge('No-show warning', 'warning')}
-            {stats.minutesExpiringSoon.length > 0 && renderProfileBadge('Minutes expiring soon', 'warning')}
-            {customer.warning_flag && renderProfileBadge(formatStatus(getCustomerWarningLevel(customer)), getCustomerWarningLevel(customer) === 'banned' ? 'danger' : 'warning')}
-            {customer.is_active === false && renderProfileBadge('Inactive', 'muted')}
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '8px', marginBottom: '12px' }}>
-          <div style={statStyle}><strong>ID checked</strong><br /><span style={{ color: customer.id_checked ? '#9be2b5' : '#ffd27a' }}>{customer.id_checked ? 'Yes' : 'No'}</span></div>
-          <div style={statStyle}><strong>Terms accepted</strong><br /><span style={{ color: customer.terms_accepted ? '#9be2b5' : '#ffd27a' }}>{customer.terms_accepted ? 'Yes' : 'No'}</span></div>
-          <div style={statStyle}><strong>Marketing consent</strong><br /><span>{customer.marketing_consent ? 'Yes' : 'No'}</span></div>
-          <div style={statStyle}><strong>Last tan date</strong><br /><span>{stats.lastTanDate ? new Date(stats.lastTanDate).toLocaleString('en-GB') : 'None recorded'}</span></div>
-          <div style={statStyle}><strong>Last visit</strong><br /><span>{stats.lastVisitDate ? new Date(stats.lastVisitDate).toLocaleString('en-GB') : 'None recorded'}</span></div>
-          <div style={statStyle}><strong>Total visits</strong><br /><span>{stats.totalVisits}</span></div>
-          <div style={statStyle}><strong>No-shows</strong><br /><span>{stats.noShowCount}</span></div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <div style={sectionStyle}>
-            <h4 style={{ marginTop: 0 }}>Notes / Warnings</h4>
-            {customer.warning_flag && <p style={{ color: getCustomerWarningStyle(getCustomerWarningLevel(customer)).color, fontWeight: 'bold' }}>{customer.warning_note || formatStatus(getCustomerWarningLevel(customer))}</p>}
-            <p style={{ whiteSpace: 'pre-wrap', color: '#ccc' }}>{customer.notes || 'No customer notes.'}</p>
-            <p style={{ whiteSpace: 'pre-wrap', color: medicalNotes ? '#ffb3b3' : '#aaa' }}><strong>Allergies / medication / health:</strong><br />{medicalNotes || 'None recorded.'}</p>
-          </div>
-          <div style={sectionStyle}>
-            <h4 style={{ marginTop: 0 }}>Quick Actions</h4>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button type="button" style={quickActionStyle} onClick={() => { setSelectedCustomerId(String(customer.id)); setCustomerSearch(customer.name || ''); setDashboardView('sunbeds'); setShowCustomerManagement(false); scrollToTop() }}>Create sunbed booking</button>
-              <button type="button" style={quickActionStyle} onClick={() => { setSelectedCustomerId(String(customer.id)); setCustomerSearch(customer.name || ''); setSprayTanCustomerName(customer.name || ''); setDashboardView('spraytan'); setShowCustomerManagement(false); scrollToTop() }}>Create spray tan booking</button>
-              <button type="button" style={quickActionStyle} onClick={() => { setSelectedCustomerId(String(customer.id)); setCustomerSearch(customer.name || ''); setShowBookingTopUp(true); setDashboardView('sunbeds'); scrollToTop() }}>Add / top up minutes</button>
-              <button type="button" style={quickActionStyle} onClick={() => { if (requireStaffSignIn()) setShowStandalonePOS(true) }}>Add product sale</button>
-              <button type="button" style={quickActionStyle} onClick={() => customerReceipts[0] ? emailCustomerReceipt(customerReceipts[0]) : alert('No receipt found for this customer.')}>Email receipt</button>
-              <button type="button" style={quickActionStyle} onClick={() => setManagerNotes(`${managerNotes ? `${managerNotes}\n` : ''}${new Date().toLocaleString('en-GB')} - `)}>Add note</button>
-              <button type="button" style={quickActionStyle} onClick={() => setManagerIdChecked(true)}>Mark ID checked</button>
-              <button type="button" style={quickActionStyle} onClick={() => setManagerTermsAccepted(true)}>Mark terms accepted</button>
+            <h2 style={{ margin: '0 0 4px', color: '#d4a853' }}>{customer.name || `${splitName.firstName} ${splitName.lastName}`.trim() || 'Customer Profile'}</h2>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {renderProfileBadge(statusLabel, statusTone)}
+              {!customer.terms_accepted && renderProfileBadge('Terms not accepted', 'warning')}
+              {!customer.id_checked && renderProfileBadge('ID not checked', 'warning')}
+              {patchWarning && renderProfileBadge(patchWarning, patchWarning.includes('expired') ? 'danger' : 'warning')}
+              {customer.warning_flag && renderProfileBadge(formatStatus(getCustomerWarningLevel(customer)), getCustomerWarningLevel(customer) === 'banned' ? 'danger' : 'warning')}
             </div>
           </div>
+          <button type="button" onClick={() => setCustomerProfileTab('notes')}>Add Note</button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Sunbed History</h4>
-            {activeSunbedHistory.length === 0 ? <p style={{ color: '#aaa' }}>No sunbed history.</p> : activeSunbedHistory.map((booking) => (
-              <div key={`sunbed-profile-${booking.id}`} style={rowStyle}>
-                <strong>{booking.appointment_time ? new Date(booking.appointment_time).toLocaleString('en-GB') : 'No date'}</strong><br />
-                {getBedName(booking.bed_id)} / Room {booking.bed_id || '-'} / {booking.minutes || 0} mins booked / {booking.minutes_used || booking.runtime_minutes || booking.minutes || 0} used<br />
-                <span style={{ color: '#aaa' }}>{formatStatus(booking.status)} / Booked by {booking.created_by_staff_name || booking.staff_name || 'Unknown'} / Started by {booking.started_by_staff_name || 'Unknown'} / {formatStatus(booking.payment_method)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Minutes / Packages</h4>
-            <p>Standard balance: <strong>{customer.standard_minutes_balance || 0}</strong></p>
-            <p>Collagen/hybrid balance: <strong>{customer.hybrid_minutes_balance || 0}</strong></p>
-            {(customerMinuteExpiries || []).length === 0 ? <p style={{ color: '#aaa' }}>No promo minute expiry allocations found.</p> : customerMinuteExpiries.map((entry) => (
-              <div key={`expiry-profile-${entry.id}`} style={rowStyle}>
-                <strong>{formatStatus(entry.source_type || 'Package / promo')}</strong><br />
-                {formatStatus(entry.minute_type)} / Bought {Number(entry.minutes_amount || 0)} / Remaining {Number(entry.minutes_remaining || 0)}<br />
-                <span style={{ color: entry.expired ? '#ff9a9a' : '#aaa' }}>Expiry: {entry.expiry_date || 'No expiry'} {entry.expired ? '/ Expired' : ''}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Product Purchases</h4>
-            {(customerProductSalesHistory || []).length === 0 ? <p style={{ color: '#aaa' }}>No product purchases.</p> : customerProductSalesHistory.slice(0, 40).map((sale) => (
-              <div key={`product-profile-${sale.id}`} style={rowStyle}>
-                <strong>{sale.created_at ? new Date(sale.created_at).toLocaleString('en-GB') : 'No date'}</strong><br />
-                {sale.product_name || 'Product'} x {sale.quantity || 1} / GBP {Number(sale.total_amount || sale.total || 0).toFixed(2)}<br />
-                <span style={{ color: '#aaa' }}>{sale.sold_by_staff_name || sale.staff_name || 'Unknown staff'}{sale.is_promo_item || sale.promo_name ? ' / Promo or free product' : ''}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Spray Tan History</h4>
-            {sprayTanHistory.length === 0 ? <p style={{ color: '#aaa' }}>No spray tan history.</p> : sprayTanHistory.map((booking) => (
-              <div key={`spray-profile-${booking.id}`} style={rowStyle}>
-                <strong>{booking.spraytan_service || 'Spray tan'} / {booking.appointment_time ? new Date(booking.appointment_time).toLocaleString('en-GB') : 'No date'}</strong><br />
-                Artist: {booking.assigned_artist_name || booking.spraytan_artist || 'Unassigned'} / Deposit {Number(booking.deposit_paid || 0).toFixed(2)} / Balance {Number(booking.spraytan_balance_paid || 0).toFixed(2)}<br />
-                <span style={{ color: '#aaa' }}>Patch test: {booking.patch_test_completed ? 'Completed' : 'Not recorded'} / {getSprayTanStatusLabel(booking)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Payments / Receipts</h4>
-            {customerReceipts.length === 0 && customerPayments.length === 0 ? <p style={{ color: '#aaa' }}>No payments or receipts.</p> : null}
-            {customerReceipts.slice(0, 30).map((receipt) => (
-              <div key={`profile-receipt-${receipt.id}`} style={rowStyle}>
-                <strong>{receipt.created_at ? new Date(receipt.created_at).toLocaleString('en-GB') : 'No date'} / GBP {Number(receipt.total || 0).toFixed(2)}</strong><br />
-                {formatStatus(receipt.receipt_type)} / {formatStatus(receipt.payment_method)} / {receipt.staff_name || 'Unknown staff'}<br />
-                <button type="button" onClick={() => alert(buildReceiptText(receipt))} style={{ marginTop: '6px', marginRight: '6px', padding: '6px 8px' }}>View Receipt</button>
-                {customer.email && <button type="button" onClick={() => emailCustomerReceipt(receipt)} style={{ marginTop: '6px', padding: '6px 8px' }}>Email Receipt</button>}
-              </div>
-            ))}
-            {customerPayments.slice(0, 20).map((payment) => (
-              <div key={`profile-payment-${payment.id}`} style={rowStyle}>
-                <strong>{payment.created_at ? new Date(payment.created_at).toLocaleString('en-GB') : 'No date'} / GBP {Number(payment.total_amount || payment.amount || 0).toFixed(2)}</strong><br />
-                {payment.package_name || payment.payment_for || payment.bed_type || 'Payment'} / {formatStatus(payment.payment_method)} / {payment.taken_by_staff_name || payment.staff_name || 'Unknown staff'}
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...sectionStyle, maxHeight: '330px', overflowY: 'auto' }}>
-            <h4 style={{ marginTop: 0 }}>Logs / Audit Trail</h4>
-            {customerLogs.length === 0 ? <p style={{ color: '#aaa' }}>No logs found.</p> : customerLogs.slice(0, 60).map((log) => (
-              <div key={`profile-log-${log.id}`} style={rowStyle}>
-                <strong>{log.action || 'Log'}</strong><br />
-                <span>{log.details || log.notes || ''}</span><br />
-                <span style={{ color: '#aaa' }}>{log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : ''}</span>
-              </div>
-            ))}
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', marginBottom: '12px' }}>
+          <div style={statStyle}><span>Lifetime Spend</span><h3>£{lifetimeSpend.toFixed(2)}</h3></div>
+          <div style={statStyle}><span>Total Visits</span><h3>{stats.totalVisits}</h3></div>
+          <div style={statStyle}><span>Last Visit</span><h3 style={{ fontSize: '16px' }}>{stats.lastVisitDate ? new Date(stats.lastVisitDate).toLocaleDateString('en-GB') : 'None'}</h3></div>
+          <div style={statStyle}><span>Next Booking</span><h3 style={{ fontSize: '16px' }}>{nextBooking?.appointment_time ? new Date(nextBooking.appointment_time).toLocaleString('en-GB') : 'None'}</h3></div>
+          <div style={statStyle}><span>Minutes Remaining</span><h3>{totalAvailableMinutes}</h3></div>
         </div>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          {tabs.map(([key, label]) => (
+            <button key={key} type="button" onClick={() => setCustomerProfileTab(key)} style={{ background: customerProfileTab === key ? '#d4a853' : '#0b0b0b', color: customerProfileTab === key ? '#0b0b0b' : '#f5f0e8', border: '1px solid rgba(212,168,83,0.45)', padding: '9px 11px' }}>{label}</button>
+          ))}
+        </div>
+
+        {customerProfileTab === 'summary' && (
+          <div style={{ ...panelStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+            <p><strong>First Name:</strong><br />{customer.first_name || splitName.firstName || '-'}</p>
+            <p><strong>Last Name:</strong><br />{customer.last_name || splitName.lastName || '-'}</p>
+            <p><strong>Full Name:</strong><br />{customer.name || '-'}</p>
+            <p><strong>Mobile Number:</strong><br />{customer.phone || '-'}</p>
+            <p><strong>Email Address:</strong><br />{customer.email || '-'}</p>
+            <p><strong>Date of Birth / Age:</strong><br />{customer.date_of_birth || '-'}{age !== null ? ` / ${age}` : ''}</p>
+            <p><strong>Address:</strong><br />{customer.address || '-'}</p>
+            <p><strong>Postcode:</strong><br />{customer.postcode || '-'}</p>
+            <p><strong>Marketing Consent:</strong><br />{customer.marketing_consent ? 'Yes' : 'No'}</p>
+            <p><strong>Customer Since:</strong><br />{customer.created_at ? new Date(customer.created_at).toLocaleDateString('en-GB') : '-'}</p>
+            <p><strong>Last Visit:</strong><br />{stats.lastVisitDate ? new Date(stats.lastVisitDate).toLocaleString('en-GB') : '-'}</p>
+            <p><strong>Next Booking:</strong><br />{nextBooking?.appointment_time ? new Date(nextBooking.appointment_time).toLocaleString('en-GB') : '-'}</p>
+          </div>
+        )}
+
+        {customerProfileTab === 'balances' && (
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px' }}>
+              <div style={statStyle}><span>Standard Minutes Balance</span><h3>{customer.standard_minutes_balance || 0}</h3></div>
+              <div style={statStyle}><span>Collagen Minutes Balance</span><h3>{customer.hybrid_minutes_balance || 0}</h3></div>
+              <div style={statStyle}><span>Weekly Minutes Balance</span><h3>{customer.weekly_minutes_balance || 0}</h3></div>
+              <div style={statStyle}><span>Free Minutes Balance</span><h3>{customer.free_minutes_balance || 0}</h3></div>
+              <div style={statStyle}><span>Total Available Minutes</span><h3>{totalAvailableMinutes}</h3></div>
+            </div>
+            <div style={panelStyle}>
+              <p><strong>Last Minutes Purchase:</strong> {lastMinutesPurchase?.created_at ? new Date(lastMinutesPurchase.created_at).toLocaleString('en-GB') : 'None recorded'}</p>
+              <p><strong>Last Top Up Date:</strong> {customerPayments[0]?.created_at ? new Date(customerPayments[0].created_at).toLocaleString('en-GB') : 'None recorded'}</p>
+              <p><strong>Lifetime Minutes Purchased:</strong> {lifetimeMinutesPurchased}</p>
+              <p><strong>Lifetime Minutes Used:</strong> {lifetimeMinutesUsed}</p>
+              {(customerMinuteExpiries || []).map((entry) => <p key={entry.id}>{formatStatus(entry.source_type || 'Promo')} - {entry.minutes_remaining || 0} mins remaining / expires {entry.expiry_date || 'never'}{entry.expired ? ' / expired' : ''}</p>)}
+            </div>
+          </div>
+        )}
+
+        {customerProfileTab === 'booking_history' && (
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>{['today', 'week', 'month', 'all'].map((filter) => <button key={filter} type="button" onClick={() => setCustomerProfileBookingFilter(filter)}>{formatStatus(filter)}</button>)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+              <div style={statStyle}><span>Total Sessions</span><h3>{sunbedBookings.length}</h3></div>
+              <div style={statStyle}><span>Total Minutes Used</span><h3>{totalMinutesUsed}</h3></div>
+              <div style={statStyle}><span>Average Session Length</span><h3>{sunbedBookings.length ? (totalMinutesUsed / sunbedBookings.length).toFixed(1) : 0}</h3></div>
+              <div style={statStyle}><span>Favourite Bed</span><h3 style={{ fontSize: '16px' }}>{favouriteBed}</h3></div>
+            </div>
+            {renderTable(['Date', 'Time', 'Bed', 'Minutes', 'Booking Source', 'Staff Member', 'Status'], filteredSunbedBookings, (booking) => {
+              const date = booking.appointment_time ? new Date(booking.appointment_time) : null
+              return <tr key={booking.id}><td style={tdStyle}>{date ? date.toLocaleDateString('en-GB') : '-'}</td><td style={tdStyle}>{date ? date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '-'}</td><td style={tdStyle}>{getBedName(booking.bed_id)}</td><td style={tdStyle}>{booking.minutes || 0}</td><td style={tdStyle}>{formatStatus(booking.booking_source || booking.source || 'dashboard')}</td><td style={tdStyle}>{booking.created_by_staff_name || booking.staff_name || 'Unknown'}</td><td style={tdStyle}>{formatStatus(booking.status)}</td></tr>
+            }, 'No sunbed bookings found.')}
+          </div>
+        )}
+
+        {customerProfileTab === 'purchases' && (
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+              <div style={statStyle}><span>Lifetime Spend</span><h3>£{lifetimeSpend.toFixed(2)}</h3></div>
+              <div style={statStyle}><span>Sunbed Revenue</span><h3>£{sunbedRevenue.toFixed(2)}</h3></div>
+              <div style={statStyle}><span>Spray Tan Revenue</span><h3>£{sprayTanRevenue.toFixed(2)}</h3></div>
+              <div style={statStyle}><span>Product Revenue</span><h3>£{productRevenue.toFixed(2)}</h3></div>
+            </div>
+            {renderTable(['Date', 'Type', 'Description', 'Amount', 'Payment Method', 'Staff Member'], purchaseRows, (row) => <tr key={row.id}><td style={tdStyle}>{row.date ? new Date(row.date).toLocaleString('en-GB') : '-'}</td><td style={tdStyle}>{formatStatus(row.type)}</td><td style={tdStyle}>{row.description}</td><td style={tdStyle}>£{Number(row.amount || 0).toFixed(2)}</td><td style={tdStyle}>{formatStatus(row.paymentMethod)}</td><td style={tdStyle}>{row.staff || 'Unknown'}</td></tr>, 'No purchases found.')}
+          </div>
+        )}
+
+        {customerProfileTab === 'spray_tans' && (
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={panelStyle}>
+              <p><strong>Patch Test Status:</strong> {patchWarning || (customer.patch_test_expiry_date ? 'Valid' : 'Not recorded')}</p>
+              <p><strong>Last Patch Test Date:</strong> {customer.last_patch_test_date ? new Date(customer.last_patch_test_date).toLocaleDateString('en-GB') : '-'}</p>
+              <p><strong>Patch Test Expiry Date:</strong> {customer.patch_test_expiry_date || '-'}</p>
+              <p><strong>Artist History:</strong> {[...new Set(sprayBookings.map((booking) => booking.assigned_artist_name || booking.spraytan_artist).filter(Boolean))].join(', ') || '-'}</p>
+              <p><strong>Lifetime Spray Tan Spend:</strong> £{sprayTanRevenue.toFixed(2)} / <strong>Total Spray Tan Visits:</strong> {sprayBookings.length}</p>
+            </div>
+            {renderTable(['Date', 'Service', 'Artist', 'Price', 'Deposit', 'Balance', 'Status'], sprayBookings, (booking) => <tr key={booking.id}><td style={tdStyle}>{booking.appointment_time ? new Date(booking.appointment_time).toLocaleString('en-GB') : '-'}</td><td style={tdStyle}>{booking.spraytan_service || '-'}</td><td style={tdStyle}>{booking.assigned_artist_name || booking.spraytan_artist || '-'}</td><td style={tdStyle}>£{getSprayTanServicePrice(booking.spraytan_service).toFixed(2)}</td><td style={tdStyle}>£{Number(booking.deposit_paid || 0).toFixed(2)}</td><td style={tdStyle}>£{Number(booking.spraytan_balance_due || 0).toFixed(2)}</td><td style={tdStyle}>{getSprayTanStatusLabel(booking)}</td></tr>, 'No spray tan bookings found.')}
+          </div>
+        )}
+
+        {customerProfileTab === 'registration' && (
+          <div style={{ ...panelStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+            <p><strong>Pregnant:</strong><br />{customer.registration_pregnant ? 'Yes' : 'No / not recorded'}</p>
+            <p><strong>Allergies:</strong><br />{customer.registration_allergies || customer.health_notes || '-'}</p>
+            <p><strong>Medication:</strong><br />{customer.registration_medication || '-'}</p>
+            <p><strong>Sun Sensitivity:</strong><br />{customer.registration_sun_sensitivity || '-'}</p>
+            <p><strong>GP Warnings:</strong><br />{customer.registration_gp_warnings || '-'}</p>
+            <p><strong>Marketing Consent:</strong><br />{customer.marketing_consent ? 'Yes' : 'No'}</p>
+            <p><strong>Referral Source:</strong><br />{customer.referral_source || '-'}</p>
+            <p><strong>Registration Completed Date:</strong><br />{customer.registration_completed_at ? new Date(customer.registration_completed_at).toLocaleString('en-GB') : '-'}</p>
+            <p><strong>Signature:</strong><br />{customer.registration_signature || '-'}</p>
+            <button type="button" onClick={() => alert('Registration record is shown read-only in this tab for Phase 1.')}>View Registration Record</button>
+          </div>
+        )}
+
+        {customerProfileTab === 'notes' && (
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={panelStyle}>
+              <h3 style={{ marginTop: 0 }}>Manager Notes</h3>
+              <textarea value={customerProfileNoteText} onChange={(event) => setCustomerProfileNoteText(event.target.value)} placeholder="Add manager note..." style={{ width: '100%', minHeight: '90px', padding: '10px', boxSizing: 'border-box', background: '#111', color: '#fff', border: '1px solid #333', borderRadius: '10px' }} />
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                <button type="button" onClick={() => saveCustomerProfileNote(customer)}>{customerProfileNoteEditingId ? 'Save Note' : 'Add Note'}</button>
+                {customerProfileNoteEditingId && <button type="button" onClick={() => { setCustomerProfileNoteEditingId(''); setCustomerProfileNoteText('') }}>Cancel Edit</button>}
+              </div>
+            </div>
+            <div style={{ ...panelStyle, maxHeight: '320px', overflowY: 'auto' }}>
+              {customerProfileNotes.length === 0 ? <p style={{ color: '#aaa' }}>No manager notes found.</p> : customerProfileNotes.map((note) => (
+                <div key={note.id} style={{ borderBottom: '1px solid #222', padding: '9px 0' }}>
+                  <strong>{note.created_at ? new Date(note.created_at).toLocaleString('en-GB') : ''}</strong> / {note.staff_name || 'Unknown staff'}
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{note.note}</p>
+                  <button type="button" onClick={() => editCustomerProfileNote(note)} style={{ marginRight: '6px', padding: '6px 8px' }}>Edit</button>
+                  <button type="button" onClick={() => deleteCustomerProfileNote(customer, note)} style={{ padding: '6px 8px' }}>Delete</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ ...panelStyle, maxHeight: '220px', overflowY: 'auto' }}>
+              <h3 style={{ marginTop: 0 }}>Audit Trail</h3>
+              {customerLogs.length === 0 ? <p style={{ color: '#aaa' }}>No audit logs found.</p> : customerLogs.slice(0, 60).map((log) => <p key={log.id}><strong>{log.action}</strong> - {log.details}<br /><span style={{ color: '#aaa' }}>{log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : ''}</span></p>)}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
