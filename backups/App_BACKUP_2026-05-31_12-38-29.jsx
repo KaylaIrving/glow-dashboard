@@ -5270,7 +5270,7 @@ function formatMoney(value) {
     }
 
     const servicePrice = getSprayTanServicePrice(sprayTanService)
-    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || 0)
+    const depositRequired = getDefaultSprayTanDeposit(sprayTanService)
     const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
     const balanceDue = Math.max(0, servicePrice - depositPaid)
     const calculatedDepositStatus = getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid)
@@ -5385,7 +5385,7 @@ function formatMoney(value) {
 
     const servicePrice = getSprayTanServicePrice(sprayTanService)
     const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
-    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || 0)
+    const depositRequired = getDefaultSprayTanDeposit(sprayTanService)
     const previousBalancePaid = Number(sprayTanEditingBooking.spraytan_balance_paid || 0)
     const balancePaymentAmount = Number(sprayTanBalancePaymentAmount || 0)
     const newBalancePaid = previousBalancePaid + balancePaymentAmount
@@ -9857,7 +9857,7 @@ function formatMoney(value) {
     const customer = getSelectedCustomer()
     const selectedStaff = getSelectedStaffAsCustomer()
     const servicePrice = getSprayTanServicePrice(sprayTanService)
-    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || 0)
+    const depositRequired = getDefaultSprayTanDeposit(sprayTanService)
     const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
     const existingBalancePaid = Number(sprayTanEditingBooking?.spraytan_balance_paid || 0)
     const balancePaymentAmount = Number(sprayTanBalancePaymentAmount || 0)
@@ -9910,11 +9910,7 @@ function formatMoney(value) {
             <div><label>Time</label><input type="time" value={sprayTanTime} onChange={(e) => setSprayTanTime(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Duration</label><input type="number" min="5" value={sprayTanDuration} onChange={(e) => setSprayTanDuration(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Artist</label><input value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} placeholder="Artist name" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit due (£)</label><input type="number" min="0" step="0.01" value={depositRequired} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
-              const nextDepositRequired = e.target.value
-              setSprayTanDepositRequired(nextDepositRequired)
-              setSprayTanDepositStatus(getSprayTanDepositStatus(sprayTanService, Number(nextDepositRequired || 0), depositPaid))
-            }} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /><small style={{ color: '#aaa' }}>{formatMoney(depositRequired)}</small></div>
+            <div><label>Deposit due</label><input type="text" value={formatMoney(depositRequired)} disabled style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Deposit paid</label><input type="number" step="0.01" value={depositPaid} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
               setSprayTanDepositPaid(e.target.value)
               setSprayTanDepositStatus(getSprayTanDepositStatus(sprayTanService, depositRequired, Number(e.target.value || 0)))
