@@ -10,22 +10,6 @@ const MANAGER_PIN = '3090'
 const WEEKLY_STAFF_FREE_MINUTES = 18
 const LOW_STOCK_THRESHOLD = 5
 const COMMON_BOOKING_MINUTES = Array.from({ length: 19 }, (_, index) => index + 2)
-const MANAGER_REPORT_TYPES = [
-  { value: 'daily_takings', label: 'Daily takings' },
-  { value: 'sunbed_sales', label: 'Sunbed sales' },
-  { value: 'spray_tan_sales', label: 'Spray tan sales' },
-  { value: 'product_sales', label: 'Product sales' },
-  { value: 'product_sales_by_staff', label: 'Product sales by staff' },
-  { value: 'staff_commission', label: 'Staff commission' },
-  { value: 'staff_performance', label: 'Staff performance' },
-  { value: 'promo_sales', label: 'Promo sales' },
-  { value: 'expired_minutes', label: 'Expired minutes' },
-  { value: 'duplicate_customers', label: 'Duplicate customers' },
-  { value: 'customer_registrations', label: 'Customer registrations' },
-  { value: 'patch_test_expiry', label: 'Patch test expiry' },
-  { value: 'no_shows_cancellations', label: 'No shows / cancellations' },
-  { value: 'cash_up_summary', label: 'Cash-up summary' }
-]
 
 // TODO Wix integration: fill this once the final Wix service names and bed rules are confirmed.
 // Example shape:
@@ -397,7 +381,6 @@ function App() {
   const [reportsSprayTanCommissionPercent, setReportsSprayTanCommissionPercent] = useState('10')
   const [reportsPromoCommissionPercent, setReportsPromoCommissionPercent] = useState('10')
   const [reportsFlatServiceCommission, setReportsFlatServiceCommission] = useState('0')
-  const [reportsType, setReportsType] = useState('daily_takings')
   const [managerReportsData, setManagerReportsData] = useState(null)
   const [managerReportsLoading, setManagerReportsLoading] = useState(false)
   const [managerReportsError, setManagerReportsError] = useState('')
@@ -1304,14 +1287,13 @@ function formatMoney(value) {
     setManagerReportsLoading(true)
     setManagerReportsError('')
 
-    const [productSalesResult, paymentsResult, receiptsResult, cashUpsResult, bookingsResult, correctionsResult, minuteExpiriesResult] = await Promise.all([
+    const [productSalesResult, paymentsResult, receiptsResult, cashUpsResult, bookingsResult, correctionsResult] = await Promise.all([
       supabase.from('ProductSales').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('Payments').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('Receipts').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('CashUps').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('Bookings').select('*').gte('appointment_time', start).lte('appointment_time', end),
-      supabase.from('CorrectionLogs').select('*').gte('created_at', start).lte('created_at', end),
-      supabase.from('CustomerMinuteExpiries').select('*').gte('created_at', start).lte('created_at', end)
+      supabase.from('CorrectionLogs').select('*').gte('created_at', start).lte('created_at', end)
     ])
 
     setManagerReportsLoading(false)
@@ -1328,7 +1310,6 @@ function formatMoney(value) {
     const cashUps = cashUpsResult.data || []
     const reportBookings = bookingsResult.data || []
     const corrections = correctionsResult.error ? [] : correctionsResult.data || []
-    const minuteExpiries = minuteExpiriesResult.error ? [] : minuteExpiriesResult.data || []
 
     const productSalesByStaffMap = new Map()
     const productSummaryMap = new Map()
@@ -1472,134 +1453,7 @@ function formatMoney(value) {
       staffActivityMap.get(staffName).corrections += 1
     }
 
-    const paymentMethodTotal = (method) => payments
-      .filter((payment) => String(payment.payment_method || '').toLowerCase() === method)
-      .reduce((total, payment) => total + Number(payment.total_amount || 0), 0)
-    const productSalesTotal = productSales.reduce((total, sale) => total + Number(sale.total_amount || 0), 0)
-    const paymentsTotal = payments.reduce((total, payment) => total + Number(payment.total_amount || 0), 0)
-    const sprayTanPayments = payments.filter((payment) => {
-      const type = String(payment.package_type || payment.package_name || '').toLowerCase()
-      return type.includes('spray_tan') || type.includes('spray tan')
-    })
-    const sunbedPayments = payments.filter((payment) => {
-      const type = String(payment.package_type || payment.package_name || '').toLowerCase()
-      return !type.includes('spray_tan') && !type.includes('spray tan') && type !== 'promo' && !type.includes('promo')
-    })
-    const promoPayments = payments.filter((payment) => {
-      const type = String(payment.package_type || payment.package_name || '').toLowerCase()
-      return type === 'promo' || type.includes('promo')
-    })
-    const dailyTakingsRows = [{
-      date_from: reportsStartDate,
-      date_to: reportsEndDate,
-      total_revenue: paymentsTotal + productSalesTotal,
-      cash_total: paymentMethodTotal('cash'),
-      card_total: paymentMethodTotal('card'),
-      bank_transfer_total: paymentMethodTotal('bank_transfer'),
-      other_total: paymentMethodTotal('other'),
-      product_sales_total: productSalesTotal,
-      sunbed_sales_total: sunbedPayments.reduce((total, payment) => total + Number(payment.total_amount || 0), 0),
-      spray_tan_sales_total: sprayTanPayments.reduce((total, payment) => total + Number(payment.total_amount || 0), 0),
-      promo_sales_total: promoPayments.reduce((total, payment) => total + Number(payment.total_amount || 0), 0),
-      transactions: payments.length + productSales.length
-    }]
-    const sunbedSalesRows = sunbedPayments.map((payment) => ({
-      date: payment.created_at ? new Date(payment.created_at).toLocaleString('en-GB') : '',
-      customer_name: payment.customer_name || 'Walk-in',
-      package_name: payment.package_name || payment.package_type || 'Sunbed sale',
-      minutes: Number(payment.minutes_added || 0),
-      amount: Number(payment.total_amount || 0),
-      payment_method: formatStatus(payment.payment_method),
-      staff_name: payment.commission_staff_name || payment.taken_by_staff_name || payment.staff_name || 'Unknown staff'
-    }))
-    const sprayTanSalesRows = sprayTanPayments.map((payment) => ({
-      date: payment.created_at ? new Date(payment.created_at).toLocaleString('en-GB') : '',
-      customer_name: payment.customer_name || 'Spray tan customer',
-      type: formatStatus(payment.package_type || payment.package_name || 'Spray tan payment'),
-      amount: Number(payment.total_amount || 0),
-      payment_method: formatStatus(payment.payment_method),
-      staff_name: payment.commission_staff_name || payment.taken_by_staff_name || payment.staff_name || 'Unknown staff'
-    }))
-    const productSalesRows = productSales.map((sale) => ({
-      date: sale.created_at ? new Date(sale.created_at).toLocaleString('en-GB') : '',
-      staff_name: sale.commission_staff_name || sale.sold_by_staff_name || sale.staff_name || sale.staff || 'Unknown staff',
-      product_name: sale.product_name || 'Product',
-      category: sale.category || 'Uncategorised',
-      quantity: Number(sale.quantity || 0),
-      total: Number(sale.total_amount || 0)
-    }))
-    const duplicateCustomerRows = getDuplicateCustomerMatches().map((match) => ({
-      customer_a: match.customerA.name || 'Unnamed',
-      customer_b: match.customerB.name || 'Unnamed',
-      customer_a_phone: match.customerA.phone || '',
-      customer_b_phone: match.customerB.phone || '',
-      reason: match.reason,
-      action: 'Merge Customers - future feature'
-    }))
-    const customerRegistrationRows = customers
-      .filter((customer) => {
-        const created = customer.created_at ? new Date(customer.created_at) : null
-        return created && created >= new Date(start) && created <= new Date(end)
-      })
-      .map((customer) => ({
-        created_at: customer.created_at ? new Date(customer.created_at).toLocaleString('en-GB') : '',
-        customer_name: customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Unnamed',
-        phone: customer.phone || '',
-        email: customer.email || '',
-        terms_accepted: customer.terms_accepted || customer.salon_terms_accepted ? 'Yes' : 'No',
-        id_checked: customer.id_checked ? 'Yes' : 'No'
-      }))
-    const patchTestExpiryRows = customers
-      .filter((customer) => customer.patch_test_expiry_date)
-      .map((customer) => {
-        const expiry = new Date(`${customer.patch_test_expiry_date}T00:00:00`)
-        const days_remaining = Math.ceil((expiry - new Date()) / (24 * 60 * 60 * 1000))
-        return {
-          customer_name: customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Unnamed',
-          phone: customer.phone || '',
-          last_patch_test_date: customer.last_patch_test_date || '',
-          patch_test_expiry_date: customer.patch_test_expiry_date,
-          days_remaining,
-          status: days_remaining < 0 ? 'Expired' : days_remaining <= 31 ? 'Expiring soon' : 'Active'
-        }
-      })
-      .filter((row) => row.status !== 'Active')
-    const noShowCancellationRows = reportBookings
-      .filter((booking) => {
-        const status = String(booking.status || '').toLowerCase()
-        const approval = String(booking.approval_status || '').toLowerCase()
-        return ['no_show', 'cancelled', 'canceled'].includes(status) || ['cancelled', 'canceled'].includes(approval)
-      })
-      .map((booking) => ({
-        date: booking.appointment_time ? new Date(booking.appointment_time).toLocaleString('en-GB') : '',
-        customer_name: booking.customer_name || 'Customer',
-        booking_type: booking.booking_type || 'sunbed',
-        status: formatStatus(booking.status || booking.approval_status),
-        staff_name: booking.created_by_staff_name || booking.staff_name || 'Unknown staff'
-      }))
-    const cashUpSummaryRows = cashUps.map((cashUp) => ({
-      date: cashUp.date || cashUp.cashup_date || cashUp.created_at?.slice(0, 10) || '',
-      starting_float: Number(cashUp.starting_float || cashUp.start_day_float || cashUp.cash_float || 0),
-      actual_cash_counted: Number(cashUp.actual_cash_counted || cashUp.actual_cash || 0),
-      variance: Number(cashUp.variance || 0),
-      staff_name: cashUp.cash_up_completed_by_staff || cashUp.manager_name || 'Unknown staff',
-      locked: cashUp.is_locked ? 'Yes' : 'No'
-    }))
-    const expiredMinutesRows = minuteExpiries.map((entry) => ({
-      customer_name: entry.customer_name || 'Customer',
-      minute_type: formatStatus(entry.minute_type),
-      minutes_amount: Number(entry.minutes_amount || 0),
-      minutes_remaining: Number(entry.minutes_remaining || 0),
-      expiry_date: entry.expiry_date || '',
-      expired: entry.expired ? 'Yes' : 'No',
-      notes: entry.notes || ''
-    }))
-
     setManagerReportsData({
-      dailyTakings: dailyTakingsRows,
-      sunbedSales: sunbedSalesRows,
-      sprayTanSales: sprayTanSalesRows,
-      productSales: productSalesRows,
       productSalesByStaff: Array.from(productSalesByStaffMap.values()).sort((a, b) => b.total - a.total),
       staffCommission: Array.from(staffCommissionMap.values())
         .filter((row) => !staffFilter || row.staff_name.toLowerCase().includes(staffFilter))
@@ -1611,211 +1465,25 @@ function formatMoney(value) {
       promoSales: Array.from(promoSalesMap.values()).sort((a, b) => b.revenue - a.revenue),
       sprayTan: Array.from(sprayTanMap.values()).map((row) => ({ ...row, artists: Array.from(row.artists).join(', ') || 'Unassigned' })),
       staffActivity: Array.from(staffActivityMap.values()).sort((a, b) => (b.bookings + b.cash_ups) - (a.bookings + a.cash_ups)),
-      stockMovement: products.map((product) => ({ name: product.name, category: product.category || 'Uncategorised', current_stock: getProductStockQuantity(product), status: getProductStockStatus(product) })),
-      expiredMinutes: expiredMinutesRows,
-      duplicateCustomers: duplicateCustomerRows,
-      customerRegistrations: customerRegistrationRows,
-      patchTestExpiry: patchTestExpiryRows,
-      noShowsCancellations: noShowCancellationRows,
-      cashUpSummary: cashUpSummaryRows
+      stockMovement: products.map((product) => ({ name: product.name, category: product.category || 'Uncategorised', current_stock: getProductStockQuantity(product), status: getProductStockStatus(product) }))
     })
-  }
-
-  function getManagerReportDefinition(reportType, data) {
-    if (!data) return null
-    const money = formatMoney
-    const definitions = {
-      daily_takings: {
-        title: 'Daily Takings',
-        rows: data.dailyTakings || [],
-        columns: [
-          { key: 'date_from', label: 'Date from' },
-          { key: 'date_to', label: 'Date to' },
-          { key: 'total_revenue', label: 'Total revenue', format: money },
-          { key: 'cash_total', label: 'Cash', format: money },
-          { key: 'card_total', label: 'Card', format: money },
-          { key: 'bank_transfer_total', label: 'Bank transfer', format: money },
-          { key: 'other_total', label: 'Other', format: money },
-          { key: 'transactions', label: 'Transactions' }
-        ]
-      },
-      sunbed_sales: {
-        title: 'Sunbed Sales',
-        rows: data.sunbedSales || [],
-        columns: [
-          { key: 'date', label: 'Date/time' },
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'package_name', label: 'Sale' },
-          { key: 'minutes', label: 'Minutes' },
-          { key: 'amount', label: 'Amount', format: money },
-          { key: 'payment_method', label: 'Method' },
-          { key: 'staff_name', label: 'Staff' }
-        ]
-      },
-      spray_tan_sales: {
-        title: 'Spray Tan Sales',
-        rows: data.sprayTanSales || [],
-        columns: [
-          { key: 'date', label: 'Date/time' },
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'type', label: 'Payment type' },
-          { key: 'amount', label: 'Amount', format: money },
-          { key: 'payment_method', label: 'Method' },
-          { key: 'staff_name', label: 'Staff' }
-        ]
-      },
-      product_sales: {
-        title: 'Product Sales',
-        rows: data.productSales || [],
-        columns: [
-          { key: 'date', label: 'Date/time' },
-          { key: 'staff_name', label: 'Staff' },
-          { key: 'product_name', label: 'Product' },
-          { key: 'category', label: 'Category' },
-          { key: 'quantity', label: 'Qty' },
-          { key: 'total', label: 'Total', format: money }
-        ]
-      },
-      product_sales_by_staff: {
-        title: 'Product Sales by Staff',
-        rows: data.productSalesByStaff || [],
-        columns: [
-          { key: 'staff_name', label: 'Staff' },
-          { key: 'product_name', label: 'Product' },
-          { key: 'category', label: 'Category' },
-          { key: 'quantity', label: 'Qty' },
-          { key: 'total', label: 'Sales', format: money }
-        ]
-      },
-      staff_commission: {
-        title: 'Staff Commission',
-        rows: data.staffCommission || [],
-        columns: [
-          { key: 'staff_name', label: 'Staff' },
-          { key: 'sunbed_packages_total', label: 'Sunbeds', format: money },
-          { key: 'product_sales_total', label: 'Products', format: money },
-          { key: 'promo_sales_total', label: 'Promos', format: money },
-          { key: 'spray_tan_sales_total', label: 'Spray tans', format: money },
-          { key: 'total_revenue', label: 'Revenue', format: money },
-          { key: 'estimated_commission', label: 'Est. commission', format: money }
-        ]
-      },
-      staff_performance: {
-        title: 'Staff Performance',
-        rows: data.staffActivity || [],
-        columns: [
-          { key: 'staff_name', label: 'Staff' },
-          { key: 'bookings', label: 'Bookings' },
-          { key: 'product_sales', label: 'Product sales', format: money },
-          { key: 'cash_ups', label: 'Cash-ups' },
-          { key: 'corrections', label: 'Corrections/voids' }
-        ]
-      },
-      promo_sales: {
-        title: 'Promo Sales',
-        rows: data.promoSales || [],
-        columns: [
-          { key: 'promo_name', label: 'Promo' },
-          { key: 'count', label: 'Sales' },
-          { key: 'minutes', label: 'Minutes' },
-          { key: 'revenue', label: 'Revenue', format: money }
-        ]
-      },
-      expired_minutes: {
-        title: 'Expired Minutes',
-        rows: data.expiredMinutes || [],
-        columns: [
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'minute_type', label: 'Type' },
-          { key: 'minutes_amount', label: 'Original minutes' },
-          { key: 'minutes_remaining', label: 'Remaining' },
-          { key: 'expiry_date', label: 'Expiry date' },
-          { key: 'expired', label: 'Expired' },
-          { key: 'notes', label: 'Notes' }
-        ]
-      },
-      duplicate_customers: {
-        title: 'Duplicate Customers',
-        rows: data.duplicateCustomers || [],
-        columns: [
-          { key: 'customer_a', label: 'Customer A' },
-          { key: 'customer_b', label: 'Customer B' },
-          { key: 'customer_a_phone', label: 'Phone A' },
-          { key: 'customer_b_phone', label: 'Phone B' },
-          { key: 'reason', label: 'Reason' },
-          { key: 'action', label: 'Action' }
-        ]
-      },
-      customer_registrations: {
-        title: 'Customer Registrations',
-        rows: data.customerRegistrations || [],
-        columns: [
-          { key: 'created_at', label: 'Created' },
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'phone', label: 'Phone' },
-          { key: 'email', label: 'Email' },
-          { key: 'terms_accepted', label: 'Terms' },
-          { key: 'id_checked', label: 'ID checked' }
-        ]
-      },
-      patch_test_expiry: {
-        title: 'Patch Test Expiry',
-        rows: data.patchTestExpiry || [],
-        columns: [
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'phone', label: 'Phone' },
-          { key: 'last_patch_test_date', label: 'Last test' },
-          { key: 'patch_test_expiry_date', label: 'Expiry' },
-          { key: 'days_remaining', label: 'Days remaining' },
-          { key: 'status', label: 'Status' }
-        ]
-      },
-      no_shows_cancellations: {
-        title: 'No Shows / Cancellations',
-        rows: data.noShowsCancellations || [],
-        columns: [
-          { key: 'date', label: 'Date/time' },
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'booking_type', label: 'Type' },
-          { key: 'status', label: 'Status' },
-          { key: 'staff_name', label: 'Staff' }
-        ]
-      },
-      cash_up_summary: {
-        title: 'Cash-Up Summary',
-        rows: data.cashUpSummary || [],
-        columns: [
-          { key: 'date', label: 'Date' },
-          { key: 'starting_float', label: 'Starting float', format: money },
-          { key: 'actual_cash_counted', label: 'Actual cash', format: money },
-          { key: 'variance', label: 'Variance', format: money },
-          { key: 'staff_name', label: 'Staff' },
-          { key: 'locked', label: 'Locked' }
-        ]
-      }
-    }
-    return definitions[reportType] || definitions.daily_takings
-  }
-
-  function getSelectedManagerReport() {
-    const report = getManagerReportDefinition(reportsType, managerReportsData)
-    if (!report) return null
-    const staffFilter = reportsStaffFilter.trim().toLowerCase()
-    const reportHasStaffRows = report.rows.some((row) => row.staff_name || row.staff)
-    const rows = staffFilter && reportHasStaffRows
-      ? report.rows.filter((row) => String(row.staff_name || row.staff || '').toLowerCase().includes(staffFilter))
-      : report.rows
-    return { ...report, rows }
   }
 
   function exportManagerReports() {
     if (!managerReportsData) {
-      alert('Generate report first.')
+      alert('Generate reports first.')
       return
     }
-    const report = getSelectedManagerReport()
-    if (!report) return
-    downloadCsv(`glow_${reportsType}_${reportsStartDate}_to_${reportsEndDate}.csv`, report.rows.map((row) => ({ report: report.title, ...row })))
+    downloadCsv(`glow_manager_reports_${reportsStartDate}_to_${reportsEndDate}.csv`, [
+      ...managerReportsData.productSalesByStaff.map((row) => ({ report: 'Product Sales by Staff', ...row })),
+      ...managerReportsData.staffCommission.map((row) => ({ report: 'Staff Commission', ...row })),
+      ...managerReportsData.productSummary.map((row) => ({ report: 'Product Sales Summary', ...row })),
+      ...managerReportsData.promoSales.map((row) => ({ report: 'Promo Sales', ...row })),
+      ...managerReportsData.customerSpend.map((row) => ({ report: 'Customer Spend', ...row })),
+      ...managerReportsData.sprayTan.map((row) => ({ report: 'Spray Tan', ...row })),
+      ...managerReportsData.staffActivity.map((row) => ({ report: 'Staff Activity', ...row })),
+      ...managerReportsData.stockMovement.map((row) => ({ report: 'Stock Movement', ...row }))
+    ])
   }
 
   function openManagerView() {
@@ -8737,7 +8405,7 @@ function formatMoney(value) {
 
   function renderManagerReportsPanel() {
     if (!showManagerView) return null
-    const selectedReport = getSelectedManagerReport()
+    const money = formatMoney
 
     return renderCollapsibleSection(
       'Reports',
@@ -8745,35 +8413,96 @@ function formatMoney(value) {
       setCollapseReports,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Date from
-            <input type="date" value={reportsStartDate} onChange={(e) => setReportsStartDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Date to
-            <input type="date" value={reportsEndDate} onChange={(e) => setReportsEndDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Staff member
-            <select value={reportsStaffFilter} onChange={(e) => setReportsStaffFilter(e.target.value)} style={{ padding: '10px' }}>
-              <option value="">All staff</option>
-              {staff.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Report type
-            <select value={reportsType} onChange={(e) => setReportsType(e.target.value)} style={{ padding: '10px' }}>
-              {MANAGER_REPORT_TYPES.map((report) => <option key={report.value} value={report.value}>{report.label}</option>)}
-            </select>
-          </label>
-          <button onClick={generateManagerReports} disabled={managerReportsLoading}>{managerReportsLoading ? 'Generating...' : 'Generate Report'}</button>
-          <button onClick={exportManagerReports}>Export Report CSV</button>
+          <input type="date" value={reportsStartDate} onChange={(e) => setReportsStartDate(e.target.value)} style={{ padding: '10px' }} />
+          <input type="date" value={reportsEndDate} onChange={(e) => setReportsEndDate(e.target.value)} style={{ padding: '10px' }} />
+          <select value={reportsStaffFilter} onChange={(e) => setReportsStaffFilter(e.target.value)} style={{ padding: '10px' }}>
+            <option value="">All staff</option>
+            {staff.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
+          </select>
+          <input type="number" step="0.1" placeholder="Fallback commission %" value={reportsCommissionPercent} onChange={(e) => setReportsCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
+          <input type="number" step="0.1" placeholder="Product commission %" value={reportsProductCommissionPercent} onChange={(e) => setReportsProductCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
+          <input type="number" step="0.1" placeholder="Spray tan commission %" value={reportsSprayTanCommissionPercent} onChange={(e) => setReportsSprayTanCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
+          <input type="number" step="0.1" placeholder="Promo commission %" value={reportsPromoCommissionPercent} onChange={(e) => setReportsPromoCommissionPercent(e.target.value)} style={{ padding: '10px' }} />
+          <input type="number" step="0.01" placeholder="Flat commission/service" value={reportsFlatServiceCommission} onChange={(e) => setReportsFlatServiceCommission(e.target.value)} style={{ padding: '10px' }} />
+          <button onClick={generateManagerReports} disabled={managerReportsLoading}>{managerReportsLoading ? 'Generating...' : 'Generate Reports'}</button>
+          <button onClick={exportManagerReports}>Export Reports CSV</button>
         </div>
         {managerReportsError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{managerReportsError}</p>}
         {!managerReportsData ? (
-          <p style={{ color: '#aaa' }}>Choose a date range, staff filter and report type, then generate the report. Older rows with missing staff fields will show as Unknown staff.</p>
+          <p style={{ color: '#aaa' }}>Choose a date range and generate reports. Older rows with missing staff fields will show as Unknown staff.</p>
         ) : (
-          selectedReport && renderReportTable(selectedReport.title, selectedReport.rows, selectedReport.columns)
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {renderReportTable('Product Sales by Staff', managerReportsData.productSalesByStaff, [
+              { key: 'staff_name', label: 'Staff' },
+              { key: 'product_name', label: 'Product' },
+              { key: 'category', label: 'Category' },
+              { key: 'quantity', label: 'Qty' },
+              { key: 'total', label: 'Sales', format: money }
+            ])}
+            {renderReportTable('Staff Commission Report', managerReportsData.staffCommission, [
+              { key: 'staff_name', label: 'Staff' },
+              { key: 'sunbed_minutes_sold', label: 'Sunbed mins' },
+              { key: 'sunbed_packages_total', label: 'Sunbed/packages', format: money },
+              { key: 'product_sales_total', label: 'Product sales', format: money },
+              { key: 'promo_sales_total', label: 'Promo sales', format: money },
+              { key: 'spray_tan_sales_total', label: 'Spray tans', format: money },
+              { key: 'deposits_taken', label: 'Deposits', format: money },
+              { key: 'balances_taken', label: 'Balances', format: money },
+              { key: 'total_revenue', label: 'Attributed revenue', format: money },
+              { key: 'estimated_commission', label: 'Est. commission', format: money }
+            ])}
+            {renderReportTable('Product Sales Summary', managerReportsData.productSummary, [
+              { key: 'product_name', label: 'Product' },
+              { key: 'category', label: 'Category' },
+              { key: 'quantity', label: 'Qty sold' },
+              { key: 'total', label: 'Revenue', format: money }
+            ])}
+            {renderReportTable('Promo Sales Report', managerReportsData.promoSales, [
+              { key: 'promo_name', label: 'Promo' },
+              { key: 'count', label: 'Sales' },
+              { key: 'minutes', label: 'Minutes' },
+              { key: 'revenue', label: 'Revenue', format: money }
+            ])}
+            {renderReportTable('Customer Spend Report', managerReportsData.customerSpend, [
+              { key: 'customer_name', label: 'Customer' },
+              { key: 'minutes_topups', label: 'Minutes', format: money },
+              { key: 'product_purchases', label: 'Products', format: money },
+              { key: 'spray_tan_payments', label: 'Spray tans', format: money },
+              { key: 'total', label: 'Total', format: money }
+            ])}
+            {renderReportTable('Minutes Sales Report', [
+              { minute_type: 'Standard', ...managerReportsData.minutesSales.standard, average_value: managerReportsData.minutesSales.standard.minutes ? managerReportsData.minutesSales.standard.revenue / managerReportsData.minutesSales.standard.minutes : 0 },
+              { minute_type: 'Hybrid', ...managerReportsData.minutesSales.hybrid, average_value: managerReportsData.minutesSales.hybrid.minutes ? managerReportsData.minutesSales.hybrid.revenue / managerReportsData.minutesSales.hybrid.minutes : 0 }
+            ], [
+              { key: 'minute_type', label: 'Type' },
+              { key: 'minutes', label: 'Minutes sold' },
+              { key: 'revenue', label: 'Revenue', format: money },
+              { key: 'average_value', label: 'Avg value/min', format: money }
+            ])}
+            {renderReportTable('Spray Tan Report', managerReportsData.sprayTan, [
+              { key: 'service', label: 'Service' },
+              { key: 'count', label: 'Bookings' },
+              { key: 'pending', label: 'Pending' },
+              { key: 'deposits_paid', label: 'Deposits', format: money },
+              { key: 'balances_due', label: 'Balances due', format: money },
+              { key: 'completed', label: 'Completed' },
+              { key: 'cancelled', label: 'Cancelled' },
+              { key: 'artists', label: 'Artists' }
+            ])}
+            {renderReportTable('Staff Activity Report', managerReportsData.staffActivity, [
+              { key: 'staff_name', label: 'Staff' },
+              { key: 'bookings', label: 'Bookings' },
+              { key: 'product_sales', label: 'Product sales', format: money },
+              { key: 'cash_ups', label: 'Cash-ups' },
+              { key: 'corrections', label: 'Corrections/voids' }
+            ])}
+            {renderReportTable('Stock Movement Report', managerReportsData.stockMovement, [
+              { key: 'name', label: 'Product' },
+              { key: 'category', label: 'Category' },
+              { key: 'current_stock', label: 'Current stock' },
+              { key: 'status', label: 'Status' }
+            ])}
+          </div>
         )}
       </div>
     )
