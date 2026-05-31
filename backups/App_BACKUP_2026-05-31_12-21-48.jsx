@@ -605,10 +605,10 @@ function App() {
     return String(text).replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase())
   }
 
-function formatMoney(value) {
-  const amount = Number(value || 0)
-  return `£${amount.toFixed(2)}`
-}
+  function formatMoney(value) {
+    const amount = Number(value || 0)
+    return `£${amount.toFixed(2)}`
+  }
 
   function formatClock(date) {
     return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -1223,14 +1223,14 @@ function formatMoney(value) {
     const summary = getDailyTakingsSummary()
     const lines = [
       `Glow Daily Takings - ${dailyReportDate}`,
-      `Total revenue: ${formatMoney(summary.totalRevenue)}`,
-      `Cash: ${formatMoney(summary.cashTotal)}`,
-      `Card: ${formatMoney(summary.cardTotal)}`,
-      `Bank transfer: ${formatMoney(summary.bankTransferTotal)}`,
-      `Other: ${formatMoney(summary.otherTotal)}`,
-      `Product sales: ${formatMoney(summary.productRevenue)}`,
-      `Minutes sales: ${formatMoney(summary.minutesRevenue)}`,
-      `Spray tan receipts: ${formatMoney(getDailySprayTanReceiptTotal())}`,
+      `Total revenue: GBP ${summary.totalRevenue.toFixed(2)}`,
+      `Cash: GBP ${summary.cashTotal.toFixed(2)}`,
+      `Card: GBP ${summary.cardTotal.toFixed(2)}`,
+      `Bank transfer: GBP ${summary.bankTransferTotal.toFixed(2)}`,
+      `Other: GBP ${summary.otherTotal.toFixed(2)}`,
+      `Product sales: GBP ${summary.productRevenue.toFixed(2)}`,
+      `Minutes sales: GBP ${summary.minutesRevenue.toFixed(2)}`,
+      `Spray tan receipts: GBP ${getDailySprayTanReceiptTotal().toFixed(2)}`,
       `Payments/transactions: ${summary.paymentCount}`,
       `Cash-up completed by: ${cashUpExistingRecord?.cash_up_completed_by_staff || cashUpExistingRecord?.manager_name || 'Not recorded'}`
     ]
@@ -2084,7 +2084,7 @@ function formatMoney(value) {
 
     const productsText = saleReceipt.products.length === 0
       ? 'No products purchased.'
-      : saleReceipt.products.map((item) => `${item.product_name || item.name || 'Product'} x ${item.quantity || 1} - ${formatMoney(item.total_amount || item.total)}`).join('\n')
+      : saleReceipt.products.map((item) => `${item.product_name || item.name || 'Product'} x ${item.quantity || 1} - GBP ${Number(item.total_amount || item.total || 0).toFixed(2)}`).join('\n')
 
     const body = [
       'Glow Tanning',
@@ -2097,9 +2097,9 @@ function formatMoney(value) {
       `Minutes/Package: ${saleReceipt.packageName || 'Minutes sale'}${saleReceipt.minutes ? ` - ${saleReceipt.minutes} mins` : ''}`,
       `Products:\n${productsText}`,
       `Payment method: ${formatStatus(saleReceipt.paymentMethod)}`,
-      `Total paid: ${formatMoney(saleReceipt.totalPaid)}`,
-      `Cash received: ${formatMoney(saleReceipt.cashReceived)}`,
-      `Change given: ${formatMoney(saleReceipt.changeGiven)}`,
+      `Total paid: GBP ${Number(saleReceipt.totalPaid || 0).toFixed(2)}`,
+      `Cash received: GBP ${Number(saleReceipt.cashReceived || 0).toFixed(2)}`,
+      `Change given: GBP ${Number(saleReceipt.changeGiven || 0).toFixed(2)}`,
       '',
       'Thank you for visiting Glow Tanning.'
     ].join('\n')
@@ -2144,7 +2144,7 @@ function formatMoney(value) {
     const packages = payments.map((payment) => payment.package_name || payment.package_type).filter(Boolean)
     const productsText = productSales.length === 0
       ? 'No products recorded.'
-      : productSales.map((sale) => `${sale.product_name || 'Product'} x ${sale.quantity || 1} - ${formatMoney(sale.total_amount)}`).join('\n')
+      : productSales.map((sale) => `${sale.product_name || 'Product'} x ${sale.quantity || 1} - GBP ${Number(sale.total_amount || 0).toFixed(2)}`).join('\n')
 
     const body = [
       'Glow Tanning',
@@ -2158,7 +2158,7 @@ function formatMoney(value) {
       `Booking source: ${isWixBooking(booking) ? 'Wix' : formatStatus(booking.booking_source || booking.source || 'dashboard')}`,
       `Payment method: ${paymentMethods.length > 0 ? paymentMethods.map(formatStatus).join(', ') : 'Not recorded'}`,
       `Products/promo:\n${[...packages, productsText].filter(Boolean).join('\n')}`,
-      `Total paid: ${formatMoney(totalPaid)}`,
+      `Total paid: GBP ${Number(totalPaid || 0).toFixed(2)}`,
       '',
       'Thank you for visiting Glow Tanning.'
     ].join('\n')
@@ -2448,7 +2448,7 @@ function formatMoney(value) {
     }
 
     const confirmed = window.confirm(
-      `Apply correction?\n\nCustomer: ${customer.name}\nType: ${formatStatus(correctionLabel)}\nStandard: ${oldStandard} -> ${newStandard}\nHybrid: ${oldHybrid} -> ${newHybrid}\nMoney amount: ${formatMoney(moneyAmount)}\nReason: ${reason}`
+      `Apply correction?\n\nCustomer: ${customer.name}\nType: ${formatStatus(correctionLabel)}\nStandard: ${oldStandard} -> ${newStandard}\nHybrid: ${oldHybrid} -> ${newHybrid}\nMoney amount: GBP ${moneyAmount.toFixed(2)}\nReason: ${reason}`
     )
 
     if (!confirmed) return
@@ -2480,7 +2480,7 @@ function formatMoney(value) {
       setManagerHybridBalance(newHybrid)
     }
 
-    await createCustomerLog(customer, 'Manager booking/payment correction', `${formatStatus(correctionLabel)}. Standard ${oldStandard} -> ${newStandard}. Hybrid ${oldHybrid} -> ${newHybrid}. Money ${formatMoney(moneyAmount)}. Reason: ${reason}`)
+    await createCustomerLog(customer, 'Manager booking/payment correction', `${formatStatus(correctionLabel)}. Standard ${oldStandard} -> ${newStandard}. Hybrid ${oldHybrid} -> ${newHybrid}. Money GBP ${moneyAmount.toFixed(2)}. Reason: ${reason}`)
     await logCustomerMinuteChanges(
       customer,
       oldStandard,
@@ -2676,7 +2676,7 @@ function formatMoney(value) {
     if (!requireStaffSignIn()) return
     if (!requireManagerAccess('Manager PIN required to delete float movements:')) return
 
-    const confirmed = window.confirm(`Delete this float movement of ${formatMoney(movement.amount)}?`)
+    const confirmed = window.confirm(`Delete this float movement of GBP ${Number(movement.amount || 0).toFixed(2)}?`)
     if (!confirmed) return
 
     const { error } = await supabase.from('FloatMovements').delete().eq('id', movement.id)
@@ -8268,7 +8268,7 @@ function formatMoney(value) {
 
   function renderManagerReportsPanel() {
     if (!showManagerView) return null
-    const money = formatMoney
+    const money = (value) => `GBP ${Number(value || 0).toFixed(2)}`
 
     return renderCollapsibleSection(
       'Reports',
@@ -8473,15 +8473,15 @@ function formatMoney(value) {
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-          <div style={itemStyle}><span>Total revenue</span><h2>{formatMoney(summary.totalRevenue)}</h2></div>
-          <div style={itemStyle}><span>Card</span><h2>{formatMoney(summary.cardTotal)}</h2></div>
-          <div style={itemStyle}><span>Cash</span><h2>{formatMoney(summary.cashTotal)}</h2></div>
-          <div style={itemStyle}><span>Bank transfer</span><h2>{formatMoney(summary.bankTransferTotal)}</h2></div>
-          <div style={itemStyle}><span>Other</span><h2>{formatMoney(summary.otherTotal)}</h2></div>
+          <div style={itemStyle}><span>Total revenue</span><h2>£{summary.totalRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Card</span><h2>£{summary.cardTotal.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Cash</span><h2>£{summary.cashTotal.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Bank transfer</span><h2>£{summary.bankTransferTotal.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Other</span><h2>£{summary.otherTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Minutes sold</span><h2>{summary.totalMinutes}</h2></div>
-          <div style={itemStyle}><span>Product sales</span><h2>{formatMoney(summary.productRevenue)}</h2></div>
-          <div style={itemStyle}><span>Minutes sales</span><h2>{formatMoney(summary.minutesRevenue)}</h2></div>
-          <div style={itemStyle}><span>Spray tan receipts</span><h2>{formatMoney(sprayTanReceiptsTotal)}</h2></div>
+          <div style={itemStyle}><span>Product sales</span><h2>£{summary.productRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Minutes sales</span><h2>GBP {summary.minutesRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Spray tan receipts</span><h2>GBP {sprayTanReceiptsTotal.toFixed(2)}</h2></div>
           <div style={itemStyle}><span>Payment count</span><h2>{summary.paymentCount}</h2></div>
           <div style={itemStyle}><span>Cash-up completed by</span><h2 style={{ fontSize: '20px' }}>{cashUpStaff}</h2></div>
         </div>
@@ -8591,7 +8591,7 @@ function formatMoney(value) {
               <div key={movement.id} style={{ display: 'grid', gridTemplateColumns: '90px 1fr auto auto', gap: '10px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
                 <span style={{ color: '#aaa' }}>{movement.created_at ? new Date(movement.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                 <span>
-                  <strong>{movement.staff_name || 'Staff'}</strong> - {formatStatus(movement.type)} {formatMoney(movement.amount)}<br />
+                  <strong>{movement.staff_name || 'Staff'}</strong> - {formatStatus(movement.type)} GBP {Number(movement.amount || 0).toFixed(2)}<br />
                   <span style={{ color: '#aaa' }}>{movement.note}</span>
                 </span>
                 {showManagerView && <button onClick={() => editFloatMovement(movement)}>Edit</button>}
@@ -8603,27 +8603,27 @@ function formatMoney(value) {
 
         <h3>End of Day Cash Up</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <div style={itemStyle}><span>Starting float</span><h2>{formatMoney(startFloat)}</h2></div>
-          <div style={itemStyle}><span>Float added</span><h2>{formatMoney(movementTotals.added)}</h2></div>
-          <div style={itemStyle}><span>Float removed</span><h2>{formatMoney(movementTotals.removed)}</h2></div>
-          <div style={itemStyle}><span>Card total</span><h2>{formatMoney(summary.cardTotal)}</h2></div>
-          <div style={itemStyle}><span>Cash total</span><h2>{formatMoney(summary.cashTotal)}</h2></div>
-          <div style={itemStyle}><span>Bank transfer</span><h2>{formatMoney(summary.bankTransferTotal)}</h2></div>
-          <div style={itemStyle}><span>Other payment total / manual adjustments</span><h2>{formatMoney(summary.otherTotal)}</h2></div>
-          <div style={itemStyle}><span>Product sales</span><h2>{formatMoney(summary.productRevenue)}</h2></div>
-          <div style={itemStyle}><span>Sunbed minutes/package sales</span><h2>{formatMoney(summary.sunbedPackageRevenue)}</h2></div>
-          <div style={itemStyle}><span>Promo sales</span><h2>{formatMoney(summary.promoRevenue)}</h2></div>
-          <div style={itemStyle}><span>Spray tan sales</span><h2>{formatMoney(summary.sprayTanRevenue)}</h2></div>
-          <div style={itemStyle}><span>Deposits</span><h2>{formatMoney(summary.sprayTanDepositRevenue)}</h2></div>
-          <div style={itemStyle}><span>Balances</span><h2>{formatMoney(summary.sprayTanBalanceRevenue)}</h2></div>
-          <div style={itemStyle}><span>Total revenue</span><h2>{formatMoney(summary.totalRevenue)}</h2></div>
-          <div style={itemStyle}><span>Expected cash in till</span><h2>{formatMoney(expectedCash)}</h2></div>
+          <div style={itemStyle}><span>Starting float</span><h2>£{startFloat.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Float added</span><h2>£{movementTotals.added.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Float removed</span><h2>£{movementTotals.removed.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Card total</span><h2>£{summary.cardTotal.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Cash total</span><h2>£{summary.cashTotal.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Bank transfer</span><h2>£{summary.bankTransferTotal.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Other payment total / manual adjustments</span><h2>£{summary.otherTotal.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Product sales</span><h2>£{summary.productRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Sunbed minutes/package sales</span><h2>£{summary.sunbedPackageRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Promo sales</span><h2>£{summary.promoRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Spray tan sales</span><h2>£{summary.sprayTanRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Deposits</span><h2>£{summary.sprayTanDepositRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Balances</span><h2>£{summary.sprayTanBalanceRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Total revenue</span><h2>£{summary.totalRevenue.toFixed(2)}</h2></div>
+          <div style={itemStyle}><span>Expected cash in till</span><h2>£{expectedCash.toFixed(2)}</h2></div>
         </div>
 
         <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
             <h3 style={{ margin: 0 }}>Cash Denomination Counter</h3>
-            <strong style={{ color: '#d4a853' }}>Counted total: {formatMoney(cashDenominationTotal)}</strong>
+            <strong style={{ color: '#d4a853' }}>Counted total: £{cashDenominationTotal.toFixed(2)}</strong>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px' }}>
             {CASH_DENOMINATIONS.map((denomination) => (
@@ -8663,7 +8663,7 @@ function formatMoney(value) {
           />
           <div style={{ ...itemStyle, padding: '10px' }}>
             <span>Variance</span>
-            <h2 style={{ margin: '4px 0 0', color: variance === 0 ? '#d4a853' : '#ffcc66' }}>{formatMoney(variance)}</h2>
+            <h2 style={{ margin: '4px 0 0', color: variance === 0 ? '#d4a853' : '#ffcc66' }}>£{variance.toFixed(2)}</h2>
           </div>
         </div>
 
@@ -8705,9 +8705,9 @@ function formatMoney(value) {
             Are you sure you want to complete and lock today’s cash-up? Once locked, staff will not be able to edit today’s cash-up, float, or float movements. A manager will be required to reopen it.
           </p>
           <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
-            <p style={{ margin: '0 0 6px' }}>Expected cash in till: <strong>{formatMoney(expectedCash)}</strong></p>
-            <p style={{ margin: '0 0 6px' }}>Actual cash counted: <strong>{formatMoney(actualCash)}</strong></p>
-            <p style={{ margin: 0 }}>Variance: <strong>{formatMoney(variance)}</strong></p>
+            <p style={{ margin: '0 0 6px' }}>Expected cash in till: <strong>£{expectedCash.toFixed(2)}</strong></p>
+            <p style={{ margin: '0 0 6px' }}>Actual cash counted: <strong>£{actualCash.toFixed(2)}</strong></p>
+            <p style={{ margin: 0 }}>Variance: <strong>£{variance.toFixed(2)}</strong></p>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button onClick={() => setShowCashUpLockConfirm(false)} disabled={cashUpCompleting}>Cancel</button>
@@ -9672,7 +9672,7 @@ function formatMoney(value) {
           {SPRAY_TAN_SERVICES.map((service) => (
             <div key={service.name} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }}>
               <strong>{service.name}</strong>
-              <p style={{ color: '#d4a853', margin: '6px 0 0', fontWeight: 'bold' }}>{formatMoney(service.price)}</p>
+              <p style={{ color: '#d4a853', margin: '6px 0 0', fontWeight: 'bold' }}>£{service.price.toFixed(2)}</p>
             </div>
           ))}
         </div>
@@ -9714,15 +9714,15 @@ function formatMoney(value) {
                             <div>
                               <strong>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
                               <p style={{ margin: '6px 0', color: '#aaa' }}>
-                                {serviceName}{servicePrice ? ` - ${formatMoney(servicePrice)}` : ''} · Artist: {booking.spraytan_artist || 'To assign'}
+                                {serviceName}{servicePrice ? ` - £${servicePrice.toFixed(2)}` : ''} · Artist: {booking.spraytan_artist || 'To assign'}
                               </p>
                             </div>
                             <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', marginTop: '8px', color: '#ddd' }}>
-                            <span>Deposit required: <strong>{formatMoney(depositRequired)}</strong></span>
-                            <span>Deposit paid: <strong>{formatMoney(depositPaid)}</strong></span>
-                            <span>Remaining: <strong>{formatMoney(remainingBalance)}</strong></span>
+                            <span>Deposit required: <strong>£{depositRequired.toFixed(2)}</strong></span>
+                            <span>Deposit paid: <strong>£{depositPaid.toFixed(2)}</strong></span>
+                            <span>Remaining: <strong>£{remainingBalance.toFixed(2)}</strong></span>
                           </div>
                           <label style={{ display: 'block', marginTop: '10px', color: booking.patch_test_completed ? '#9ccfae' : '#ffcc66' }}>
                             <input type="checkbox" checked={Boolean(booking.patch_test_completed)} readOnly style={{ marginRight: '8px' }} />
@@ -9772,7 +9772,7 @@ function formatMoney(value) {
           {SPRAY_TAN_SERVICES.map((service) => (
             <div key={service.name} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }}>
               <strong>{service.name}</strong>
-              <p style={{ color: '#d4a853', margin: '6px 0 0', fontWeight: 'bold' }}>{formatMoney(service.price)}</p>
+              <p style={{ color: '#d4a853', margin: '6px 0 0', fontWeight: 'bold' }}>£{service.price.toFixed(2)}</p>
             </div>
           ))}
         </div>
@@ -9825,10 +9825,10 @@ function formatMoney(value) {
                               <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
                             </div>
                             <p style={{ margin: '6px 0', color: '#aaa' }}>
-                              {serviceName} · {formatMoney(servicePrice)} · {Number(booking.spraytan_duration_minutes || 0)} mins
+                              {serviceName} · £{servicePrice.toFixed(2)} · {Number(booking.spraytan_duration_minutes || 0)} mins
                             </p>
                             <p style={{ margin: '4px 0', color: '#ddd' }}>
-                              Deposit: {formatMoney(depositPaid)} / {formatMoney(depositRequired)} · Balance {formatMoney(balanceDue)}
+                              Deposit: £{depositPaid.toFixed(2)} / £{depositRequired.toFixed(2)} · Balance £{balanceDue.toFixed(2)}
                             </p>
                             <p style={{ margin: '4px 0', color: '#aaa' }}>Artist: {booking.spraytan_artist || 'To assign'}</p>
                             {serviceName !== 'Patch Test' && !booking.patch_test_completed && (
@@ -9903,14 +9903,14 @@ function formatMoney(value) {
             <div>
               <label>Specific service / price</label>
               <select value={sprayTanService} onChange={(e) => setSprayTanServiceWithDefaults(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                {SPRAY_TAN_SERVICES.map((service) => <option key={service.name} value={service.name}>{service.name} - {formatMoney(service.price)}</option>)}
+                {SPRAY_TAN_SERVICES.map((service) => <option key={service.name} value={service.name}>{service.name} - £{service.price.toFixed(2)}</option>)}
               </select>
             </div>
             <div><label>Date</label><input type="date" value={sprayTanDate} onChange={(e) => setSprayTanDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Time</label><input type="time" value={sprayTanTime} onChange={(e) => setSprayTanTime(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Duration</label><input type="number" min="5" value={sprayTanDuration} onChange={(e) => setSprayTanDuration(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Artist</label><input value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} placeholder="Artist name" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit due</label><input type="text" value={formatMoney(depositRequired)} disabled style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
+            <div><label>Deposit due</label><input type="number" step="0.01" value={depositRequired} disabled style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Deposit paid</label><input type="number" step="0.01" value={depositPaid} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
               setSprayTanDepositPaid(e.target.value)
               setSprayTanDepositStatus(getSprayTanDepositStatus(sprayTanService, depositRequired, Number(e.target.value || 0)))
@@ -9973,9 +9973,9 @@ function formatMoney(value) {
           </div>
 
           <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
-            <p style={{ margin: '0 0 6px' }}>Service price: <strong>{formatMoney(servicePrice)}</strong></p>
-            <p style={{ margin: '0 0 6px' }}>Balance already paid: <strong>{formatMoney(existingBalancePaid)}</strong></p>
-            <p style={{ margin: '0 0 6px' }}>Balance due: <strong>{formatMoney(balanceDue)}</strong></p>
+            <p style={{ margin: '0 0 6px' }}>Service price: <strong>£{servicePrice.toFixed(2)}</strong></p>
+            <p style={{ margin: '0 0 6px' }}>Balance already paid: <strong>£{existingBalancePaid.toFixed(2)}</strong></p>
+            <p style={{ margin: '0 0 6px' }}>Balance due: <strong>£{balanceDue.toFixed(2)}</strong></p>
             <p style={{ margin: 0 }}>Deposit status: <strong>{formatStatus(sprayTanDepositStatus || getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid))}</strong></p>
           </div>
 
@@ -10101,7 +10101,6 @@ function formatMoney(value) {
       {showManagerView && renderExportsPanel()}
       {showManagerView && renderDailyTakingsPanel()}
       {showManagerView && renderManagerReportsPanel()}
-      {showManagerView && renderDuplicateCustomersReportPanel()}
 
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '18px' }}>
         <button onClick={() => setDashboardView('sunbeds')} style={{ background: dashboardView === 'sunbeds' ? '#d4a853' : '#111', color: dashboardView === 'sunbeds' ? '#050505' : 'white' }}>Sunbeds</button>
