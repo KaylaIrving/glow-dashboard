@@ -9,7 +9,7 @@ const SLOT_MINUTES = 5
 const MANAGER_PIN = '3090'
 const WEEKLY_STAFF_FREE_MINUTES = 18
 const LOW_STOCK_THRESHOLD = 5
-const COMMON_BOOKING_MINUTES = Array.from({ length: 19 }, (_, index) => index + 2)
+const COMMON_BOOKING_MINUTES = [3, 6, 9, 12, 15, 18, 20]
 
 // TODO Wix integration: fill this once the final Wix service names and bed rules are confirmed.
 // Example shape:
@@ -365,7 +365,6 @@ function App() {
   const [wixImportedCount, setWixImportedCount] = useState(0)
   const [wixFailedCount, setWixFailedCount] = useState(0)
   const [wixSyncRunning, setWixSyncRunning] = useState(false)
-  const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || ''
   const [managerReceipts, setManagerReceipts] = useState([])
   const [receiptSearchDate, setReceiptSearchDate] = useState(formatLocalDate(new Date()))
   const [receiptSearchCustomer, setReceiptSearchCustomer] = useState('')
@@ -402,14 +401,6 @@ function App() {
   useEffect(() => {
     autoCompleteFinishedSessions()
   }, [currentTime, bookings])
-
-  useEffect(() => {
-    if (!wixSyncEndpoint) return undefined
-    const syncTimer = window.setInterval(() => {
-      runWixBookingSync({ automatic: true })
-    }, 15 * 60 * 1000)
-    return () => window.clearInterval(syncTimer)
-  }, [wixSyncEndpoint])
 
   useEffect(() => {
     const selectedCustomer = customers.find((customer) => customer.id === Number(selectedCustomerId || selectedManagerCustomerId))
@@ -1680,15 +1671,6 @@ function formatMoney(value) {
 
   function getMinuteOptionsForBooking() {
     return COMMON_BOOKING_MINUTES
-  }
-
-  function isValidSunbedMinuteValue(value) {
-    const minutes = Number(value)
-    return Number.isInteger(minutes) && minutes >= 2 && minutes <= 20
-  }
-
-  function alertInvalidSunbedMinutes() {
-    alert('Please enter a valid number of minutes between 2 and 20.')
   }
 
   function getStaffIdFromBooking(booking) {
@@ -3704,26 +3686,6 @@ function formatMoney(value) {
     return ''
   }
 
-  function getCustomerActivePatchTestInfo(customer) {
-    if (!customer?.id) return { active: false, date: null, expiry: null, warning: 'No patch test recorded for this customer.' }
-    const latestPatchTestDate = getLatestCustomerPatchTestDate(customer.id)
-    if (!latestPatchTestDate) return { active: false, date: null, expiry: null, warning: 'No active patch test recorded.' }
-    const expiry = customer.patch_test_expiry_date
-      ? new Date(`${customer.patch_test_expiry_date}T00:00:00`)
-      : addMonthsToDate(latestPatchTestDate, 12)
-    if (!expiry || Number.isNaN(expiry.getTime()) || expiry < new Date()) {
-      return { active: false, date: latestPatchTestDate, expiry, warning: `Patch test expired${expiry && !Number.isNaN(expiry.getTime()) ? ` on ${expiry.toLocaleDateString('en-GB')}` : ''}.` }
-    }
-    const oneMonthFromNow = new Date()
-    oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1)
-    return {
-      active: true,
-      date: latestPatchTestDate,
-      expiry,
-      warning: expiry <= oneMonthFromNow ? `Patch test expires soon on ${expiry.toLocaleDateString('en-GB')}.` : ''
-    }
-  }
-
   function getSprayTanStatusLabel(booking) {
     const status = getBookingStatusKey(booking)
     if (status === 'completed') return 'Completed'
@@ -3942,14 +3904,6 @@ function formatMoney(value) {
     return WIX_SERVICE_BOOKING_MAP[key] || null
   }
 
-  function getWixMappedStatus(wixBookingPayload, bookingType) {
-    const rawStatus = String(wixBookingPayload.wix_status || wixBookingPayload.status || '').trim().toLowerCase()
-    const cancelled = ['cancelled', 'canceled', 'declined', 'voided'].some((status) => rawStatus.includes(status))
-    if (cancelled) return { status: 'cancelled', approval_status: 'cancelled' }
-    if (bookingType === 'spraytan') return { status: 'booked', approval_status: wixBookingPayload.approval_status || 'pending' }
-    return { status: 'booked', approval_status: wixBookingPayload.approval_status || 'approved' }
-  }
-
   function getSampleWixSprayTanPayload() {
     const sampleTime = new Date(`${selectedDate}T10:00:00`)
     return {
@@ -3995,25 +3949,7 @@ function formatMoney(value) {
         .limit(1)
 
       if (error) throw error
-      if (existingCustomers && existingCustomers.length > 0) {
-        const existingCustomer = existingCustomers[0]
-        const safeUpdates = {}
-        if (wixCustomerName && (!existingCustomer.name || existingCustomer.customer_source === 'wix')) safeUpdates.name = wixCustomerName
-        if (wixCustomerPhone && !existingCustomer.phone) safeUpdates.phone = wixCustomerPhone
-        if (wixCustomerEmail && !existingCustomer.email) safeUpdates.email = wixCustomerEmail
-        if (wixContactId && !existingCustomer.wix_contact_id) safeUpdates.wix_contact_id = wixContactId
-        if (!existingCustomer.customer_source) safeUpdates.customer_source = 'wix'
-        if (Object.keys(safeUpdates).length > 0) {
-          const { data: updatedCustomer, error: updateError } = await supabase
-            .from('Customers')
-            .update(safeUpdates)
-            .eq('id', existingCustomer.id)
-            .select()
-            .single()
-          if (!updateError && updatedCustomer) return updatedCustomer
-        }
-        return existingCustomer
-      }
+      if (existingCustomers && existingCustomers.length > 0) return existingCustomers[0]
     }
 
     const { data: newCustomer, error: createError } = await supabase
@@ -4057,7 +3993,6 @@ function formatMoney(value) {
     const servicePrice = isSprayTan ? getSprayTanServicePrice(serviceName) : 0
     const depositRequired = Number(wixBookingPayload.deposit_required ?? (isSprayTan && serviceName !== 'Patch Test' ? servicePrice * 0.5 : 0))
     const depositPaid = Number(wixBookingPayload.deposit_paid || 0)
-    const mappedStatus = getWixMappedStatus(wixBookingPayload, bookingType)
 
     return {
       customer_id: customer?.id || null,
@@ -4065,7 +4000,7 @@ function formatMoney(value) {
       customer_phone: customer?.phone || wixBookingPayload.wix_customer_phone || wixBookingPayload.customer_phone || null,
       customer_email: customer?.email || wixBookingPayload.wix_customer_email || wixBookingPayload.customer_email || null,
       appointment_time: new Date(appointmentTime).toISOString(),
-      status: mappedStatus.status,
+      status: wixBookingPayload.status || 'booked',
       source: 'wix',
       booking_source: 'wix',
       wix_booking_id: wixBookingPayload.wix_booking_id,
@@ -4075,14 +4010,13 @@ function formatMoney(value) {
       wix_customer_email: wixBookingPayload.wix_customer_email || wixBookingPayload.customer_email || customer?.email || null,
       wix_customer_phone: wixBookingPayload.wix_customer_phone || wixBookingPayload.customer_phone || customer?.phone || null,
       last_wix_sync_at: new Date().toISOString(),
-      approval_status: mappedStatus.approval_status,
+      approval_status: wixBookingPayload.approval_status || (isSprayTan ? 'pending' : 'approved'),
       booking_type: bookingType,
       spraytan_service: isSprayTan ? serviceName || null : null,
       spraytan_artist: isSprayTan ? wixBookingPayload.spraytan_artist || null : null,
       deposit_required: isSprayTan ? depositRequired : null,
       deposit_paid: isSprayTan ? depositPaid : null,
       deposit_status: isSprayTan ? wixBookingPayload.deposit_status || getSprayTanDepositStatus(serviceName, depositRequired, depositPaid) : null,
-      spraytan_deposit_paid_at: isSprayTan && depositPaid > 0 ? wixBookingPayload.spraytan_deposit_paid_at || wixBookingPayload.deposit_paid_at || new Date().toISOString() : null,
       patch_test_required: isSprayTan ? Boolean(wixBookingPayload.patch_test_required) : false,
       patch_test_completed: isSprayTan ? Boolean(wixBookingPayload.patch_test_completed) : false,
       patch_test_date: isSprayTan ? wixBookingPayload.patch_test_date || null : null,
@@ -4121,13 +4055,11 @@ function formatMoney(value) {
       throw new Error('Matched booking is not a Wix booking. Refusing to update dashboard-created booking.')
     }
 
-    const mappedStatus = getWixMappedStatus({ wix_status: wixStatus, approval_status: approvalStatus }, existingBooking.booking_type || 'sunbed')
     const { data, error } = await supabase
       .from('Bookings')
       .update({
         wix_status: wixStatus,
-        status: mappedStatus.status,
-        approval_status: approvalStatus || mappedStatus.approval_status || existingBooking.approval_status || 'pending',
+        approval_status: approvalStatus || existingBooking.approval_status || 'pending',
         last_wix_sync_at: new Date().toISOString()
       })
       .eq('id', existingBooking.id)
@@ -4169,59 +4101,6 @@ function formatMoney(value) {
     }
   }
 
-  async function runWixBookingSync({ automatic = false } = {}) {
-    if (!automatic) {
-      if (!requireStaffSignIn()) return
-      if (!requireManagerAccess('Manager PIN required to sync Wix bookings:')) return
-    }
-
-    if (!wixSyncEndpoint) {
-      setWixSyncStatus('Wix API connection pending. Add VITE_WIX_SYNC_ENDPOINT and Wix credentials in Vercel to enable live sync.')
-      setWixImportedCount(0)
-      setWixFailedCount(0)
-      return
-    }
-
-    setWixSyncRunning(true)
-    setWixSyncStatus(automatic ? 'Automatic Wix sync running...' : 'Syncing Wix bookings...')
-    let imported = 0
-    let failed = 0
-
-    try {
-      // TODO Wix API/webhook: Vercel should fetch Wix bookings server-side, verify credentials,
-      // normalize bookings into the helper payload shape, then return { bookings: [...] } here.
-      const response = await fetch(wixSyncEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-      if (!response.ok) throw new Error(`Wix sync endpoint returned ${response.status}`)
-      const payload = await response.json()
-      const wixBookings = Array.isArray(payload?.bookings) ? payload.bookings : []
-
-      for (const wixBooking of wixBookings) {
-        try {
-          await upsertWixBooking(wixBooking)
-          imported += 1
-        } catch (bookingError) {
-          failed += 1
-          console.error('Wix booking sync failed for one booking:', { wixBooking, bookingError })
-        }
-      }
-
-      setWixImportedCount(imported)
-      setWixFailedCount(failed)
-      setWixSyncStatus(`Wix sync complete: ${imported} imported/updated, ${failed} failed.`)
-      if (imported > 0) {
-        await getBookings()
-        await getCustomers()
-      }
-    } catch (error) {
-      setWixFailedCount((count) => count + 1)
-      setWixSyncStatus(error.message || 'Wix sync failed.')
-      if (!automatic) showDataLoadWarning('Wix booking sync failed. Check Vercel API route and credentials.', error)
-      console.error('Wix booking sync failed:', error)
-    } finally {
-      setWixSyncRunning(false)
-    }
-  }
-
   async function upsertWixBooking(wixBookingPayload) {
     // Future Vercel webhook/API route should call this helper after verifying the Wix request.
     // Keep this helper dormant in the client until the server route is added.
@@ -4252,7 +4131,6 @@ function formatMoney(value) {
     const appointmentTime = wixBookingPayload.appointment_time || wixBookingPayload.start_time || wixBookingPayload.startDate
     const bedId = wixBookingPayload.bed_id || serviceMapping?.bedId
     const minutes = Number(wixBookingPayload.minutes || serviceMapping?.minutes || 0)
-    const mappedStatus = getWixMappedStatus(wixBookingPayload, 'sunbed')
 
     if (!appointmentTime || !bedId || minutes <= 0) {
       throw new Error('Wix booking could not be mapped yet. Add the service to WIX_SERVICE_BOOKING_MAP with bedId and minutes.')
@@ -4267,7 +4145,7 @@ function formatMoney(value) {
       bed_id: Number(bedId),
       minutes,
       appointment_time: new Date(appointmentTime).toISOString(),
-      status: mappedStatus.status,
+      status: wixBookingPayload.status || 'booked',
       source: 'wix',
       booking_source: 'wix',
       wix_booking_id: wixBookingPayload.wix_booking_id,
@@ -4328,10 +4206,6 @@ function formatMoney(value) {
 
     const shopTestCustomer = customers.find((customer) => isShopTestCustomer(customer)) || await ensureShopTestCustomer()
     const testMinutes = Number(selectedMinutes || 2)
-    if (!isValidSunbedMinuteValue(testMinutes)) {
-      alertInvalidSunbedMinutes()
-      return
-    }
 
     if (doesLockedBedOverlapInterval(modalSlot.bedId, appointmentDateTime, testMinutes)) {
       showBedLockedAlert()
@@ -4398,8 +4272,8 @@ function formatMoney(value) {
       return
     }
 
-    if (!isValidSunbedMinuteValue(selectedMinutes)) {
-      alertInvalidSunbedMinutes()
+    if (Number(selectedMinutes || 0) <= 0) {
+      alert('Please enter a valid number of minutes.')
       return
     }
 
@@ -4488,10 +4362,6 @@ function formatMoney(value) {
     }
 
     const sessionMinutes = Number(selectedMinutes || 0)
-    if (!isValidSunbedMinuteValue(sessionMinutes)) {
-      alertInvalidSunbedMinutes()
-      return
-    }
     if (Number(member.weekly_free_minutes_balance || 0) < sessionMinutes) {
       alert(`${member.name} only has ${member.weekly_free_minutes_balance || 0} staff free mins available this week.`)
       return
@@ -4559,8 +4429,8 @@ function formatMoney(value) {
       return
     }
 
-    if (!isValidSunbedMinuteValue(selectedMinutes)) {
-      alertInvalidSunbedMinutes()
+    if (Number(selectedMinutes || 0) <= 0) {
+      alert('Please enter a valid number of minutes.')
       return
     }
 
@@ -5437,7 +5307,6 @@ function formatMoney(value) {
       deposit_paid: depositPaid,
       deposit_status: statusFields.deposit_status,
       spraytan_deposit_payment_method: depositPaid > 0 ? sprayTanDepositPaymentMethod : null,
-      spraytan_deposit_paid_at: depositPaid > 0 ? new Date().toISOString() : null,
       spraytan_balance_paid: 0,
       spraytan_balance_payment_method: null,
       spraytan_balance_paid_at: null,
@@ -5530,22 +5399,11 @@ function formatMoney(value) {
     }
 
     const statusFields = getSprayTanStatusFields(sprayTanStatusControl, sprayTanDepositStatus)
-    const bookingCustomer = customers.find((item) => Number(item.id) === Number(sprayTanEditingBooking.customer_id))
-    const activePatchInfo = getCustomerActivePatchTestInfo(bookingCustomer)
-    if (sprayTanService !== 'Patch Test' && statusFields.approval_status === 'approved' && !sprayTanPatchCompleted && !activePatchInfo.active) {
-      alert('This customer does not have an active patch test. Change this booking to Patch Test, or reschedule/cancel until a valid patch test is recorded.')
-      return
-    }
     const balanceDue = Math.max(0, servicePrice - depositPaid - newBalancePaid)
-    const nextDepositStatus = depositRequired > 0 && depositPaid >= depositRequired ? 'paid' : statusFields.deposit_status
+    const nextDepositStatus = balanceDue <= 0 && servicePrice > 0 ? 'paid' : statusFields.deposit_status
     const patchDate = sprayTanPatchTestDate ? new Date(`${sprayTanPatchTestDate}T00:00:00`).toISOString() : null
     const customerName = sprayTanCustomerName.trim() || customerSearch.trim() || sprayTanEditingBooking.customer_name || 'Spray tan customer'
     const assignedArtist = staff.find((member) => String(member.name || '').trim().toLowerCase() === String(sprayTanArtist || '').trim().toLowerCase())
-    const previousDepositPaid = Number(sprayTanEditingBooking.deposit_paid || 0)
-    const depositIncrease = depositPaid - previousDepositPaid
-    const nextApprovalStatus = depositRequired > 0 && depositPaid >= depositRequired && (sprayTanPatchCompleted || activePatchInfo.active)
-      ? 'approved'
-      : statusFields.approval_status
 
     setSprayTanSaving(true)
     const { error } = await supabase.from('Bookings').update({
@@ -5561,13 +5419,12 @@ function formatMoney(value) {
       deposit_paid: depositPaid,
       deposit_status: nextDepositStatus,
       spraytan_deposit_payment_method: depositPaid > 0 ? sprayTanDepositPaymentMethod : null,
-      spraytan_deposit_paid_at: depositIncrease > 0 ? new Date().toISOString() : sprayTanEditingBooking.spraytan_deposit_paid_at || null,
       spraytan_balance_paid: Number(newBalancePaid.toFixed(2)),
       spraytan_balance_payment_method: balancePaymentAmount > 0 ? sprayTanBalancePaymentMethod : sprayTanEditingBooking.spraytan_balance_payment_method || null,
       spraytan_balance_paid_at: balancePaymentAmount > 0 ? new Date().toISOString() : sprayTanEditingBooking.spraytan_balance_paid_at || null,
-      approval_status: nextApprovalStatus,
-      approved_by: nextApprovalStatus === 'approved' && sprayTanEditingBooking.approval_status !== 'approved' ? getCurrentStaffUser()?.name || null : sprayTanEditingBooking.approved_by || null,
-      approved_at: nextApprovalStatus === 'approved' && sprayTanEditingBooking.approval_status !== 'approved' ? new Date().toISOString() : sprayTanEditingBooking.approved_at || null,
+      approval_status: statusFields.approval_status,
+      approved_by: statusFields.approval_status === 'approved' && sprayTanEditingBooking.approval_status !== 'approved' ? getCurrentStaffUser()?.name || null : sprayTanEditingBooking.approved_by || null,
+      approved_at: statusFields.approval_status === 'approved' && sprayTanEditingBooking.approval_status !== 'approved' ? new Date().toISOString() : sprayTanEditingBooking.approved_at || null,
       status: statusFields.status,
       patch_test_required: sprayTanService !== 'Patch Test',
       patch_test_completed: sprayTanService === 'Patch Test' ? true : sprayTanPatchCompleted,
@@ -5595,6 +5452,8 @@ function formatMoney(value) {
       }
     }
 
+    const previousDepositPaid = Number(sprayTanEditingBooking.deposit_paid || 0)
+    const depositIncrease = depositPaid - previousDepositPaid
     if (depositIncrease > 0) {
       const paymentMethodForIncrease = previousDepositPaid >= depositRequired ? sprayTanBalancePaymentMethod : sprayTanDepositPaymentMethod
       const paymentSaved = await recordSprayTanPayment({
@@ -7289,23 +7148,27 @@ function formatMoney(value) {
 
   function renderBookingMinutesControl() {
     return (
-      <label style={{ display: 'grid', gap: '5px', marginBottom: '12px' }}>
-        Minutes
-        <input
-          type="number"
-          list="sunbed-minute-options"
-          min="2"
-          max="20"
-          step="1"
-          placeholder="Select or type 2-20 minutes"
-          value={selectedMinutes}
-          onChange={(event) => setSelectedMinutes(event.target.value)}
-          style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
-        />
-        <datalist id="sunbed-minute-options">
-          {getMinuteOptionsForBooking().map((minute) => <option key={minute} value={minute} />)}
-        </datalist>
-      </label>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+        <label style={{ display: 'grid', gap: '5px' }}>
+          Common minutes
+          <select value={COMMON_BOOKING_MINUTES.includes(Number(selectedMinutes)) ? selectedMinutes : ''} onChange={(e) => e.target.value && setSelectedMinutes(e.target.value)} style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}>
+            <option value="">Custom</option>
+            {getMinuteOptionsForBooking().map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: '5px' }}>
+          Custom minutes
+          <input
+            type="number"
+            min="1"
+            step="1"
+            placeholder="Type minutes"
+            value={selectedMinutes}
+            onChange={(event) => setSelectedMinutes(event.target.value)}
+            style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
+          />
+        </label>
+      </div>
     )
   }
 
@@ -8927,16 +8790,11 @@ function formatMoney(value) {
             <h3 style={{ marginBottom: 0 }}>{wixFailedCount}</h3>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button onClick={() => runWixBookingSync()} disabled={wixSyncRunning}>
-            {wixSyncRunning ? 'Syncing...' : 'Sync Wix Bookings'}
-          </button>
-          <button onClick={runWixTestImport} disabled={wixSyncRunning}>
-            {wixSyncRunning ? 'Testing Import...' : 'Test Import'}
-          </button>
-        </div>
+        <button onClick={runWixTestImport} disabled={wixSyncRunning}>
+          {wixSyncRunning ? 'Testing Import...' : 'Test Import'}
+        </button>
         <p style={{ color: '#aaa', marginBottom: 0 }}>
-          Live sync is pending the Vercel Wix API route and Wix credentials. Test Import creates or updates one sample pending spray tan booking for the selected date using a fixed Wix booking ID.
+          Test Import creates or updates one sample pending spray tan booking for the selected date using a fixed Wix booking ID.
         </p>
       </div>
     )
@@ -10007,7 +9865,6 @@ function formatMoney(value) {
     const appointmentDateTime = new Date(`${sprayTanDate}T${sprayTanTime}`)
     const patchWarning = customer ? getPatchTestWarning(customer, appointmentDateTime, sprayTanService) : ''
     const latestPatchTestDate = customer ? getLatestCustomerPatchTestDate(customer.id) : null
-    const patchTestInfo = customer ? getCustomerActivePatchTestInfo(customer) : { active: false, date: null, expiry: null, warning: 'No customer selected.' }
 
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
@@ -10026,29 +9883,6 @@ function formatMoney(value) {
             </div>
           ) : renderCustomerSearchBox({ context: 'spraytan' })}
           {selectedStaff && <p style={{ color: '#d4a853', fontWeight: 'bold' }}>Staff selected for spray tan booking. Use deposit/payment fields if this visit is paid, or leave payment at 0 if free.</p>}
-          {sprayTanEditingBooking && (
-            <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
-              <strong style={{ color: patchTestInfo.active ? '#9ccfae' : '#ffcc66' }}>
-                Patch test: {patchTestInfo.active ? 'Active' : 'Not active'}
-              </strong>
-              <p style={{ margin: '6px 0', color: '#ddd' }}>
-                Last patch test: {patchTestInfo.date ? patchTestInfo.date.toLocaleDateString('en-GB') : 'Not recorded'}
-                {patchTestInfo.expiry && !Number.isNaN(patchTestInfo.expiry.getTime()) ? ` · Expires ${patchTestInfo.expiry.toLocaleDateString('en-GB')}` : ''}
-              </p>
-              {patchTestInfo.warning && <p style={{ margin: '0 0 8px', color: '#ffcc66', fontWeight: 'bold' }}>{patchTestInfo.warning}</p>}
-              {!patchTestInfo.active && sprayTanService !== 'Patch Test' && (
-                <button type="button" onClick={() => setSprayTanServiceWithDefaults('Patch Test')}>Change to Patch Test</button>
-              )}
-              {patchTestInfo.active && sprayTanService !== 'Patch Test' && depositPaid < depositRequired && (
-                <button type="button" onClick={() => {
-                  setSprayTanDepositPaid(depositRequired)
-                  setSprayTanDepositStatus('paid')
-                  setSprayTanStatusControl('Deposit Paid')
-                  setSprayTanApprovalStatus('approved')
-                }}>Take 50% Deposit & Approve</button>
-              )}
-            </div>
-          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
             <div>
