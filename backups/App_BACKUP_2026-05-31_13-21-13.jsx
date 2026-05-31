@@ -65,12 +65,12 @@ const STAFF_SCHEDULE_TYPES = [
 ]
 
 const CASH_DENOMINATIONS = [
-  { key: 'note50', label: '£50 notes', value: 50 },
-  { key: 'note20', label: '£20 notes', value: 20 },
-  { key: 'note10', label: '£10 notes', value: 10 },
-  { key: 'note5', label: '£5 notes', value: 5 },
-  { key: 'coin2', label: '£2 coins', value: 2 },
-  { key: 'coin1', label: '£1 coins', value: 1 },
+  { key: 'note50', label: 'Â£50 notes', value: 50 },
+  { key: 'note20', label: 'Â£20 notes', value: 20 },
+  { key: 'note10', label: 'Â£10 notes', value: 10 },
+  { key: 'note5', label: 'Â£5 notes', value: 5 },
+  { key: 'coin2', label: 'Â£2 coins', value: 2 },
+  { key: 'coin1', label: 'Â£1 coins', value: 1 },
   { key: 'coin50p', label: '50p', value: 0.5 },
   { key: 'coin20p', label: '20p', value: 0.2 },
   { key: 'coin10p', label: '10p', value: 0.1 },
@@ -105,14 +105,14 @@ const DEFAULT_STAFF = [
 ]
 
 const PURCHASE_OPTIONS = {
-  standard_custom: { type: 'standard', name: 'Custom Standard Minutes', label: 'Custom Standard - Bed 1/3 - £1.05 per min', pricePerMinute: 1.05, minutes: null, total: null },
-  hybrid_custom: { type: 'hybrid', name: 'Custom Hybrid Minutes', label: 'Custom Hybrid - Any Bed - £1.15 per min', pricePerMinute: 1.15, minutes: null, total: null },
-  standard_50: { type: 'standard', name: 'Standard 50 mins', label: 'Standard Package - 50 mins - £42.50', pricePerMinute: 42.5 / 50, minutes: 50, total: 42.5 },
-  standard_80: { type: 'standard', name: 'Standard 80 mins', label: 'Standard Package - 80 mins - £67.50', pricePerMinute: 67.5 / 80, minutes: 80, total: 67.5 },
-  standard_120: { type: 'standard', name: 'Standard 120 mins', label: 'Standard Package - 120 mins - £87.50', pricePerMinute: 87.5 / 120, minutes: 120, total: 87.5 },
-  hybrid_50: { type: 'hybrid', name: 'Hybrid 50 mins', label: 'Hybrid Package - 50 mins - £45.50', pricePerMinute: 45.5 / 50, minutes: 50, total: 45.5 },
-  hybrid_80: { type: 'hybrid', name: 'Hybrid 80 mins', label: 'Hybrid Package - 80 mins - £72.50', pricePerMinute: 72.5 / 80, minutes: 80, total: 72.5 },
-  hybrid_120: { type: 'hybrid', name: 'Hybrid 120 mins', label: 'Hybrid Package - 120 mins - £92.50', pricePerMinute: 92.5 / 120, minutes: 120, total: 92.5 }
+  standard_custom: { type: 'standard', name: 'Custom Standard Minutes', label: 'Custom Standard - Bed 1/3 - Â£1.05 per min', pricePerMinute: 1.05, minutes: null, total: null },
+  hybrid_custom: { type: 'hybrid', name: 'Custom Hybrid Minutes', label: 'Custom Hybrid - Any Bed - Â£1.15 per min', pricePerMinute: 1.15, minutes: null, total: null },
+  standard_50: { type: 'standard', name: 'Standard 50 mins', label: 'Standard Package - 50 mins - Â£42.50', pricePerMinute: 42.5 / 50, minutes: 50, total: 42.5 },
+  standard_80: { type: 'standard', name: 'Standard 80 mins', label: 'Standard Package - 80 mins - Â£67.50', pricePerMinute: 67.5 / 80, minutes: 80, total: 67.5 },
+  standard_120: { type: 'standard', name: 'Standard 120 mins', label: 'Standard Package - 120 mins - Â£87.50', pricePerMinute: 87.5 / 120, minutes: 120, total: 87.5 },
+  hybrid_50: { type: 'hybrid', name: 'Hybrid 50 mins', label: 'Hybrid Package - 50 mins - Â£45.50', pricePerMinute: 45.5 / 50, minutes: 50, total: 45.5 },
+  hybrid_80: { type: 'hybrid', name: 'Hybrid 80 mins', label: 'Hybrid Package - 80 mins - Â£72.50', pricePerMinute: 72.5 / 80, minutes: 80, total: 72.5 },
+  hybrid_120: { type: 'hybrid', name: 'Hybrid 120 mins', label: 'Hybrid Package - 120 mins - Â£92.50', pricePerMinute: 92.5 / 120, minutes: 120, total: 92.5 }
 }
 
 function App() {
@@ -644,7 +644,7 @@ function App() {
 
 function formatMoney(value) {
   const amount = Number(value || 0)
-  return `£${amount.toFixed(2)}`
+  return `Â£${amount.toFixed(2)}`
 }
 
   function formatClock(date) {
@@ -671,7 +671,7 @@ function formatMoney(value) {
     if (!customer?.date_of_birth) return 'DOB not recorded'
     const age = calculateAge(customer.date_of_birth)
     if (age === null) return 'DOB invalid'
-    return `DOB: ${new Date(customer.date_of_birth).toLocaleDateString('en-GB')} — Age ${age}`
+    return `DOB: ${new Date(customer.date_of_birth).toLocaleDateString('en-GB')} â€” Age ${age}`
   }
 
   function checkCustomerAgeBeforeSunbed(customer) {
@@ -1459,43 +1459,12 @@ function formatMoney(value) {
     await getCommissionRules()
   }
 
-  function getCommissionRuleTargetOptions(scope = commissionRuleScope) {
-    const optionMap = new Map()
-    const addOption = (value, label = value) => {
-      const cleanValue = String(value || '').trim()
-      if (!cleanValue) return
-      optionMap.set(cleanValue.toLowerCase(), { value: cleanValue, label: String(label || cleanValue).trim() })
-    }
-
-    if (scope === 'product') {
-      getActiveProducts().forEach((product) => addOption(product.name, product.name))
-    } else if (scope === 'category') {
-      productCategories.forEach((category) => addOption(category.value || category.label, category.label || category.value))
-    } else if (scope === 'spraytan') {
-      SPRAY_TAN_SERVICES.forEach((service) => addOption(service.name, service.name))
-    } else if (scope === 'sunbed') {
-      beds.forEach((bed) => addOption(getBedName(bed.id), getBedName(bed.id)))
-      addOption('Standard Minutes', 'Standard Minutes')
-      addOption('Standard Minutes - Bed 1 and Bed 3', 'Standard Minutes - Bed 1 and Bed 3')
-      addOption('Collagen Minutes', 'Collagen Minutes')
-      addOption('Hybrid Minutes', 'Hybrid Minutes')
-      addOption('Hybrid Minutes - Any Bed', 'Hybrid Minutes - Any Bed')
-    } else if (scope === 'package') {
-      Object.values(PURCHASE_OPTIONS).forEach((option) => addOption(option.name, option.label || option.name))
-    } else if (scope === 'promo') {
-      promos.forEach((promo) => addOption(promo.promo_name, promo.promo_name))
-    }
-
-    return Array.from(optionMap.values()).sort((a, b) => a.label.localeCompare(b.label))
-  }
-
   function getCommissionRuleAmount({ scope, amount = 0, staffName = '', productName = '', category = '', serviceName = '' }) {
     const staffKey = String(staffName || '').trim().toLowerCase()
     const matchCandidates = [productName, category, serviceName].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
-    const scopesToCheck = scope === 'promo' || scope === 'package' ? [scope, 'sunbed'] : [scope]
     const candidates = commissionRules
       .filter((rule) => rule.is_active !== false)
-      .filter((rule) => scopesToCheck.includes(String(rule.rule_scope || '').toLowerCase()))
+      .filter((rule) => String(rule.rule_scope || '').toLowerCase() === scope)
       .filter((rule) => !rule.staff_name || String(rule.staff_name || '').trim().toLowerCase() === staffKey)
       .filter((rule) => matchCandidates.includes(String(rule.match_value || '').trim().toLowerCase()))
 
@@ -1632,7 +1601,7 @@ function formatMoney(value) {
       if (packageType === 'promo' || packageName.includes('promo')) {
         row.promo_sales_total += amount
         row.total_revenue += amount
-        row.estimated_commission += getCommissionRuleAmount({ scope: 'promo', amount, staffName, serviceName: payment.package_name || payment.package_type }) || (amount * promoCommissionRate / 100)
+        row.estimated_commission += getCommissionRuleAmount({ scope: 'sunbed', amount, staffName, serviceName: payment.package_name || payment.package_type }) || (amount * promoCommissionRate / 100)
       } else if (packageType.includes('spray_tan') || packageName.includes('spray tan')) {
         row.spray_tan_sales_total += amount
         if (packageType.includes('deposit')) row.deposits_taken += amount
@@ -1643,8 +1612,7 @@ function formatMoney(value) {
         row.sunbed_minutes_sold += Number(payment.minutes_added || 0)
         row.sunbed_packages_total += amount
         row.total_revenue += amount
-        row.estimated_commission += getCommissionRuleAmount({ scope: 'package', amount, staffName, serviceName: payment.package_name || payment.package_type })
-          || getCommissionRuleAmount({ scope: 'sunbed', amount, staffName, serviceName: payment.bed_type || payment.package_name || payment.package_type })
+        row.estimated_commission += getCommissionRuleAmount({ scope: 'sunbed', amount, staffName, serviceName: payment.package_name || payment.package_type })
       }
     }
 
@@ -2600,10 +2568,10 @@ function formatMoney(value) {
       `Customer: ${receipt.customer_name || 'Walk-in'}`,
       `Type: ${formatStatus(receipt.receipt_type)}`,
       `Payment: ${formatStatus(receipt.payment_method)}`,
-      ...items.map((item) => `${item.name || item.product_name || item.description || 'Item'} x ${item.quantity || 1} - £${Number(item.total || item.total_amount || 0).toFixed(2)}`),
-      `Subtotal: £${Number(receipt.subtotal || 0).toFixed(2)}`,
-      `Discount: £${Number(receipt.discount || 0).toFixed(2)}`,
-      `Total: £${Number(receipt.total || 0).toFixed(2)}`,
+      ...items.map((item) => `${item.name || item.product_name || item.description || 'Item'} x ${item.quantity || 1} - Â£${Number(item.total || item.total_amount || 0).toFixed(2)}`),
+      `Subtotal: Â£${Number(receipt.subtotal || 0).toFixed(2)}`,
+      `Discount: Â£${Number(receipt.discount || 0).toFixed(2)}`,
+      `Total: Â£${Number(receipt.total || 0).toFixed(2)}`,
       `Staff: ${receipt.staff_name || ''}`,
       receipt.notes ? `Notes: ${receipt.notes}` : ''
     ].filter(Boolean).join('\n')
@@ -3714,7 +3682,7 @@ function formatMoney(value) {
     const newHybridBalance = isHybridTopUp ? Number(customer.hybrid_minutes_balance || 0) + amount : Number(customer.hybrid_minutes_balance || 0)
 
     const cashMessage = paymentMethod === 'cash'
-      ? `\nCash received: £${Number(cashReceived || 0).toFixed(2)}\nChange due: £${Math.max(0, Number(cashReceived || 0) - combinedTotal).toFixed(2)}`
+      ? `\nCash received: Â£${Number(cashReceived || 0).toFixed(2)}\nChange due: Â£${Math.max(0, Number(cashReceived || 0) - combinedTotal).toFixed(2)}`
       : ''
 
     if (paymentMethod === 'cash' && Number(cashReceived || 0) < combinedTotal) {
@@ -3723,7 +3691,7 @@ function formatMoney(value) {
     }
 
     const confirmed = window.confirm(
-      `Payment taken?\n\nCustomer: ${customer.name}\nPackage: ${purchase.name}\nMinutes: ${amount}\nMinutes total: £${totalAmount.toFixed(2)}\nProducts total: £${productTotal.toFixed(2)}\nTotal: £${combinedTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
+      `Payment taken?\n\nCustomer: ${customer.name}\nPackage: ${purchase.name}\nMinutes: ${amount}\nMinutes total: Â£${totalAmount.toFixed(2)}\nProducts total: Â£${productTotal.toFixed(2)}\nTotal: Â£${combinedTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
     )
     if (!confirmed) return
 
@@ -3765,7 +3733,7 @@ function formatMoney(value) {
       return
     }
 
-    await createCustomerLog(customer, 'Top up added', `${purchase.name}: ${amount} mins added. Standard ${customer.standard_minutes_balance || 0} → ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} → ${newHybridBalance}. Total paid £${totalAmount.toFixed(2)}.`)
+    await createCustomerLog(customer, 'Top up added', `${purchase.name}: ${amount} mins added. Standard ${customer.standard_minutes_balance || 0} â†’ ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} â†’ ${newHybridBalance}. Total paid Â£${totalAmount.toFixed(2)}.`)
 
     await logCustomerMinuteChanges(
       customer,
@@ -3774,7 +3742,7 @@ function formatMoney(value) {
       Number(customer.hybrid_minutes_balance || 0),
       newHybridBalance,
       'added',
-      `${purchase.name}. Payment ${formatStatus(paymentMethod)}. Total paid £${totalAmount.toFixed(2)}.`
+      `${purchase.name}. Payment ${formatStatus(paymentMethod)}. Total paid Â£${totalAmount.toFixed(2)}.`
     )
 
     await createReceipt({
@@ -3888,11 +3856,11 @@ function formatMoney(value) {
     if (summary.grandTotal <= 0) return true
 
     const cashMessage = paymentMethod === 'cash'
-      ? `\nCash received: £${Number(cashReceived || 0).toFixed(2)}\nChange due: £${Math.max(0, Number(cashReceived || 0) - summary.grandTotal).toFixed(2)}`
+      ? `\nCash received: Â£${Number(cashReceived || 0).toFixed(2)}\nChange due: Â£${Math.max(0, Number(cashReceived || 0) - summary.grandTotal).toFixed(2)}`
       : ''
 
     return window.confirm(
-      `Complete booking checkout?\n\nCustomer: ${customer?.name || 'Walk-in'}\nSession: ${selectedMinutes || 0} tanning mins\nPromo: ${summary.promo?.promo_name || 'None'}\nTop-up total: £${summary.topUpTotal.toFixed(2)}\nPromo total: £${summary.promoTotal.toFixed(2)}\nProducts total: £${summary.productsTotal.toFixed(2)}\nTotal to pay: £${summary.grandTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
+      `Complete booking checkout?\n\nCustomer: ${customer?.name || 'Walk-in'}\nSession: ${selectedMinutes || 0} tanning mins\nPromo: ${summary.promo?.promo_name || 'None'}\nTop-up total: Â£${summary.topUpTotal.toFixed(2)}\nPromo total: Â£${summary.promoTotal.toFixed(2)}\nProducts total: Â£${summary.productsTotal.toFixed(2)}\nTotal to pay: Â£${summary.grandTotal.toFixed(2)}\nMethod: ${formatStatus(paymentMethod)}${cashMessage}`
     )
   }
 
@@ -3962,7 +3930,7 @@ function formatMoney(value) {
           oldHybridBalance,
           newHybridBalance,
           'added',
-          `${summary.promo.promo_name}. Promo checkout payment ${formatStatus(paymentMethod)}. Total paid £${summary.promoTotal.toFixed(2)}.`
+          `${summary.promo.promo_name}. Promo checkout payment ${formatStatus(paymentMethod)}. Total paid Â£${summary.promoTotal.toFixed(2)}.`
         )
         await recordPromoMinuteExpiry({
           customer,
@@ -4046,7 +4014,7 @@ function formatMoney(value) {
         return false
       }
 
-      await createCustomerLog(customer, 'Top up added', `${summary.purchase.name}: ${summary.topUpMinutesToAdd} mins added during booking checkout. Standard ${customer.standard_minutes_balance || 0} → ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} → ${newHybridBalance}. Total paid £${summary.topUpTotal.toFixed(2)}.`)
+      await createCustomerLog(customer, 'Top up added', `${summary.purchase.name}: ${summary.topUpMinutesToAdd} mins added during booking checkout. Standard ${customer.standard_minutes_balance || 0} â†’ ${newStandardBalance}. Hybrid ${customer.hybrid_minutes_balance || 0} â†’ ${newHybridBalance}. Total paid Â£${summary.topUpTotal.toFixed(2)}.`)
       await logCustomerMinuteChanges(
         customer,
         Number(balanceCustomer.standard_minutes_balance || 0),
@@ -4054,7 +4022,7 @@ function formatMoney(value) {
         Number(balanceCustomer.hybrid_minutes_balance || 0),
         newHybridBalance,
         'added',
-        `${summary.purchase.name}. Booking checkout payment ${formatStatus(paymentMethod)}. Total paid £${summary.topUpTotal.toFixed(2)}.`
+        `${summary.purchase.name}. Booking checkout payment ${formatStatus(paymentMethod)}. Total paid Â£${summary.topUpTotal.toFixed(2)}.`
       )
 
       nextCustomer = {
@@ -4282,12 +4250,9 @@ function formatMoney(value) {
 
   function getSprayTanStatusLabel(booking) {
     const status = getBookingStatusKey(booking)
-    const approval = String(booking?.approval_status || '').toLowerCase()
     if (status === 'completed') return 'Completed'
-    if (approval === 'completed') return 'Completed'
     if (status === 'cancelled' || status === 'canceled') return 'Cancelled'
-    if (approval === 'cancelled' || approval === 'canceled') return 'Cancelled'
-    if (approval === 'pending') return 'Pending Approval'
+    if (String(booking?.approval_status || '').toLowerCase() === 'pending') return 'Pending Approval'
     if (String(booking?.deposit_status || '').toLowerCase() === 'not_paid') return 'Deposit Not Paid'
     if (String(booking?.deposit_status || '').toLowerCase() === 'paid') return 'Deposit Paid'
     if (Number(booking?.deposit_required || 0) > Number(booking?.deposit_paid || 0)) return 'Deposit Pending'
@@ -4313,52 +4278,6 @@ function formatMoney(value) {
       padding: '4px 9px',
       fontWeight: 'bold',
       fontSize: '12px'
-    }
-  }
-
-  function isSprayTanCompleted(booking) {
-    const status = getBookingStatusKey(booking)
-    const approval = String(booking?.approval_status || '').toLowerCase()
-    return status === 'completed' || approval === 'completed'
-  }
-
-  function isSprayTanOverdueNoAction(booking) {
-    if (!booking?.appointment_time || isSprayTanCompleted(booking)) return false
-    const statusLabel = getSprayTanStatusLabel(booking)
-    if (['Approved', 'Deposit Paid', 'Completed', 'Cancelled'].includes(statusLabel)) return false
-    const appointment = new Date(booking.appointment_time)
-    if (Number.isNaN(appointment.getTime())) return false
-    return currentTime.getTime() - appointment.getTime() > 45 * 60 * 1000
-  }
-
-  function getSprayTanBookingCardStyle(booking) {
-    const completed = isSprayTanCompleted(booking)
-    const overdue = isSprayTanOverdueNoAction(booking)
-    const base = {
-      border: '1px solid rgba(212,168,83,0.22)',
-      borderRadius: '8px',
-      padding: '12px',
-      marginBottom: '8px',
-      cursor: 'pointer',
-      boxShadow: '0 10px 22px rgba(0,0,0,0.24)'
-    }
-    if (completed) {
-      return {
-        ...base,
-        background: 'linear-gradient(135deg, rgba(47,122,75,0.95), rgba(25,68,42,0.96))',
-        border: '1px solid rgba(122,189,141,0.72)'
-      }
-    }
-    if (overdue) {
-      return {
-        ...base,
-        background: 'linear-gradient(135deg, rgba(181,106,34,0.95), rgba(98,63,22,0.98))',
-        border: '1px solid rgba(255,204,102,0.72)'
-      }
-    }
-    return {
-      ...base,
-      background: '#111'
     }
   }
 
@@ -5447,7 +5366,7 @@ function formatMoney(value) {
       return false
     }
 
-    await createCustomerLog(customer, 'Minutes deducted', `Booking ${booking.id || ''}: ${sessionMinutes} mins deducted for ${getBedName(booking.bed_id)}. Standard ${standardBalance} → ${newStandardBalance}. Hybrid ${hybridBalance} → ${newHybridBalance}.`)
+    await createCustomerLog(customer, 'Minutes deducted', `Booking ${booking.id || ''}: ${sessionMinutes} mins deducted for ${getBedName(booking.bed_id)}. Standard ${standardBalance} â†’ ${newStandardBalance}. Hybrid ${hybridBalance} â†’ ${newHybridBalance}.`)
     await logCustomerMinuteChanges(
       customer,
       standardBalance,
@@ -6078,7 +5997,7 @@ function formatMoney(value) {
       await createCustomerLog(customer, 'Patch test recorded', `Patch test recorded from spray tan booking. Date: ${new Date(patchDate).toLocaleString('en-GB')}.`)
     }
 
-    await createCustomerLog(customer, 'Spray tan booking created', `${sprayTanService} booked for ${appointmentDateTime.toLocaleString('en-GB')}. Deposit required £${depositRequired.toFixed(2)}, paid £${depositPaid.toFixed(2)}.`)
+    await createCustomerLog(customer, 'Spray tan booking created', `${sprayTanService} booked for ${appointmentDateTime.toLocaleString('en-GB')}. Deposit required Â£${depositRequired.toFixed(2)}, paid Â£${depositPaid.toFixed(2)}.`)
     if (depositPaid > 0) {
       const paymentSaved = await recordSprayTanPayment({
         bookingId: data?.id,
@@ -7330,7 +7249,7 @@ function formatMoney(value) {
       return
     }
 
-    await createCustomerLog(customer, 'Customer updated', `Details saved. DOB: ${managerDateOfBirth || 'not recorded'}. Standard ${oldStandard} → ${newStandard}. Hybrid ${oldHybrid} → ${newHybrid}.`)
+    await createCustomerLog(customer, 'Customer updated', `Details saved. DOB: ${managerDateOfBirth || 'not recorded'}. Standard ${oldStandard} â†’ ${newStandard}. Hybrid ${oldHybrid} â†’ ${newHybrid}.`)
     await logCustomerMinuteChanges(
       customer,
       oldStandard,
@@ -7460,7 +7379,7 @@ function formatMoney(value) {
       return
     }
 
-    await createStaffLog(member, 'Staff minutes adjusted', `Balance ${oldBalance} → ${newBalance}. Adjustment: ${amount}. Reason: ${staffAdjustmentReason.trim()}`)
+    await createStaffLog(member, 'Staff minutes adjusted', `Balance ${oldBalance} â†’ ${newBalance}. Adjustment: ${amount}. Reason: ${staffAdjustmentReason.trim()}`)
     setStaffAdjustmentId('')
     setStaffAdjustmentAmount('')
     setStaffAdjustmentReason('')
@@ -7800,14 +7719,14 @@ function formatMoney(value) {
                 {option.kind === 'customer' ? (
                   <>
                     {isShopTestCustomer(option.record) ? (
-                      <><strong>Shop Test</strong> — Internal</>
+                      <><strong>Shop Test</strong> â€” Internal</>
                     ) : (
-                      <><strong>{option.record.name}</strong> — Standard {option.record.standard_minutes_balance || 0} mins / Hybrid {option.record.hybrid_minutes_balance || 0} mins</>
+                      <><strong>{option.record.name}</strong> â€” Standard {option.record.standard_minutes_balance || 0} mins / Hybrid {option.record.hybrid_minutes_balance || 0} mins</>
                     )}
                   </>
                 ) : (
                   <>
-                    <strong>{option.record.name} - Staff</strong> — {option.record.weekly_free_minutes_balance || 0} free mins
+                    <strong>{option.record.name} - Staff</strong> â€” {option.record.weekly_free_minutes_balance || 0} free mins
                   </>
                 )}
               </div>
@@ -7835,7 +7754,7 @@ function formatMoney(value) {
 
         {selectedCustomer && (
           <div style={{ background: '#111', padding: '12px', borderRadius: '10px' }}>
-            <strong>{isShopTestCustomer(selectedCustomer) ? 'Shop Test — Internal' : selectedCustomer.name}</strong>
+            <strong>{isShopTestCustomer(selectedCustomer) ? 'Shop Test â€” Internal' : selectedCustomer.name}</strong>
             {isShopTestCustomer(selectedCustomer) ? (
               <>
                 <div style={{ background: '#0b0b0b', padding: '15px', borderRadius: '10px', marginTop: '12px', border: '1px solid #333', textAlign: 'center' }}>
@@ -7853,8 +7772,8 @@ function formatMoney(value) {
                 <p style={{ color: selectedCustomer.date_of_birth && isCustomerUnder18(selectedCustomer) ? '#ff7875' : '#aaa', fontWeight: selectedCustomer.date_of_birth && isCustomerUnder18(selectedCustomer) ? 'bold' : 'normal', marginBottom: '8px' }}>
                   {getCustomerAgeText(selectedCustomer)}
                 </p>
-                {selectedCustomer.date_of_birth && isCustomerUnder18(selectedCustomer) && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Under 18 — do not book.</p>}
-                {!selectedCustomer.date_of_birth && <p style={{ color: '#faad14', fontWeight: 'bold' }}>DOB not recorded — check ID before use.</p>}
+                {selectedCustomer.date_of_birth && isCustomerUnder18(selectedCustomer) && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Under 18 â€” do not book.</p>}
+                {!selectedCustomer.date_of_birth && <p style={{ color: '#faad14', fontWeight: 'bold' }}>DOB not recorded â€” check ID before use.</p>}
                 {!selectedCustomer.terms_accepted && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Salon terms not accepted yet.</p>}
                 {!selectedCustomer.id_checked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>ID check not recorded.</p>}
                 {renderCustomerWarning(selectedCustomer)}
@@ -7893,32 +7812,23 @@ function formatMoney(value) {
   }
 
   function renderBookingMinutesControl() {
-    const commonValue = COMMON_BOOKING_MINUTES.includes(Number(selectedMinutes)) ? String(Number(selectedMinutes)) : ''
-
     return (
       <label style={{ display: 'grid', gap: '5px', marginBottom: '12px' }}>
         Minutes
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-          <select
-            value={commonValue}
-            onChange={(event) => setSelectedMinutes(event.target.value)}
-            style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
-          >
-            <option value="">Type custom</option>
-            {COMMON_BOOKING_MINUTES.map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
-          </select>
-          <input
-            type="number"
-            min="2"
-            max="20"
-            step="1"
-            placeholder="2-20"
-            value={selectedMinutes}
-            onChange={(event) => setSelectedMinutes(event.target.value)}
-            style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
-          />
-        </div>
-        <small style={{ color: '#aaa' }}>Select a common time or type any value from 2 to 20 minutes.</small>
+        <input
+          type="number"
+          list="sunbed-minute-options"
+          min="2"
+          max="20"
+          step="1"
+          placeholder="Select or type 2-20 minutes"
+          value={selectedMinutes}
+          onChange={(event) => setSelectedMinutes(event.target.value)}
+          style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
+        />
+        <datalist id="sunbed-minute-options">
+          {getMinuteOptionsForBooking().map((minute) => <option key={minute} value={minute} />)}
+        </datalist>
       </label>
     )
   }
@@ -7931,14 +7841,14 @@ function formatMoney(value) {
         ) : (
           productCart.map((item) => (
             <div key={item.product_id} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #333', padding: '8px 0' }}>
-              <span style={{ flex: '1 1 180px', minWidth: 0 }}>{item.product_name}<br /><small>£{Number(item.price || 0).toFixed(2)} — Stock {item.stock_quantity || 0}</small></span>
+              <span style={{ flex: '1 1 180px', minWidth: 0 }}>{item.product_name}<br /><small>Â£{Number(item.price || 0).toFixed(2)} â€” Stock {item.stock_quantity || 0}</small></span>
               <input type="number" value={item.quantity} min="0" onChange={(e) => updateProductCartQuantity(item.product_id, e.target.value)} style={{ flex: '0 1 80px', width: '80px', padding: '8px', boxSizing: 'border-box' }} />
-              <strong style={{ flex: '0 0 auto' }}>£{(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)}</strong>
+              <strong style={{ flex: '0 0 auto' }}>Â£{(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)}</strong>
               <button type="button" onClick={() => updateProductCartQuantity(item.product_id, 0)} style={{ flex: '0 1 auto', padding: '8px 10px' }}>Remove</button>
             </div>
           ))
         )}
-        <p>Total products: <strong>£{getProductCartTotal().toFixed(2)}</strong></p>
+        <p>Total products: <strong>Â£{getProductCartTotal().toFixed(2)}</strong></p>
       </div>
     )
   }
@@ -7975,7 +7885,7 @@ function formatMoney(value) {
                 <option value="">Select product...</option>
                 {filteredProducts.map((product) => (
                   <option key={product.id} value={product.id}>
-                    {product.name} - £{Number(product.price || 0).toFixed(2)}
+                    {product.name} - Â£{Number(product.price || 0).toFixed(2)}
                   </option>
                 ))}
               </select>
@@ -8060,7 +7970,7 @@ function formatMoney(value) {
           <option value="">No offer / promo</option>
           {activePromos.map((entry) => (
             <option key={entry.id} value={entry.id}>
-              {entry.promo_name} - £{Number(entry.promo_price || 0).toFixed(2)}
+              {entry.promo_name} - Â£{Number(entry.promo_price || 0).toFixed(2)}
             </option>
           ))}
         </select>
@@ -8137,7 +8047,7 @@ function formatMoney(value) {
         ) : (
           <p style={{ margin: '8px 0' }}>Minutes to add: <strong>{purchase.minutes} mins</strong></p>
         )}
-        <p style={{ margin: '8px 0 0' }}>Top-up cost: <strong>£{Number((Number(purchase.minutes || 0) > 0 ? purchase.total : 0) || 0).toFixed(2)}</strong></p>
+        <p style={{ margin: '8px 0 0' }}>Top-up cost: <strong>Â£{Number((Number(purchase.minutes || 0) > 0 ? purchase.total : 0) || 0).toFixed(2)}</strong></p>
       </div>
     )
   }
@@ -8169,10 +8079,10 @@ function formatMoney(value) {
           {summary.hasPromo && <p style={{ margin: 0 }}>Promo minutes added to account: <strong>{Number(summary.promo.included_minutes || 0)} mins</strong></p>}
           {summary.hasPromo && <p style={{ margin: 0, color: '#aaa' }}>Today uses the selected session minutes; remaining promo/account balance stays on the customer account.</p>}
           {promoItems.length > 0 && <p style={{ margin: 0 }}>Included promo products: <strong>{promoItems.map((item) => `${item.product_name} x${item.quantity}`).join(', ')}</strong></p>}
-          {summary.hasPromo && <p style={{ margin: 0 }}>Offer / Promo: <strong>{summary.promo.promo_name}</strong> - £{summary.promoTotal.toFixed(2)}</p>}
-          <p style={{ margin: 0 }}>Top-up minutes cost: <strong>£{summary.topUpTotal.toFixed(2)}</strong></p>
-          <p style={{ margin: 0 }}>Products total: <strong>£{summary.productsTotal.toFixed(2)}</strong></p>
-          <p style={{ margin: 0, color: '#d4a853', fontWeight: 'bold' }}>Grand total to pay: £{summary.grandTotal.toFixed(2)}</p>
+          {summary.hasPromo && <p style={{ margin: 0 }}>Offer / Promo: <strong>{summary.promo.promo_name}</strong> - Â£{summary.promoTotal.toFixed(2)}</p>}
+          <p style={{ margin: 0 }}>Top-up minutes cost: <strong>Â£{summary.topUpTotal.toFixed(2)}</strong></p>
+          <p style={{ margin: 0 }}>Products total: <strong>Â£{summary.productsTotal.toFixed(2)}</strong></p>
+          <p style={{ margin: 0, color: '#d4a853', fontWeight: 'bold' }}>Grand total to pay: Â£{summary.grandTotal.toFixed(2)}</p>
         </div>
         <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
           <option value="cash">Cash</option>
@@ -8201,7 +8111,7 @@ function formatMoney(value) {
               onChange={(e) => setCashReceived(e.target.value)}
               style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}
             />
-            <p style={{ margin: 0 }}>Change to give: <strong style={{ color: '#d4a853' }}>£{changeDue.toFixed(2)}</strong></p>
+            <p style={{ margin: 0 }}>Change to give: <strong style={{ color: '#d4a853' }}>Â£{changeDue.toFixed(2)}</strong></p>
             {Number(cashReceived || 0) > 0 && Number(cashReceived || 0) < summary.grandTotal && (
               <p style={{ margin: '6px 0 0', color: '#ff7875', fontWeight: 'bold' }}>Cash given is less than the total.</p>
             )}
@@ -8343,7 +8253,7 @@ function formatMoney(value) {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', marginBottom: '12px' }}>
-          <div style={statStyle}><span>Lifetime Spend</span><h3>£{lifetimeSpend.toFixed(2)}</h3></div>
+          <div style={statStyle}><span>Lifetime Spend</span><h3>Â£{lifetimeSpend.toFixed(2)}</h3></div>
           <div style={statStyle}><span>Total Visits</span><h3>{stats.totalVisits}</h3></div>
           <div style={statStyle}><span>Last Visit</span><h3 style={{ fontSize: '16px' }}>{stats.lastVisitDate ? new Date(stats.lastVisitDate).toLocaleDateString('en-GB') : 'None'}</h3></div>
           <div style={statStyle}><span>Next Booking</span><h3 style={{ fontSize: '16px' }}>{nextBooking?.appointment_time ? new Date(nextBooking.appointment_time).toLocaleString('en-GB') : 'None'}</h3></div>
@@ -8411,12 +8321,12 @@ function formatMoney(value) {
         {customerProfileTab === 'purchases' && (
           <div style={{ display: 'grid', gap: '10px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
-              <div style={statStyle}><span>Lifetime Spend</span><h3>£{lifetimeSpend.toFixed(2)}</h3></div>
-              <div style={statStyle}><span>Sunbed Revenue</span><h3>£{sunbedRevenue.toFixed(2)}</h3></div>
-              <div style={statStyle}><span>Spray Tan Revenue</span><h3>£{sprayTanRevenue.toFixed(2)}</h3></div>
-              <div style={statStyle}><span>Product Revenue</span><h3>£{productRevenue.toFixed(2)}</h3></div>
+              <div style={statStyle}><span>Lifetime Spend</span><h3>Â£{lifetimeSpend.toFixed(2)}</h3></div>
+              <div style={statStyle}><span>Sunbed Revenue</span><h3>Â£{sunbedRevenue.toFixed(2)}</h3></div>
+              <div style={statStyle}><span>Spray Tan Revenue</span><h3>Â£{sprayTanRevenue.toFixed(2)}</h3></div>
+              <div style={statStyle}><span>Product Revenue</span><h3>Â£{productRevenue.toFixed(2)}</h3></div>
             </div>
-            {renderTable(['Date', 'Type', 'Description', 'Amount', 'Payment Method', 'Staff Member'], purchaseRows, (row) => <tr key={row.id}><td style={tdStyle}>{row.date ? new Date(row.date).toLocaleString('en-GB') : '-'}</td><td style={tdStyle}>{formatStatus(row.type)}</td><td style={tdStyle}>{row.description}</td><td style={tdStyle}>£{Number(row.amount || 0).toFixed(2)}</td><td style={tdStyle}>{formatStatus(row.paymentMethod)}</td><td style={tdStyle}>{row.staff || 'Unknown'}</td></tr>, 'No purchases found.')}
+            {renderTable(['Date', 'Type', 'Description', 'Amount', 'Payment Method', 'Staff Member'], purchaseRows, (row) => <tr key={row.id}><td style={tdStyle}>{row.date ? new Date(row.date).toLocaleString('en-GB') : '-'}</td><td style={tdStyle}>{formatStatus(row.type)}</td><td style={tdStyle}>{row.description}</td><td style={tdStyle}>Â£{Number(row.amount || 0).toFixed(2)}</td><td style={tdStyle}>{formatStatus(row.paymentMethod)}</td><td style={tdStyle}>{row.staff || 'Unknown'}</td></tr>, 'No purchases found.')}
           </div>
         )}
 
@@ -8427,9 +8337,9 @@ function formatMoney(value) {
               <p><strong>Last Patch Test Date:</strong> {customer.last_patch_test_date ? new Date(customer.last_patch_test_date).toLocaleDateString('en-GB') : '-'}</p>
               <p><strong>Patch Test Expiry Date:</strong> {customer.patch_test_expiry_date || '-'}</p>
               <p><strong>Artist History:</strong> {[...new Set(sprayBookings.map((booking) => booking.assigned_artist_name || booking.spraytan_artist).filter(Boolean))].join(', ') || '-'}</p>
-              <p><strong>Lifetime Spray Tan Spend:</strong> £{sprayTanRevenue.toFixed(2)} / <strong>Total Spray Tan Visits:</strong> {sprayBookings.length}</p>
+              <p><strong>Lifetime Spray Tan Spend:</strong> Â£{sprayTanRevenue.toFixed(2)} / <strong>Total Spray Tan Visits:</strong> {sprayBookings.length}</p>
             </div>
-            {renderTable(['Date', 'Service', 'Artist', 'Price', 'Deposit', 'Balance', 'Status'], sprayBookings, (booking) => <tr key={booking.id}><td style={tdStyle}>{booking.appointment_time ? new Date(booking.appointment_time).toLocaleString('en-GB') : '-'}</td><td style={tdStyle}>{booking.spraytan_service || '-'}</td><td style={tdStyle}>{booking.assigned_artist_name || booking.spraytan_artist || '-'}</td><td style={tdStyle}>£{getSprayTanServicePrice(booking.spraytan_service).toFixed(2)}</td><td style={tdStyle}>£{Number(booking.deposit_paid || 0).toFixed(2)}</td><td style={tdStyle}>£{Number(booking.spraytan_balance_due || 0).toFixed(2)}</td><td style={tdStyle}>{getSprayTanStatusLabel(booking)}</td></tr>, 'No spray tan bookings found.')}
+            {renderTable(['Date', 'Service', 'Artist', 'Price', 'Deposit', 'Balance', 'Status'], sprayBookings, (booking) => <tr key={booking.id}><td style={tdStyle}>{booking.appointment_time ? new Date(booking.appointment_time).toLocaleString('en-GB') : '-'}</td><td style={tdStyle}>{booking.spraytan_service || '-'}</td><td style={tdStyle}>{booking.assigned_artist_name || booking.spraytan_artist || '-'}</td><td style={tdStyle}>Â£{getSprayTanServicePrice(booking.spraytan_service).toFixed(2)}</td><td style={tdStyle}>Â£{Number(booking.deposit_paid || 0).toFixed(2)}</td><td style={tdStyle}>Â£{Number(booking.spraytan_balance_due || 0).toFixed(2)}</td><td style={tdStyle}>{getSprayTanStatusLabel(booking)}</td></tr>, 'No spray tan bookings found.')}
           </div>
         )}
 
@@ -8521,7 +8431,7 @@ function formatMoney(value) {
                     <strong>{row.payload.name || 'Unnamed customer'}</strong>
                     <br />
                     <span style={{ color: '#aaa' }}>
-                      Row {row.rowNumber} — {row.payload.phone || 'No phone'} — {row.payload.email || 'No email'} — Standard {row.payload.standard_minutes_balance} / Hybrid {row.payload.hybrid_minutes_balance}
+                      Row {row.rowNumber} â€” {row.payload.phone || 'No phone'} â€” {row.payload.email || 'No email'} â€” Standard {row.payload.standard_minutes_balance} / Hybrid {row.payload.hybrid_minutes_balance}
                     </span>
                     {row.duplicate && (
                       <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>
@@ -8572,7 +8482,7 @@ function formatMoney(value) {
       <div key={receipt.id} style={{ borderBottom: '1px solid #333', padding: '8px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
           <strong>{formatStatus(receipt.receipt_type)}</strong>
-          <strong style={{ color: '#d4a853' }}>£{Number(receipt.total || 0).toFixed(2)}</strong>
+          <strong style={{ color: '#d4a853' }}>Â£{Number(receipt.total || 0).toFixed(2)}</strong>
         </div>
         <span style={{ color: '#aaa' }}>
           {receipt.created_at ? new Date(receipt.created_at).toLocaleString('en-GB') : ''} / {formatStatus(receipt.payment_method)} / {receipt.staff_name || 'No staff'}
@@ -8840,7 +8750,7 @@ function formatMoney(value) {
                   </strong>
                   <span>{formatStatus(transaction.minute_type)}<br />{formatStatus(transaction.transaction_type)}</span>
                   <span>
-                    {Number(transaction.balance_before || 0)} → {Number(transaction.balance_after || 0)}
+                    {Number(transaction.balance_before || 0)} â†’ {Number(transaction.balance_after || 0)}
                     {transaction.staff_name ? ` / ${transaction.staff_name}` : ''}
                     <br />
                     <span style={{ color: '#aaa' }}>{transaction.created_at ? new Date(transaction.created_at).toLocaleString('en-GB') : ''}</span>
@@ -8861,7 +8771,7 @@ function formatMoney(value) {
                 {customerPayments.length === 0 ? <p style={{ color: '#aaa' }}>No payments found.</p> : customerPayments.map((payment) => (
                   <div key={payment.id} style={{ borderBottom: '1px solid #333', padding: '8px 0' }}>
                     <strong>{payment.package_name || payment.bed_type || 'Payment'}</strong><br />
-                    {payment.minutes_added || 0} mins — £{Number(payment.total_amount || 0).toFixed(2)}<br />
+                    {payment.minutes_added || 0} mins â€” Â£{Number(payment.total_amount || 0).toFixed(2)}<br />
                     <span style={{ color: '#aaa' }}>{payment.created_at ? new Date(payment.created_at).toLocaleString('en-GB') : ''}</span>
                   </div>
                 ))}
@@ -8955,7 +8865,7 @@ function formatMoney(value) {
             <option value="">Select customer</option>
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
-                {customer.name} — Standard {customer.standard_minutes_balance || 0} / Hybrid {customer.hybrid_minutes_balance || 0}
+                {customer.name} â€” Standard {customer.standard_minutes_balance || 0} / Hybrid {customer.hybrid_minutes_balance || 0}
               </option>
             ))}
           </select>
@@ -8973,7 +8883,7 @@ function formatMoney(value) {
           </select>
 
           <input type="number" placeholder="Minutes" value={managerCorrectionAmount} onChange={(e) => setManagerCorrectionAmount(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="0.01" placeholder="£ amount/refund value" value={managerCorrectionMoneyAmount} onChange={(e) => setManagerCorrectionMoneyAmount(e.target.value)} style={{ padding: '10px' }} />
+          <input type="number" step="0.01" placeholder="Â£ amount/refund value" value={managerCorrectionMoneyAmount} onChange={(e) => setManagerCorrectionMoneyAmount(e.target.value)} style={{ padding: '10px' }} />
 
           <select value={managerCorrectionPaymentMethod} onChange={(e) => setManagerCorrectionPaymentMethod(e.target.value)} style={{ padding: '10px' }}>
             <option value="card">Card</option>
@@ -9063,10 +8973,6 @@ function formatMoney(value) {
 
   function renderCommissionSettingsPanel() {
     if (!showManagerView) return null
-    const commissionTargetOptions = getCommissionRuleTargetOptions()
-    const visibleCommissionTargetOptions = commissionRuleMatch && !commissionTargetOptions.some((option) => option.value === commissionRuleMatch)
-      ? [{ value: commissionRuleMatch, label: commissionRuleMatch }, ...commissionTargetOptions]
-      : commissionTargetOptions
 
     return renderCollapsibleSection(
       'Commission Settings',
@@ -9075,31 +8981,18 @@ function formatMoney(value) {
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
         {commissionRulesError && <p style={{ color: '#ffcc66' }}>Commission settings table not loaded: {commissionRulesError}</p>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <select
-            value={commissionRuleScope}
-            onChange={(e) => {
-              setCommissionRuleScope(e.target.value)
-              setCommissionRuleMatch('')
-            }}
-            style={{ padding: '10px' }}
-          >
+          <select value={commissionRuleScope} onChange={(e) => setCommissionRuleScope(e.target.value)} style={{ padding: '10px' }}>
             <option value="product">Product</option>
             <option value="category">Product category</option>
             <option value="spraytan">Spray tan service</option>
-            <option value="sunbed">Sunbed service</option>
-            <option value="package">Package</option>
-            <option value="promo">Promo</option>
+            <option value="sunbed">Sunbed service/package/promo</option>
           </select>
-          <select
+          <input
+            placeholder="Product, category, service or package name"
             value={commissionRuleMatch}
             onChange={(e) => setCommissionRuleMatch(e.target.value)}
             style={{ padding: '10px' }}
-          >
-            <option value="">Select item...</option>
-            {visibleCommissionTargetOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          />
           <select value={commissionRuleType} onChange={(e) => setCommissionRuleType(e.target.value)} style={{ padding: '10px' }}>
             <option value="percentage">% percentage</option>
             <option value="fixed">£ fixed amount</option>
@@ -9113,7 +9006,7 @@ function formatMoney(value) {
             <input type="checkbox" checked={commissionRuleActive} onChange={(e) => setCommissionRuleActive(e.target.checked)} />
             Active
           </label>
-          <button onClick={saveCommissionRule} style={{ minWidth: '108px', whiteSpace: 'nowrap' }}>{commissionRuleEditingId ? 'Save Rule' : 'Add Rule'}</button>
+          <button onClick={saveCommissionRule}>{commissionRuleEditingId ? 'Save Commission Rule' : 'Add Commission Rule'}</button>
           {commissionRuleEditingId && <button onClick={clearCommissionRuleForm}>Cancel Edit</button>}
         </div>
 
@@ -9273,7 +9166,7 @@ function formatMoney(value) {
       collapseCashUp,
       setCollapseCashUp,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <h3 style={{ marginTop: 0 }}>Cash-Up — {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}</h3>
+        <h3 style={{ marginTop: 0 }}>Cash-Up â€” {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}</h3>
         {!signedIn && (
           <p style={{ color: '#ffcc66', fontWeight: 'bold', marginTop: 0 }}>
             Please sign in before entering float or completing cash up.
@@ -9468,7 +9361,7 @@ function formatMoney(value) {
         <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.4)', borderRadius: '12px', padding: '22px', width: '520px', maxWidth: '100%', boxShadow: '0 24px 70px rgba(0,0,0,0.68)' }}>
           <h2 style={{ marginTop: 0, color: '#d4a853' }}>Complete & Lock Cash-Up</h2>
           <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>
-            Are you sure you want to complete and lock today’s cash-up? Once locked, staff will not be able to edit today’s cash-up, float, or float movements. A manager will be required to reopen it.
+            Are you sure you want to complete and lock todayâ€™s cash-up? Once locked, staff will not be able to edit todayâ€™s cash-up, float, or float movements. A manager will be required to reopen it.
           </p>
           <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
             <p style={{ margin: '0 0 6px' }}>Expected cash in till: <strong>{formatMoney(expectedCash)}</strong></p>
@@ -9581,7 +9474,7 @@ function formatMoney(value) {
           <h2>Select Staff User</h2>
           {activeStaff.map((member) => (
             <button key={member.id} onClick={() => selectCurrentStaffUser(member)} style={{ width: '100%', marginBottom: '8px', textAlign: 'left' }}>
-              {member.name} — {formatStatus(member.role)}
+              {member.name} â€” {formatStatus(member.role)}
             </button>
           ))}
           <button onClick={() => setStaffSelectorOpen(false)}>Cancel</button>
@@ -9699,7 +9592,7 @@ function formatMoney(value) {
               saleReceipt.products.map((item, index) => (
                 <div key={`${item.product_name}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', borderBottom: '1px solid #222', padding: '8px 0' }}>
                   <span>{item.product_name} x {item.quantity}</span>
-                  <strong>£{Number(item.total_amount || 0).toFixed(2)}</strong>
+                  <strong>Â£{Number(item.total_amount || 0).toFixed(2)}</strong>
                 </div>
               ))
             )}
@@ -9707,9 +9600,9 @@ function formatMoney(value) {
 
           <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px' }}>
             <p><strong>Payment method:</strong> {formatStatus(saleReceipt.paymentMethod)}</p>
-            <p><strong>Total paid:</strong> £{Number(saleReceipt.totalPaid || 0).toFixed(2)}</p>
-            <p><strong>Cash received:</strong> £{Number(saleReceipt.cashReceived || 0).toFixed(2)}</p>
-            <p><strong>Change given:</strong> £{Number(saleReceipt.changeGiven || 0).toFixed(2)}</p>
+            <p><strong>Total paid:</strong> Â£{Number(saleReceipt.totalPaid || 0).toFixed(2)}</p>
+            <p><strong>Cash received:</strong> Â£{Number(saleReceipt.cashReceived || 0).toFixed(2)}</p>
+            <p><strong>Change given:</strong> Â£{Number(saleReceipt.changeGiven || 0).toFixed(2)}</p>
           </div>
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
@@ -9801,7 +9694,7 @@ function formatMoney(value) {
             lineHeight: '13px'
           }}
         >
-          ×
+          Ã—
         </button>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
           <strong style={{ fontSize: '13px' }}>{entry.staff_name || 'Shop'}</strong>
@@ -10009,7 +9902,7 @@ function formatMoney(value) {
           <option value="">Select staff to edit...</option>
           {staff.map((member) => (
             <option key={member.id} value={member.id}>
-              {member.name} — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {member.is_active === false ? 'Inactive' : 'Active'}
+              {member.name} â€” {formatStatus(member.role)} â€” {member.weekly_free_minutes_balance || 0} mins â€” {member.is_active === false ? 'Inactive' : 'Active'}
             </option>
           ))}
         </select>
@@ -10017,7 +9910,7 @@ function formatMoney(value) {
         <div style={{ maxHeight: '170px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px', marginBottom: '15px' }}>
           {staff.map((member) => (
             <div key={member.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
-              <span><strong>{member.name}</strong> — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {member.is_active === false ? 'Inactive' : 'Active'}</span>
+              <span><strong>{member.name}</strong> â€” {formatStatus(member.role)} â€” {member.weekly_free_minutes_balance || 0} mins â€” {member.is_active === false ? 'Inactive' : 'Active'}</span>
               <button onClick={() => editStaffMember(member)}>Edit</button>
               <button onClick={() => deactivateStaffMember(member)}>Deactivate</button>
             </div>
@@ -10176,7 +10069,7 @@ function formatMoney(value) {
                 <div style={{ marginBottom: '10px' }}>
                   <strong style={{ color: '#ff7875' }}>Out of stock</strong>
                   {outOfStockProducts.map((product) => (
-                    <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} — Stock {getProductStockQuantity(product)}</div>
+                    <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} â€” Stock {getProductStockQuantity(product)}</div>
                   ))}
                 </div>
               )}
@@ -10184,7 +10077,7 @@ function formatMoney(value) {
                 <div>
                   <strong style={{ color: '#ffcc66' }}>Low stock</strong>
                   {lowStockProducts.map((product) => (
-                    <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} — Stock {getProductStockQuantity(product)}</div>
+                    <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} â€” Stock {getProductStockQuantity(product)}</div>
                   ))}
                 </div>
               )}
@@ -10202,7 +10095,7 @@ function formatMoney(value) {
             <option value="">Select product...</option>
             {products.map((product) => (
               <option key={product.id} value={product.id}>
-                {product.name} — {getProductCategoryLabel(product.category)} — £{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — {getProductStockStatus(product)} — {isProductActive(product) ? 'Active' : 'Inactive'}
+                {product.name} â€” {getProductCategoryLabel(product.category)} â€” Â£{Number(product.price || 0).toFixed(2)} â€” Stock {getProductStockQuantity(product)} â€” {getProductStockStatus(product)} â€” {isProductActive(product) ? 'Active' : 'Inactive'}
               </option>
             ))}
           </select>
@@ -10211,7 +10104,7 @@ function formatMoney(value) {
             <div style={{ marginTop: '12px', padding: '12px', background: '#111', borderRadius: '12px', border: '1px solid #333' }}>
               <div>
                 <strong>{selectedProduct.name}</strong><br />
-                <span>{getProductCategoryLabel(selectedProduct.category)} — £{Number(selectedProduct.price || 0).toFixed(2)} — Stock {getProductStockQuantity(selectedProduct)}</span><br />
+                <span>{getProductCategoryLabel(selectedProduct.category)} â€” Â£{Number(selectedProduct.price || 0).toFixed(2)} â€” Stock {getProductStockQuantity(selectedProduct)}</span><br />
                 <span style={getProductStockStatusStyle(selectedProduct)}>{getProductStockStatus(selectedProduct)}</span><br />
                 <span>Status: {isProductActive(selectedProduct) ? 'Active' : 'Inactive'}</span>
               </div>
@@ -10257,7 +10150,7 @@ function formatMoney(value) {
               <h2>Products / POS</h2>
               {getActiveProducts().map((product) => (
                 <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '12px', marginBottom: '8px' }}>
-                  <div><strong>{product.name}</strong><br /><small>£{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — <span style={getProductStockStatusStyle(product)}>{getProductStockStatus(product)}</span></small></div>
+                  <div><strong>{product.name}</strong><br /><small>Â£{Number(product.price || 0).toFixed(2)} â€” Stock {getProductStockQuantity(product)} â€” <span style={getProductStockStatusStyle(product)}>{getProductStockStatus(product)}</span></small></div>
                   <button onClick={() => addProductToCart(product)}>Add</button>
                 </div>
               ))}
@@ -10291,7 +10184,7 @@ function formatMoney(value) {
                   <p style={{ margin: 0 }}>
                     Change to give:
                     <strong style={{ marginLeft: '6px', color: '#d4a853' }}>
-                      £{Math.max(0, Number(posCashReceived || 0) - getProductCartTotal()).toFixed(2)}
+                      Â£{Math.max(0, Number(posCashReceived || 0) - getProductCartTotal()).toFixed(2)}
                     </strong>
                   </p>
                 </div>
@@ -10408,7 +10301,7 @@ function formatMoney(value) {
         <div style={{ display: 'grid', gap: '10px' }}>
           {promos.length === 0 ? <p style={{ color: '#aaa' }}>No promos found.</p> : promos.map((promo) => (
             <div key={promo.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px' }}>
-              <strong>{promo.promo_name}</strong> - £{Number(promo.promo_price || 0).toFixed(2)} - {promo.active === false ? 'Inactive' : 'Active'}
+              <strong>{promo.promo_name}</strong> - Â£{Number(promo.promo_price || 0).toFixed(2)} - {promo.active === false ? 'Inactive' : 'Active'}
               <p style={{ color: '#aaa', margin: '6px 0' }}>{promo.promo_description || 'No description'}</p>
               <p style={{ margin: '6px 0' }}>{Number(promo.included_minutes || 0)} mins / {formatStatus(promo.bed_type || 'any')} bed / expires {promo.minutes_expiry_days ? `${promo.minutes_expiry_days} days` : 'never'}</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -10492,7 +10385,7 @@ function formatMoney(value) {
                             <div>
                               <strong>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
                               <p style={{ margin: '6px 0', color: '#aaa' }}>
-                                {serviceName}{servicePrice ? ` - ${formatMoney(servicePrice)}` : ''} · Artist: {booking.spraytan_artist || 'To assign'}
+                                {serviceName}{servicePrice ? ` - ${formatMoney(servicePrice)}` : ''} Â· Artist: {booking.spraytan_artist || 'To assign'}
                               </p>
                             </div>
                             <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
@@ -10585,8 +10478,7 @@ function formatMoney(value) {
                         const servicePrice = getSprayTanServicePrice(serviceName)
                         const depositRequired = Number(booking.deposit_required || 0)
                         const depositPaid = Number(booking.deposit_paid || 0)
-                        const balancePaid = Number(booking.spraytan_balance_paid || 0)
-                        const balanceRequired = Math.max(0, servicePrice - depositRequired)
+                        const balanceDue = Number(booking.spraytan_balance_due ?? Math.max(0, servicePrice - depositPaid))
                         const statusLabel = getSprayTanStatusLabel(booking)
                         const lastPatchTestDate = customer?.last_patch_test_date || booking.patch_test_date
 
@@ -10597,23 +10489,22 @@ function formatMoney(value) {
                               event.stopPropagation()
                               openSprayTanBookingForEdit(booking)
                             }}
-                            style={getSprayTanBookingCardStyle(booking)}
+                            style={{ background: '#111', border: '1px solid rgba(212,168,83,0.22)', borderRadius: '8px', padding: '10px', marginBottom: '8px', cursor: 'pointer' }}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                              <strong style={{ fontSize: '16px', lineHeight: 1.25 }}>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                              <strong>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
                               <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
                             </div>
-                            <p style={{ margin: '8px 0 5px', color: '#f2e2bd', fontWeight: 700 }}>
-                              {serviceName} - {formatMoney(servicePrice)} - {Number(booking.spraytan_duration_minutes || 0)} mins
+                            <p style={{ margin: '6px 0', color: '#aaa' }}>
+                              {serviceName} Â· {formatMoney(servicePrice)} Â· {Number(booking.spraytan_duration_minutes || 0)} mins
                             </p>
-                            <p style={{ margin: '4px 0', color: '#fff', lineHeight: 1.45 }}>
-                              Deposit: {formatMoney(depositPaid)} / {formatMoney(depositRequired)}<br />
-                              Balance: {formatMoney(balancePaid)} / {formatMoney(balanceRequired)}
+                            <p style={{ margin: '4px 0', color: '#ddd' }}>
+                              Deposit: {formatMoney(depositPaid)} / {formatMoney(depositRequired)} Â· Balance {formatMoney(balanceDue)}
                             </p>
                             <p style={{ margin: '4px 0', color: '#aaa' }}>Artist: {booking.spraytan_artist || 'To assign'}</p>
                             {serviceName !== 'Patch Test' && !booking.patch_test_completed && (
                               <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>
-                                Patch test warning{lastPatchTestDate ? ` - Last ${new Date(lastPatchTestDate).toLocaleDateString('en-GB')}` : ''}
+                                Patch test warning{lastPatchTestDate ? ` Â· Last ${new Date(lastPatchTestDate).toLocaleDateString('en-GB')}` : ''}
                               </p>
                             )}
                           </div>
@@ -10671,7 +10562,7 @@ function formatMoney(value) {
               </strong>
               <p style={{ margin: '6px 0', color: '#ddd' }}>
                 Last patch test: {patchTestInfo.date ? patchTestInfo.date.toLocaleDateString('en-GB') : 'Not recorded'}
-                {patchTestInfo.expiry && !Number.isNaN(patchTestInfo.expiry.getTime()) ? ` · Expires ${patchTestInfo.expiry.toLocaleDateString('en-GB')}` : ''}
+                {patchTestInfo.expiry && !Number.isNaN(patchTestInfo.expiry.getTime()) ? ` Â· Expires ${patchTestInfo.expiry.toLocaleDateString('en-GB')}` : ''}
               </p>
               {patchTestInfo.warning && <p style={{ margin: '0 0 8px', color: '#ffcc66', fontWeight: 'bold' }}>{patchTestInfo.warning}</p>}
               {!patchTestInfo.active && sprayTanService !== 'Patch Test' && (
@@ -10714,7 +10605,7 @@ function formatMoney(value) {
             <div><label>Time</label><input type="time" value={sprayTanTime} onChange={(e) => setSprayTanTime(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Duration</label><input type="number" min="5" value={sprayTanDuration} onChange={(e) => setSprayTanDuration(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Artist</label><input value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} placeholder="Artist name" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit due (£)</label><input type="number" min="0" step="0.01" value={depositRequired} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
+            <div><label>Deposit due (Â£)</label><input type="number" min="0" step="0.01" value={depositRequired} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
               const nextDepositRequired = e.target.value
               setSprayTanDepositRequired(nextDepositRequired)
               setSprayTanDepositStatus(getSprayTanDepositStatus(sprayTanService, Number(nextDepositRequired || 0), depositPaid))
@@ -10847,7 +10738,7 @@ function formatMoney(value) {
             <button onClick={collapseCashUp ? openCashUpPanel : () => setCollapseCashUp(true)}>{collapseCashUp ? 'Cash Up' : 'Hide Cash Up'}</button>
             {currentStaffUser && (
               <button onClick={() => setCollapseStaffCalendar(!collapseStaffCalendar)}>
-                {collapseStaffCalendar ? 'Staff Calendar' : 'Hide Staff Calendar'}{pendingStaffScheduleCount > 0 ? ` • ${pendingStaffScheduleCount}` : ''}
+                {collapseStaffCalendar ? 'Staff Calendar' : 'Hide Staff Calendar'}{pendingStaffScheduleCount > 0 ? ` â€¢ ${pendingStaffScheduleCount}` : ''}
               </button>
             )}
             {showManagerView ? (
@@ -10877,7 +10768,7 @@ function formatMoney(value) {
 
       {(isOffline || dataLoadWarning) && (
         <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,120,117,0.65)', borderRadius: '14px', padding: '12px 16px', color: '#ffcc66', fontWeight: 'bold', marginBottom: '18px' }}>
-          {isOffline ? 'Connection lost — changes may not save' : dataLoadWarning}
+          {isOffline ? 'Connection lost â€” changes may not save' : dataLoadWarning}
         </div>
       )}
 
@@ -11158,7 +11049,7 @@ function formatMoney(value) {
 
       {showBackToTop && (
         <button onClick={scrollToTop} title="Back to top" style={{ position: 'fixed', right: '24px', bottom: '24px', width: '58px', height: '58px', borderRadius: '50%', fontSize: '26px', zIndex: 1001 }}>
-          ↑
+          â†‘
         </button>
       )}
     </div>
