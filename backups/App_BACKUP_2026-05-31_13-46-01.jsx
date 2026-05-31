@@ -58,8 +58,6 @@ const SPRAY_TAN_STATUSES = [
   'Cancelled'
 ]
 
-const DEFAULT_SPRAY_TAN_ARTISTS = ['Charlie', 'Jazz', 'Tia', 'Nadia']
-
 const STAFF_SCHEDULE_TYPES = [
   { value: 'shift', label: 'Shift' },
   { value: 'holiday', label: 'Holiday' },
@@ -172,9 +170,6 @@ function App() {
   const [sprayTanApprovalStatus, setSprayTanApprovalStatus] = useState('pending')
   const [sprayTanStatusControl, setSprayTanStatusControl] = useState('Pending Approval')
   const [sprayTanSaving, setSprayTanSaving] = useState(false)
-  const [showSprayTanDepositApproval, setShowSprayTanDepositApproval] = useState(false)
-  const [sprayTanApprovalPaymentAmount, setSprayTanApprovalPaymentAmount] = useState('')
-  const [sprayTanApprovalPaymentMethod, setSprayTanApprovalPaymentMethod] = useState('card')
 
   const [showCustomerManagement, setShowCustomerManagement] = useState(false)
   const [showManagerView, setShowManagerView] = useState(false)
@@ -301,7 +296,6 @@ function App() {
   const [staffLoadError, setStaffLoadError] = useState('')
   const [staffName, setStaffName] = useState('')
   const [staffRole, setStaffRole] = useState('staff')
-  const [staffCanSprayTan, setStaffCanSprayTan] = useState(false)
   const [staffEditingId, setStaffEditingId] = useState('')
   const [staffAdjustmentId, setStaffAdjustmentId] = useState('')
   const [staffAdjustmentAmount, setStaffAdjustmentAmount] = useState('')
@@ -853,7 +847,6 @@ function formatMoney(value) {
         id: `default-${index}`,
         ...member,
         is_active: true,
-        is_spray_tan_artist: DEFAULT_SPRAY_TAN_ARTISTS.includes(member.name),
         weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES,
         last_weekly_reset_date: getWeekStartDateString()
       }))))
@@ -875,7 +868,6 @@ function formatMoney(value) {
       await supabase.from('Staff').insert(defaultStaffToInsert.map((member) => ({
         ...member,
         is_active: true,
-        is_spray_tan_artist: DEFAULT_SPRAY_TAN_ARTISTS.includes(member.name),
         weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES,
         last_weekly_reset_date: getWeekStartDateString()
       })))
@@ -1488,13 +1480,8 @@ function formatMoney(value) {
       addOption('Collagen Minutes', 'Collagen Minutes')
       addOption('Hybrid Minutes', 'Hybrid Minutes')
       addOption('Hybrid Minutes - Any Bed', 'Hybrid Minutes - Any Bed')
-      addOption('Custom Standard Minutes', 'Custom Standard Minutes')
-      addOption('Custom Hybrid Minutes', 'Custom Hybrid Minutes')
-      COMMON_BOOKING_MINUTES.forEach((minutes) => addOption(`${minutes} minute sunbed`, `${minutes} minute sunbed`))
     } else if (scope === 'package') {
-      Object.values(PURCHASE_OPTIONS)
-        .filter((option) => option.minutes !== null)
-        .forEach((option) => addOption(option.name, option.label || option.name))
+      Object.values(PURCHASE_OPTIONS).forEach((option) => addOption(option.name, option.label || option.name))
     } else if (scope === 'promo') {
       promos.forEach((promo) => addOption(promo.promo_name, promo.promo_name))
     }
@@ -2141,15 +2128,6 @@ function formatMoney(value) {
 
   function getCurrentStaffUser() {
     return staff.find((member) => String(member.id) === String(currentStaffUserId))
-  }
-
-  function isSprayTanArtist(member) {
-    const defaultArtist = DEFAULT_SPRAY_TAN_ARTISTS.includes(String(member?.name || '').trim())
-    return member?.is_spray_tan_artist === true || (member?.is_spray_tan_artist === undefined && defaultArtist)
-  }
-
-  function getSprayTanArtistStaff() {
-    return staff.filter((member) => member.is_active !== false && isSprayTanArtist(member))
   }
 
   function getCurrentStaffAttribution() {
@@ -4225,7 +4203,6 @@ function formatMoney(value) {
   async function recordSprayTanPayment({ bookingId = null, customer = null, customerName = '', amount = 0, paymentMethod = 'card', paymentType = 'spray_tan_payment', notes = '' }) {
     const totalAmount = Number(amount || 0)
     if (totalAmount <= 0) return true
-    const { staffId, staffName } = getCurrentStaffAttribution()
     const { error } = await supabase.from('Payments').insert({
       customer_id: customer?.id || null,
       customer_name: customer?.name || customerName || 'Spray tan customer',
@@ -4237,10 +4214,7 @@ function formatMoney(value) {
       package_type: paymentType,
       package_name: formatStatus(paymentType),
       notes,
-      taken_by_staff_id: staffId,
-      taken_by_staff_name: staffName,
-      commission_staff_id: staffId,
-      commission_staff_name: staffName
+      ...getPaymentStaffFields()
     })
     if (error) {
       alert('Spray tan payment was not saved. Please check the Payments table and connection.')
@@ -5934,9 +5908,6 @@ function formatMoney(value) {
     setSprayTanPatchTestDate('')
     setSprayTanApprovalStatus('pending')
     setSprayTanStatusControl('Pending Approval')
-    setShowSprayTanDepositApproval(false)
-    setSprayTanApprovalPaymentAmount('')
-    setSprayTanApprovalPaymentMethod('card')
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')
     setCustomerSearch('')
@@ -5969,9 +5940,6 @@ function formatMoney(value) {
     setSprayTanPatchTestDate(booking.patch_test_date ? formatLocalDate(new Date(booking.patch_test_date)) : '')
     setSprayTanApprovalStatus(booking.approval_status || 'approved')
     setSprayTanStatusControl(getSprayTanStatusLabel(booking))
-    setShowSprayTanDepositApproval(false)
-    setSprayTanApprovalPaymentAmount('')
-    setSprayTanApprovalPaymentMethod(booking.spraytan_deposit_payment_method || 'card')
     setSelectedCustomerId(booking.customer_id ? String(booking.customer_id) : '')
     setSelectedStaffAsCustomerId('')
     setCustomerSearch(booking.customer_name || '')
@@ -6002,9 +5970,6 @@ function formatMoney(value) {
     setSprayTanApprovalStatus('pending')
     setSprayTanStatusControl('Pending Approval')
     setSprayTanSaving(false)
-    setShowSprayTanDepositApproval(false)
-    setSprayTanApprovalPaymentAmount('')
-    setSprayTanApprovalPaymentMethod('card')
     setCommissionStaffId('')
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')
@@ -6307,112 +6272,6 @@ function formatMoney(value) {
       return
     }
 
-    closeSprayTanModal()
-    await getBookings()
-  }
-
-  async function approveSprayTanWithDepositPayment() {
-    if (sprayTanSaving) return
-    if (!requireStaffSignIn()) return
-    if (!sprayTanEditingBooking?.id) return
-
-    const amount = Number(sprayTanApprovalPaymentAmount || 0)
-    const servicePrice = getSprayTanServicePrice(sprayTanService)
-    const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || 0)
-    const previousDepositPaid = Number(sprayTanEditingBooking.deposit_paid || 0)
-    const nextDepositPaid = previousDepositPaid + amount
-    const existingBalancePaid = Number(sprayTanEditingBooking.spraytan_balance_paid || 0)
-    const bookingCustomer = sprayTanEditingBooking.customer_id
-      ? customers.find((item) => Number(item.id) === Number(sprayTanEditingBooking.customer_id))
-      : null
-    const customerName = sprayTanCustomerName.trim() || sprayTanEditingBooking.customer_name || bookingCustomer?.name || 'Spray tan customer'
-
-    if (amount <= 0) {
-      alert('Enter the deposit payment amount.')
-      return
-    }
-    if (nextDepositPaid < depositRequired) {
-      alert(`Deposit payment must cover the required deposit of ${formatMoney(depositRequired)}.`)
-      return
-    }
-    if (nextDepositPaid + existingBalancePaid > servicePrice) {
-      alert('Deposit and balance payments cannot be more than the service price.')
-      return
-    }
-
-    setSprayTanSaving(true)
-    const paymentSaved = await recordSprayTanPayment({
-      bookingId: sprayTanEditingBooking.id,
-      customer: bookingCustomer || (sprayTanEditingBooking.customer_id ? { id: sprayTanEditingBooking.customer_id, name: customerName } : null),
-      customerName,
-      amount,
-      paymentMethod: sprayTanApprovalPaymentMethod,
-      paymentType: 'spray_tan_deposit',
-      notes: `Deposit payment and approval recorded for spray tan booking ${sprayTanEditingBooking.id}.`
-    })
-    if (!paymentSaved) {
-      setSprayTanSaving(false)
-      return
-    }
-
-    await createReceipt({
-      customer: bookingCustomer || (sprayTanEditingBooking.customer_id ? { id: sprayTanEditingBooking.customer_id, name: customerName } : null),
-      customerName,
-      receiptType: 'spray_tan_deposit',
-      items: [{ name: sprayTanService, quantity: 1, total: amount }],
-      subtotal: amount,
-      total: amount,
-      paymentMethod: sprayTanApprovalPaymentMethod,
-      notes: `Deposit payment and approval recorded for spray tan booking ${sprayTanEditingBooking.id}.`
-    })
-
-    const { data, error } = await supabase.from('Bookings').update({
-      deposit_paid: Number(nextDepositPaid.toFixed(2)),
-      deposit_status: 'paid',
-      spraytan_deposit_payment_method: sprayTanApprovalPaymentMethod,
-      spraytan_deposit_paid_at: new Date().toISOString(),
-      spraytan_balance_due: Math.max(0, servicePrice - nextDepositPaid - existingBalancePaid),
-      approval_status: 'approved',
-      approved_by: getCurrentStaffUser()?.name || null,
-      approved_at: new Date().toISOString(),
-      status: 'booked'
-    }).eq('id', sprayTanEditingBooking.id).select().single()
-
-    setSprayTanSaving(false)
-    if (error) {
-      alert('Deposit was recorded, but the spray tan booking was not approved. Please check the connection.')
-      showDataLoadWarning('Spray tan approval update failed.', error)
-      console.log(error)
-      return
-    }
-
-    setSprayTanEditingBooking(data)
-    setSprayTanDepositPaid(Number(data.deposit_paid || 0))
-    setSprayTanDepositPaymentMethod(data.spraytan_deposit_payment_method || sprayTanApprovalPaymentMethod)
-    setSprayTanDepositStatus('paid')
-    setSprayTanStatusControl('Deposit Paid')
-    setSprayTanApprovalStatus('approved')
-    setShowSprayTanDepositApproval(false)
-    setSprayTanApprovalPaymentAmount('')
-    await getBookings()
-  }
-
-  async function deleteSprayTanBooking() {
-    if (sprayTanSaving) return
-    if (!requireStaffSignIn()) return
-    if (!sprayTanEditingBooking?.id) return
-    const confirmed = window.confirm('Are you sure you want to permanently delete this spray tan booking?')
-    if (!confirmed) return
-
-    setSprayTanSaving(true)
-    const { error } = await supabase.from('Bookings').delete().eq('id', sprayTanEditingBooking.id)
-    setSprayTanSaving(false)
-    if (error) {
-      alert('Spray tan booking was not deleted. Please check the connection.')
-      showDataLoadWarning('Spray tan booking delete failed.', error)
-      console.log(error)
-      return
-    }
     closeSprayTanModal()
     await getBookings()
   }
@@ -7525,14 +7384,13 @@ function formatMoney(value) {
     const payload = {
       name: staffName.trim(),
       role: staffRole,
-      is_spray_tan_artist: staffCanSprayTan,
       is_active: true,
       weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES,
       last_weekly_reset_date: getWeekStartDateString()
     }
 
     const request = staffEditingId
-      ? supabase.from('Staff').update({ name: payload.name, role: payload.role, is_spray_tan_artist: payload.is_spray_tan_artist }).eq('id', staffEditingId)
+      ? supabase.from('Staff').update({ name: payload.name, role: payload.role }).eq('id', staffEditingId)
       : supabase.from('Staff').insert(payload)
 
     const { error } = await request
@@ -7545,7 +7403,6 @@ function formatMoney(value) {
 
     setStaffName('')
     setStaffRole('staff')
-    setStaffCanSprayTan(false)
     setStaffEditingId('')
     getStaff()
   }
@@ -7554,7 +7411,6 @@ function formatMoney(value) {
     setStaffEditingId(String(member.id))
     setStaffName(member.name || '')
     setStaffRole(member.role || 'staff')
-    setStaffCanSprayTan(isSprayTanArtist(member))
   }
 
   async function deactivateStaffMember(member) {
@@ -10138,12 +9994,8 @@ function formatMoney(value) {
             <option value="manager">Manager</option>
             <option value="admin">Admin</option>
           </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', border: '1px solid #333', padding: '10px', background: '#111' }}>
-            <input type="checkbox" checked={staffCanSprayTan} onChange={(e) => setStaffCanSprayTan(e.target.checked)} />
-            Spray tan artist
-          </label>
           <button onClick={saveStaffMember}>{staffEditingId ? 'Save Staff' : 'Add Staff'}</button>
-          {staffEditingId && <button onClick={() => { setStaffEditingId(''); setStaffName(''); setStaffRole('staff'); setStaffCanSprayTan(false) }}>Cancel Edit</button>}
+          {staffEditingId && <button onClick={() => { setStaffEditingId(''); setStaffName(''); setStaffRole('staff') }}>Cancel Edit</button>}
         </div>
 
         <select
@@ -10157,7 +10009,7 @@ function formatMoney(value) {
           <option value="">Select staff to edit...</option>
           {staff.map((member) => (
             <option key={member.id} value={member.id}>
-              {member.name} — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} — {member.is_active === false ? 'Inactive' : 'Active'}
+              {member.name} — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {member.is_active === false ? 'Inactive' : 'Active'}
             </option>
           ))}
         </select>
@@ -10165,7 +10017,7 @@ function formatMoney(value) {
         <div style={{ maxHeight: '170px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px', marginBottom: '15px' }}>
           {staff.map((member) => (
             <div key={member.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
-              <span><strong>{member.name}</strong> — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} — {member.is_active === false ? 'Inactive' : 'Active'}</span>
+              <span><strong>{member.name}</strong> — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {member.is_active === false ? 'Inactive' : 'Active'}</span>
               <button onClick={() => editStaffMember(member)}>Edit</button>
               <button onClick={() => deactivateStaffMember(member)}>Deactivate</button>
             </div>
@@ -10794,10 +10646,6 @@ function formatMoney(value) {
     const patchWarning = customer ? getPatchTestWarning(customer, appointmentDateTime, sprayTanService) : ''
     const latestPatchTestDate = customer ? getLatestCustomerPatchTestDate(customer.id) : null
     const patchTestInfo = customer ? getCustomerActivePatchTestInfo(customer) : { active: false, date: null, expiry: null, warning: 'No customer selected.' }
-    const sprayTanArtistOptions = getSprayTanArtistStaff()
-    const visibleSprayTanArtistOptions = sprayTanArtist && !sprayTanArtistOptions.some((member) => String(member.name) === String(sprayTanArtist))
-      ? [{ id: 'current-artist', name: sprayTanArtist, is_active: true }, ...sprayTanArtistOptions]
-      : sprayTanArtistOptions
 
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
@@ -10831,34 +10679,11 @@ function formatMoney(value) {
               )}
               {patchTestInfo.active && sprayTanService !== 'Patch Test' && depositPaid < depositRequired && (
                 <button type="button" onClick={() => {
-                  setSprayTanApprovalPaymentAmount(Math.max(0, depositRequired - depositPaid).toFixed(2))
-                  setSprayTanApprovalPaymentMethod(sprayTanDepositPaymentMethod || 'card')
-                  setShowSprayTanDepositApproval(true)
+                  setSprayTanDepositPaid(depositRequired)
+                  setSprayTanDepositStatus('paid')
+                  setSprayTanStatusControl('Deposit Paid')
+                  setSprayTanApprovalStatus('approved')
                 }}>Take 50% Deposit & Approve</button>
-              )}
-              {showSprayTanDepositApproval && (
-                <div style={{ marginTop: '12px', display: 'grid', gap: '8px', background: '#111', border: '1px solid rgba(212,168,83,0.35)', padding: '12px' }}>
-                  <strong>Deposit payment</strong>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={sprayTanApprovalPaymentAmount}
-                    onChange={(e) => setSprayTanApprovalPaymentAmount(e.target.value)}
-                    placeholder="Payment amount"
-                    style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-                  />
-                  <select value={sprayTanApprovalPaymentMethod} onChange={(e) => setSprayTanApprovalPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px' }}>
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="bank_transfer">BACS / Bank Transfer</option>
-                    <option value="other">Other</option>
-                  </select>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button type="button" onClick={approveSprayTanWithDepositPayment} disabled={sprayTanSaving}>{sprayTanSaving ? 'Saving...' : 'Confirm Deposit & Approve'}</button>
-                    <button type="button" onClick={() => setShowSprayTanDepositApproval(false)} disabled={sprayTanSaving}>Cancel</button>
-                  </div>
-                </div>
               )}
             </div>
           )}
@@ -10888,14 +10713,7 @@ function formatMoney(value) {
             <div><label>Date</label><input type="date" value={sprayTanDate} onChange={(e) => setSprayTanDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Time</label><input type="time" value={sprayTanTime} onChange={(e) => setSprayTanTime(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Duration</label><input type="number" min="5" value={sprayTanDuration} onChange={(e) => setSprayTanDuration(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Artist</label>
-              <select value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                <option value="">Assign artist...</option>
-                {visibleSprayTanArtistOptions.map((member) => (
-                  <option key={member.id} value={member.name}>{member.name}</option>
-                ))}
-              </select>
-            </div>
+            <div><label>Artist</label><input value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} placeholder="Artist name" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Deposit due (£)</label><input type="number" min="0" step="0.01" value={depositRequired} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
               const nextDepositRequired = e.target.value
               setSprayTanDepositRequired(nextDepositRequired)
@@ -10933,6 +10751,16 @@ function formatMoney(value) {
                   </select>
                 </div>
               </>
+            )}
+            {showManagerView && (
+              <div><label>Commission staff</label>
+                <select value={commissionStaffId} onChange={(e) => setCommissionStaffId(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
+                  <option value="">Signed-in staff</option>
+                  {staff.filter((member) => member.is_active !== false).map((member) => (
+                    <option key={member.id} value={member.id}>{member.name}</option>
+                  ))}
+                </select>
+              </div>
             )}
             <div><label>Booking status</label>
               <select
@@ -10978,7 +10806,6 @@ function formatMoney(value) {
               {sprayTanSaving ? 'Saving...' : sprayTanEditingBooking ? 'Save Spray Tan Booking' : 'Create Spray Tan Booking'}
             </button>
             {sprayTanEditingBooking && <button onClick={cancelSprayTanBooking} disabled={sprayTanSaving}>Cancel Booking</button>}
-            {sprayTanEditingBooking && <button onClick={deleteSprayTanBooking} disabled={sprayTanSaving} style={{ borderColor: 'rgba(255,120,117,0.65)', color: '#ffb3ad' }}>Delete Booking</button>}
             <button onClick={closeSprayTanModal} disabled={sprayTanSaving}>Cancel</button>
           </div>
         </div>
