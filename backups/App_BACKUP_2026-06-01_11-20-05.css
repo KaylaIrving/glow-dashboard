@@ -1240,55 +1240,6 @@ button,
   font-weight: 700;
 }
 
-.v2-manager-locked-panel h2 {
-  margin: 0 0 6px;
-  font-size: 22px;
-}
-
-.v2-manager-locked-panel p {
-  margin: 0 0 12px;
-  color: #d8c49b;
-}
-
-.cash-up-v2-denominations,
-.cash-up-v2-section {
-  border: 1px solid rgba(212, 168, 83, 0.2);
-  border-radius: 6px;
-  background: linear-gradient(180deg, rgba(20, 18, 16, 0.98), rgba(9, 9, 9, 0.98));
-  padding: 12px;
-  margin-bottom: 12px;
-}
-
-.cash-up-v2-columns {
-  display: grid;
-  grid-template-columns: minmax(320px, 0.85fr) minmax(420px, 1.15fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.cash-up-v2-section h3 {
-  color: #f6e3bd;
-  font-size: 17px;
-}
-
-.cash-up-v2-section input,
-.cash-up-v2-section select,
-.cash-up-v2-section textarea,
-.cash-up-v2-denominations input {
-  min-height: 36px !important;
-}
-
-.cash-up-v2-section button {
-  min-height: 36px !important;
-  padding: 7px 10px !important;
-}
-
-@media (max-width: 1200px) {
-  .cash-up-v2-columns {
-    grid-template-columns: 1fr;
-  }
-}
-
 .top-dashboard-header.v2-sidebar {
   display: none !important;
 }

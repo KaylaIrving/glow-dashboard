@@ -145,7 +145,7 @@ function App() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()))
   const [dashboardView, setDashboardView] = useState('sunbeds')
-  const [v2ActiveTab, setV2ActiveTab] = useState('sunbeds')
+  const [v2ActiveTab, setV2ActiveTab] = useState('dashboard')
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalBooking, setModalBooking] = useState(null)
@@ -9771,41 +9771,13 @@ function formatMoney(value) {
         {locked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Cash-up is locked for this date. Manager access is required to make changes.</p>}
         {cashUpBlockMessage && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>{cashUpBlockMessage}</p>}
 
-        <div className="cash-up-v2-denominations">
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
-            <h3 style={{ margin: 0 }}>Cash Denomination Counter</h3>
-            <strong style={{ color: '#d4a853' }}>Counted total: {formatMoney(cashDenominationTotal)}</strong>
-          </div>
-          <p style={{ color: '#aaa', marginTop: 0 }}>Use this for the End of Day Cash Count. The counted total fills the cash count field automatically.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px' }}>
-            {CASH_DENOMINATIONS.map((denomination) => (
-              <label key={denomination.key} style={{ display: 'grid', gap: '4px', color: '#ddd', fontSize: '13px' }}>
-                {denomination.label}
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={cashDenominations[denomination.key]}
-                  disabled={!canEditCashUp}
-                  onChange={(e) => updateCashDenomination(denomination.key, e.target.value)}
-                  style={{ padding: '9px' }}
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="cash-up-v2-columns">
-        <section className="cash-up-v2-section">
         <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
-          <h3 style={{ marginTop: 0 }}>Start of Day Cash</h3>
-          <p style={{ color: '#aaa', marginTop: 0 }}>Start of Day Float before trading begins.</p>
-          <strong style={{ display: 'block', marginBottom: '6px', color: '#d4a853' }}>Start of Day Float</strong>
+          <h3 style={{ marginTop: 0 }}>Start Day Float</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 260px) auto', gap: '10px', alignItems: 'center' }}>
             <input
               type="number"
               step="0.01"
-              placeholder="Start of Day Float"
+              placeholder="Start of Day Cash Float"
               value={cashUpStartFloat}
               disabled={!canEditCashUp}
               onChange={(e) => setCashUpStartFloat(e.target.value)}
@@ -9882,8 +9854,6 @@ function formatMoney(value) {
           </div>
         </div>
 
-        </section>
-        <section className="cash-up-v2-section">
         <h3>End of Day Cash Up</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '12px' }}>
           <div style={itemStyle}><span>Starting float</span><h2>{formatMoney(startFloat)}</h2></div>
@@ -9903,12 +9873,35 @@ function formatMoney(value) {
           <div style={itemStyle}><span>Expected cash in till</span><h2>{formatMoney(expectedCash)}</h2></div>
         </div>
 
-        <strong style={{ display: 'block', marginBottom: '6px', color: '#d4a853' }}>End of Day Cash Count</strong>
+        <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0 }}>Cash Denomination Counter</h3>
+            <strong style={{ color: '#d4a853' }}>Counted total: {formatMoney(cashDenominationTotal)}</strong>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px' }}>
+            {CASH_DENOMINATIONS.map((denomination) => (
+              <label key={denomination.key} style={{ display: 'grid', gap: '4px', color: '#ddd', fontSize: '13px' }}>
+                {denomination.label}
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cashDenominations[denomination.key]}
+                  disabled={!canEditCashUp}
+                  onChange={(e) => updateCashDenomination(denomination.key, e.target.value)}
+                  style={{ padding: '9px' }}
+                />
+              </label>
+            ))}
+          </div>
+          <p style={{ color: '#aaa', marginBottom: 0 }}>The counted total fills Actual cash counted automatically. Managers can still override the actual cash field if needed.</p>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
           <input
             type="number"
             step="0.01"
-            placeholder="End of Day Cash Count"
+            placeholder="Actual cash counted"
             value={cashUpActualCash}
             disabled={!canEditCashUp}
             onChange={(e) => setCashUpActualCash(e.target.value)}
@@ -9936,15 +9929,13 @@ function formatMoney(value) {
         />
 
         <button onClick={saveCashUp} disabled={cashUpCompleting || !canEditCashUp} style={{ marginTop: '10px' }}>
-          {cashUpCompleting ? 'Completing Cash-Up...' : 'Complete End of Day Cash-Up'}
+          {cashUpCompleting ? 'Completing Cash-Up...' : 'Complete Cash-Up'}
         </button>
         {showManagerView && cashUpExistingRecord?.id && (
           <button onClick={() => setCashUpLock(!locked)} style={{ marginTop: '10px', marginLeft: '10px' }}>
             {locked ? 'Manager Reopen Cash-Up' : 'Lock Cash-Up'}
           </button>
         )}
-        </section>
-        </div>
       </div>
     )
   }
@@ -11347,6 +11338,7 @@ function formatMoney(value) {
   const selectedDateShopClosures = getShopClosuresForSelectedDate()
   const pendingStaffScheduleCount = getPendingStaffScheduleCount()
   const v2TabTitle = {
+    dashboard: 'Dashboard',
     customers: 'Customers',
     sunbeds: 'Sunbeds',
     spraytan: 'Spray Tans',
@@ -11355,11 +11347,11 @@ function formatMoney(value) {
     reports: 'Reports',
     staffcalendar: 'Staff Calendar',
     manager: 'Manager'
-  }[v2ActiveTab] || 'Sunbeds'
+  }[v2ActiveTab] || 'Dashboard'
 
   function openV2Tab(tab) {
     setV2ActiveTab(tab)
-    if (tab === 'sunbeds') setDashboardView('sunbeds')
+    if (tab === 'sunbeds' || tab === 'dashboard') setDashboardView('sunbeds')
     if (tab === 'spraytan') setDashboardView('spraytan')
     if (tab === 'customers') setShowCustomerManagement(true)
     if (tab === 'cashup') setCollapseCashUp(false)
@@ -11396,6 +11388,7 @@ function formatMoney(value) {
           <span>{currentTime.toLocaleDateString('en-GB')}</span>
         </div>
         <nav className="v2-real-nav">
+          {renderV2SidebarButton('dashboard', 'Dashboard')}
           {renderV2SidebarButton('customers', 'Customers')}
           {renderV2SidebarButton('sunbeds', 'Sunbeds')}
           {renderV2SidebarButton('spraytan', 'Spray Tans')}
@@ -11508,7 +11501,7 @@ function formatMoney(value) {
         </div>
       )}
 
-      {v2ActiveTab === 'sunbeds' && renderStaffOwnSchedulePanel()}
+      {v2ActiveTab === 'dashboard' && renderStaffOwnSchedulePanel()}
       {v2ActiveTab === 'customers' && renderCustomerManagementPanel()}
       {v2ActiveTab === 'cashup' && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
       {v2ActiveTab === 'staffcalendar' && renderStaffCalendarPanel()}
@@ -11518,9 +11511,7 @@ function formatMoney(value) {
       {v2ActiveTab === 'manager' && renderManagerSectionNav()}
       {['products', 'reports', 'manager'].includes(v2ActiveTab) && !showManagerView && (
         <div className="v2-manager-locked-panel">
-          <h2>Manager View Locked</h2>
-          <p>Enter manager PIN 3090 to open this section.</p>
-          <button type="button" onClick={openManagerView}>Unlock Manager View</button>
+          Manager View is locked. Enter manager PIN 3090 to open this section.
         </div>
       )}
       {v2ActiveTab === 'manager' && showManagerView && renderStaffManagementPanel()}
@@ -11537,7 +11528,7 @@ function formatMoney(value) {
       {v2ActiveTab === 'manager' && showManagerView && renderLoyaltyRewardsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderDuplicateCustomersReportPanel()}
 
-      {v2ActiveTab === 'sunbeds' && (
+      {(v2ActiveTab === 'dashboard' || v2ActiveTab === 'sunbeds') && (
         <>
       <h2 style={{ textAlign: 'center' }}>Sunbeds</h2>
 
