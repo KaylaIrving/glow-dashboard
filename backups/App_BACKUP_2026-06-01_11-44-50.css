@@ -1362,44 +1362,6 @@ button,
   color: #f3e6c3;
 }
 
-.v2-sunbed-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  background: linear-gradient(180deg, rgba(24, 22, 20, 0.96), rgba(11, 11, 11, 0.98));
-  border: 1px solid rgba(212, 168, 83, 0.2);
-  border-radius: 5px;
-}
-
-.v2-sunbed-action-bar h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.v2-sunbed-action-bar > div {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.v2-sunbed-action-bar p {
-  flex: 1 1 100%;
-  margin: 0;
-  color: #b8b1a7;
-  font-size: 12px;
-}
-
-.emergency-stop-button {
-  background: linear-gradient(180deg, #b32636 0%, #681420 100%) !important;
-  color: #fff8f2 !important;
-  border-color: rgba(255, 120, 117, 0.78) !important;
-  box-shadow: 0 0 22px rgba(179, 38, 54, 0.24) !important;
-}
-
 @media (max-width: 1200px) {
   .cash-up-v2-columns {
     grid-template-columns: 1fr;

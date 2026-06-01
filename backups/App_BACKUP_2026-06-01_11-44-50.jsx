@@ -3457,47 +3457,6 @@ function formatMoney(value) {
     }
   }
 
-  function getMissingSupabaseColumn(error) {
-    const message = String(error?.message || error?.details || '')
-    return message.match(/'([^']+)' column/)?.[1] || message.match(/column "([^"]+)"/)?.[1] || ''
-  }
-
-  async function writeCashUpRecord(payload) {
-    const optionalColumns = new Set([
-      'variance_notes',
-      'float_entered_by_staff',
-      'float_entered_at',
-      'cash_up_completed_by_staff',
-      'cash_up_completed_at',
-      'cash_up_locked',
-      'cash_up_locked_by_staff',
-      'cash_up_locked_at',
-      'cash_up_reopened_by_staff',
-      'cash_up_reopened_at'
-    ])
-    let safePayload = { ...payload }
-
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const request = cashUpExistingRecord?.id
-        ? supabase.from('CashUps').update(safePayload).eq('id', cashUpExistingRecord.id)
-        : supabase.from('CashUps').insert(safePayload)
-      const { error } = await request
-      if (!error) return { error: null, payload: safePayload }
-
-      const missingColumn = getMissingSupabaseColumn(error)
-      if (missingColumn && optionalColumns.has(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
-        console.warn('CashUps optional column missing, retrying without it:', missingColumn)
-        const { [missingColumn]: _removed, ...nextPayload } = safePayload
-        safePayload = nextPayload
-        continue
-      }
-
-      return { error, payload: safePayload }
-    }
-
-    return { error: new Error('CashUps save failed after retrying optional columns.'), payload: safePayload }
-  }
-
   function clearFloatMovementForm() {
     setFloatMovementType('added')
     setFloatMovementAmount('')
@@ -3634,12 +3593,16 @@ function formatMoney(value) {
 
     try {
       setCashFloatSaving(true)
-      const { error, payload: attemptedPayload } = await writeCashUpRecord(payload)
+      const request = cashUpExistingRecord?.id
+        ? supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
+        : supabase.from('CashUps').insert(payload)
+
+      const { error } = await request
 
       if (error) {
         alert('Start-of-day cash float was not saved. Please check the connection and try again.')
         showDataLoadWarning('Start-of-day cash float failed to save. Please check the connection.', error)
-        console.error('Start day float save failed:', { table: 'CashUps', payload: attemptedPayload, existingId: cashUpExistingRecord?.id, error })
+        console.error('Start day float save failed:', { table: 'CashUps', payload, existingId: cashUpExistingRecord?.id, error })
         return
       }
 
@@ -3719,12 +3682,16 @@ function formatMoney(value) {
 
     try {
       setCashUpCompleting(true)
-      const { error, payload: attemptedPayload } = await writeCashUpRecord(payload)
+      const request = cashUpExistingRecord?.id
+        ? supabase.from('CashUps').update(payload).eq('id', cashUpExistingRecord.id)
+        : supabase.from('CashUps').insert(payload)
+
+      const { error } = await request
 
       if (error) {
         alert('Cash-up was not saved. Please check the connection and try again.')
         showDataLoadWarning('Cash-up failed to save. Please check the connection.', error)
-        console.error('Cash-up save failed:', { table: 'CashUps', payload: attemptedPayload, existingId: cashUpExistingRecord?.id, error })
+        console.error('Cash-up save failed:', { table: 'CashUps', payload, existingId: cashUpExistingRecord?.id, error })
         return
       }
 
@@ -5917,49 +5884,6 @@ function formatMoney(value) {
     }
     closeModal()
     getBookings()
-  }
-
-  function getActiveEmergencyStopBookings() {
-    const activeStatuses = ['undressing', 'running', 'cooldown', 'active', 'time_sent', 'sent', 'customer_started', 'waiting_to_start', 'in_use']
-    return bookings.filter((booking) => (
-      isSunbedBooking(booking)
-      && activeStatuses.includes(String(booking.status || '').toLowerCase())
-      && !['completed', 'force_stopped', 'no_show', 'cancelled', 'deleted'].includes(String(booking.status || '').toLowerCase())
-    ))
-  }
-
-  async function emergencyStopAllBeds() {
-    if (!requireStaffSignIn()) return
-    const activeBookings = getActiveEmergencyStopBookings()
-    if (activeBookings.length === 0) {
-      alert('No active dashboard bed sessions to emergency stop.')
-      return
-    }
-
-    const confirmed = window.confirm(
-      `Emergency stop ${activeBookings.length} active bed session(s)?\n\nThis will mark active dashboard sessions as Force Stopped and start cooldown blocking. Physical T-Max stop still requires local T-Max integration/control.`
-    )
-    if (!confirmed) return
-
-    const now = new Date()
-    const cooldownEnd = new Date(now.getTime() + COOLDOWN_SECONDS * 1000)
-    const ids = activeBookings.map((booking) => booking.id)
-    const { error } = await supabase.from('Bookings').update({
-      status: 'force_stopped',
-      actual_tanning_end: now.toISOString(),
-      booking_end: cooldownEnd.toISOString(),
-      tmax_status: 'force_stopped'
-    }).in('id', ids)
-
-    if (error) {
-      alert('Emergency stop was not saved. Please check the connection and stop beds locally if needed.')
-      showDataLoadWarning('Emergency stop failed to save. Physical T-Max stop requires local integration.', error)
-      console.error('Emergency stop all beds failed:', { ids, error })
-      return
-    }
-
-    await getBookings()
-    alert('Dashboard sessions marked Force Stopped. Physical T-Max emergency stop requires local integration/control.')
   }
 
   async function autoCompleteFinishedSessions() {
@@ -10041,17 +9965,13 @@ function formatMoney(value) {
             onChange={(e) => setCashUpActualCash(e.target.value)}
             style={{ padding: '10px' }}
           />
-          <select
-            value={cashUpManagerName || getCurrentStaffUser()?.name || ''}
+          <input
+            placeholder="Staff completing cash-up"
+            value={cashUpManagerName}
             disabled={!canEditCashUp}
             onChange={(e) => setCashUpManagerName(e.target.value)}
             style={{ padding: '10px' }}
-          >
-            <option value="">Staff completing cash-up</option>
-            {staff.filter((member) => member.is_active !== false).map((member) => (
-              <option key={member.id} value={member.name}>{member.name}</option>
-            ))}
-          </select>
+          />
           <div style={{ ...itemStyle, padding: '10px' }}>
             <span>Variance</span>
             <h2 style={{ margin: '4px 0 0', color: variance === 0 ? '#d4a853' : '#ffcc66' }}>{formatMoney(variance)}</h2>
@@ -11666,18 +11586,7 @@ function formatMoney(value) {
 
       {v2ActiveTab === 'sunbeds' && (
         <>
-      <div className="v2-sunbed-action-bar">
-        <h2>Sunbeds</h2>
-        <div>
-          <button type="button" onClick={() => runWixBookingSync()} disabled={wixSyncRunning}>
-            {wixSyncRunning ? 'Syncing Wix...' : 'Sync Wix Bookings'}
-          </button>
-          <button type="button" className="emergency-stop-button" onClick={emergencyStopAllBeds}>
-            Emergency Stop All Beds
-          </button>
-        </div>
-        <p>{wixSyncStatus}</p>
-      </div>
+      <h2 style={{ textAlign: 'center' }}>Sunbeds</h2>
 
       <div className="sunbeds-grid premium-sunbeds-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
         {beds.map((bed) => {
