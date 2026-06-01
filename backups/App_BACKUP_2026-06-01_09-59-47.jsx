@@ -24,11 +24,7 @@ const MANAGER_REPORT_TYPES = [
   { value: 'customer_registrations', label: 'Customer registrations' },
   { value: 'patch_test_expiry', label: 'Patch test expiry' },
   { value: 'no_shows_cancellations', label: 'No shows / cancellations' },
-  { value: 'cash_up_summary', label: 'Cash-up summary' },
-  { value: 'loyalty_points_issued', label: 'Loyalty points issued' },
-  { value: 'rewards_redeemed', label: 'Rewards redeemed' },
-  { value: 'referral_rewards', label: 'Referral rewards' },
-  { value: 'birthday_rewards', label: 'Birthday rewards' }
+  { value: 'cash_up_summary', label: 'Cash-up summary' }
 ]
 
 // TODO Wix integration: fill this once the final Wix service names and bed rules are confirmed.
@@ -63,21 +59,6 @@ const SPRAY_TAN_STATUSES = [
 ]
 
 const DEFAULT_SPRAY_TAN_ARTISTS = ['Charlie', 'Jazz', 'Tia', 'Nadia']
-
-const LOYALTY_REWARD_TYPES = [
-  { value: 'birthday', label: 'Birthday reward' },
-  { value: 'referral', label: 'Refer a friend reward' },
-  { value: 'visit_based', label: 'Visit-based reward' },
-  { value: 'spend_based', label: 'Spend-based reward' },
-  { value: 'product_purchase', label: 'Product purchase reward' }
-]
-
-const LOYALTY_APPLIES_TO = [
-  { value: 'all', label: 'All' },
-  { value: 'sunbeds', label: 'Sunbeds' },
-  { value: 'spray_tans', label: 'Spray tans' },
-  { value: 'products', label: 'Products' }
-]
 
 const STAFF_SCHEDULE_TYPES = [
   { value: 'shift', label: 'Shift' },
@@ -211,7 +192,6 @@ function App() {
   const [collapsePromos, setCollapsePromos] = useState(true)
   const [collapseCommissionSettings, setCollapseCommissionSettings] = useState(true)
   const [collapseDuplicateCustomers, setCollapseDuplicateCustomers] = useState(true)
-  const [collapseLoyaltyRewards, setCollapseLoyaltyRewards] = useState(true)
   const [selectedProductManagementId, setSelectedProductManagementId] = useState('')
   const [customerManagerSearch, setCustomerManagerSearch] = useState('')
   const [showAllCustomersList, setShowAllCustomersList] = useState(false)
@@ -276,8 +256,6 @@ function App() {
   const [customerProfileNotes, setCustomerProfileNotes] = useState([])
   const [customerProfileNoteText, setCustomerProfileNoteText] = useState('')
   const [customerProfileNoteEditingId, setCustomerProfileNoteEditingId] = useState('')
-  const [customerRewardLogs, setCustomerRewardLogs] = useState([])
-  const [customerRewardLogsError, setCustomerRewardLogsError] = useState('')
 
   const [showMinuteCorrection, setShowMinuteCorrection] = useState(false)
   const [correctionType, setCorrectionType] = useState('move_standard_to_hybrid')
@@ -439,17 +417,6 @@ function App() {
   const [commissionRuleValue, setCommissionRuleValue] = useState('')
   const [commissionRuleStaffId, setCommissionRuleStaffId] = useState('')
   const [commissionRuleActive, setCommissionRuleActive] = useState(true)
-  const [loyaltyRules, setLoyaltyRules] = useState([])
-  const [loyaltyRulesError, setLoyaltyRulesError] = useState('')
-  const [loyaltyRuleEditingId, setLoyaltyRuleEditingId] = useState('')
-  const [loyaltyRuleName, setLoyaltyRuleName] = useState('')
-  const [loyaltyRuleType, setLoyaltyRuleType] = useState('birthday')
-  const [loyaltyRulePoints, setLoyaltyRulePoints] = useState('')
-  const [loyaltyRuleFreeMinutes, setLoyaltyRuleFreeMinutes] = useState('')
-  const [loyaltyRuleCredit, setLoyaltyRuleCredit] = useState('')
-  const [loyaltyRuleAppliesTo, setLoyaltyRuleAppliesTo] = useState('all')
-  const [loyaltyRuleActive, setLoyaltyRuleActive] = useState(true)
-  const [selectedRewardRuleId, setSelectedRewardRuleId] = useState('')
   const [exportFromDate, setExportFromDate] = useState(formatLocalDate(new Date()))
   const [exportToDate, setExportToDate] = useState(formatLocalDate(new Date()))
 
@@ -461,7 +428,6 @@ function App() {
     getProducts()
     getPromos()
     getCommissionRules()
-    getLoyaltyRules()
     getStaffSchedule()
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
@@ -482,11 +448,6 @@ function App() {
   useEffect(() => {
     const selectedCustomer = customers.find((customer) => customer.id === Number(selectedCustomerId || selectedManagerCustomerId))
     if (selectedCustomer) removeExpiredPromoMinutesForCustomers([selectedCustomer])
-  }, [selectedCustomerId, selectedManagerCustomerId])
-
-  useEffect(() => {
-    const customerId = selectedCustomerId || selectedManagerCustomerId
-    if (customerId) getCustomerRewardLogs(customerId)
   }, [selectedCustomerId, selectedManagerCustomerId])
 
   useEffect(() => {
@@ -964,32 +925,6 @@ function formatMoney(value) {
     setStaffSchedule(data || [])
   }
 
-  async function getLoyaltyRules() {
-    const { data, error } = await supabase.from('LoyaltyRewardRules').select('*').order('created_at', { ascending: false })
-    if (error) {
-      setLoyaltyRulesError(error.message || 'Could not load LoyaltyRewardRules table.')
-      setLoyaltyRules([])
-      return
-    }
-    setLoyaltyRulesError('')
-    setLoyaltyRules(data || [])
-  }
-
-  async function getCustomerRewardLogs(customerId) {
-    const { data, error } = await supabase
-      .from('CustomerRewardLogs')
-      .select('*')
-      .eq('customer_id', Number(customerId))
-      .order('created_at', { ascending: false })
-    if (error) {
-      setCustomerRewardLogsError(error.message || 'Could not load CustomerRewardLogs table.')
-      setCustomerRewardLogs([])
-      return
-    }
-    setCustomerRewardLogsError('')
-    setCustomerRewardLogs(data || [])
-  }
-
   async function createStaffLog(member, action, details) {
     if (!member || String(member.id).startsWith('default-')) return
     await supabase.from('StaffLogs').insert({ staff_id: member.id, staff_name: member.name, action, details })
@@ -1022,6 +957,7 @@ function formatMoney(value) {
     if (showManagerView) return true
     const currentStaff = getCurrentStaffUser()
     if (!currentStaff) return false
+    if (getStaffScheduleApprovalStatus(entry) !== 'pending') return false
     const createdBy = String(entry?.request_created_by || '').trim().toLowerCase()
     const currentName = String(currentStaff.name || '').trim().toLowerCase()
     return String(entry.staff_id) === String(currentStaff.id) || (createdBy && createdBy === currentName)
@@ -1055,6 +991,7 @@ function formatMoney(value) {
     setStaffScheduleEndTime('17:00')
     setStaffScheduleAllDay(false)
     setStaffScheduleType('shift')
+    setStaffScheduleServiceType('general')
     setStaffScheduleNotes('')
     setStaffScheduleAvailable(true)
     setStaffScheduleApprovalStatus(showManagerView ? 'approved' : 'pending')
@@ -1088,10 +1025,6 @@ function formatMoney(value) {
       if (!currentStaff) return false
       return String(entry.staff_id) === String(currentStaff.id) || entry.request_created_by === currentStaff.name
     }).length
-  }
-
-  function getValidStaffScheduleType(value) {
-    return STAFF_SCHEDULE_TYPES.some((type) => type.value === value) ? value : 'shift'
   }
 
   function getAvailableSprayTanArtists(date, time) {
@@ -1201,7 +1134,7 @@ function formatMoney(value) {
       schedule_date: staffScheduleDate,
       start_time: staffScheduleAllDay ? '00:00' : staffScheduleStartTime || null,
       end_time: staffScheduleAllDay ? '23:59' : staffScheduleEndTime || null,
-      schedule_type: getValidStaffScheduleType(staffScheduleType),
+      schedule_type: staffScheduleType,
       notes: staffScheduleNotes || null,
       is_available: isManager ? staffScheduleAvailable : false,
       approval_status: approvalStatus,
@@ -1272,68 +1205,6 @@ function formatMoney(value) {
       String(scheduleEntry.id) === String(entry.id) ? { ...scheduleEntry, ...updates } : scheduleEntry
     )))
     await getStaffSchedule()
-  }
-
-  function getActiveLoyaltyRulesForCustomer(customer, appliesTo = 'all') {
-    if (!customer) return []
-    const redeemedIds = new Set(customerRewardLogs
-      .filter((log) => Number(log.customer_id) === Number(customer.id) && String(log.transaction_type || '').toLowerCase() === 'redeemed')
-      .map((log) => String(log.reward_rule_id)))
-    return loyaltyRules.filter((rule) => {
-      if (rule.is_active === false) return false
-      const ruleAppliesTo = String(rule.applies_to || 'all')
-      if (ruleAppliesTo !== 'all' && ruleAppliesTo !== appliesTo) return false
-      if (redeemedIds.has(String(rule.id))) return false
-      return true
-    })
-  }
-
-  function getSelectedRewardRule() {
-    return loyaltyRules.find((rule) => String(rule.id) === String(selectedRewardRuleId))
-  }
-
-  function getRewardCreditAmount(rule) {
-    return Number(rule?.credit_amount || 0)
-  }
-
-  async function redeemSelectedReward(customer, sourceType = 'sunbed_checkout', sourceId = null) {
-    const rule = getSelectedRewardRule()
-    if (!customer || !rule) return true
-    const alreadyRedeemed = customerRewardLogs.some((log) => (
-      Number(log.customer_id) === Number(customer.id)
-      && String(log.reward_rule_id) === String(rule.id)
-      && String(log.transaction_type || '').toLowerCase() === 'redeemed'
-    ))
-    if (alreadyRedeemed) {
-      alert('This reward has already been redeemed for this customer.')
-      return false
-    }
-    const staffUser = getCurrentStaffUser()
-    const { error } = await supabase.from('CustomerRewardLogs').insert({
-      customer_id: customer.id,
-      customer_name: customer.name,
-      reward_rule_id: rule.id,
-      reward_name: rule.reward_name,
-      reward_type: rule.reward_type,
-      transaction_type: 'redeemed',
-      points_changed: -Math.abs(Number(rule.points_earned || 0)),
-      free_minutes: Number(rule.free_minutes || 0),
-      credit_amount: Number(rule.credit_amount || 0),
-      applies_to: rule.applies_to || 'all',
-      source_type: sourceType,
-      source_id: sourceId,
-      staff_name: staffUser?.name || null,
-      notes: 'Reward redeemed in checkout.'
-    })
-    if (error) {
-      alert('Reward was not redeemed. Please check the Loyalty tables.')
-      showDataLoadWarning('Reward redemption failed.', error)
-      console.log(error)
-      return false
-    }
-    await getCustomerRewardLogs(customer.id)
-    setSelectedRewardRuleId('')
-    return true
   }
 
   async function getProducts() {
@@ -1596,72 +1467,6 @@ function formatMoney(value) {
     await getCommissionRules()
   }
 
-  function clearLoyaltyRuleForm() {
-    setLoyaltyRuleEditingId('')
-    setLoyaltyRuleName('')
-    setLoyaltyRuleType('birthday')
-    setLoyaltyRulePoints('')
-    setLoyaltyRuleFreeMinutes('')
-    setLoyaltyRuleCredit('')
-    setLoyaltyRuleAppliesTo('all')
-    setLoyaltyRuleActive(true)
-  }
-
-  function editLoyaltyRule(rule) {
-    setLoyaltyRuleEditingId(String(rule.id))
-    setLoyaltyRuleName(rule.reward_name || '')
-    setLoyaltyRuleType(rule.reward_type || 'birthday')
-    setLoyaltyRulePoints(rule.points_earned ?? '')
-    setLoyaltyRuleFreeMinutes(rule.free_minutes ?? '')
-    setLoyaltyRuleCredit(rule.credit_amount ?? '')
-    setLoyaltyRuleAppliesTo(rule.applies_to || 'all')
-    setLoyaltyRuleActive(rule.is_active !== false)
-  }
-
-  async function saveLoyaltyRule() {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to save loyalty rewards:')) return
-    if (!loyaltyRuleName.trim()) {
-      alert('Enter a reward name.')
-      return
-    }
-    const payload = {
-      reward_name: loyaltyRuleName.trim(),
-      reward_type: loyaltyRuleType,
-      points_earned: Number(loyaltyRulePoints || 0),
-      free_minutes: Number(loyaltyRuleFreeMinutes || 0),
-      credit_amount: Number(loyaltyRuleCredit || 0),
-      applies_to: loyaltyRuleAppliesTo,
-      is_active: loyaltyRuleActive
-    }
-    const request = loyaltyRuleEditingId
-      ? supabase.from('LoyaltyRewardRules').update(payload).eq('id', loyaltyRuleEditingId)
-      : supabase.from('LoyaltyRewardRules').insert(payload)
-    const { error } = await request
-    if (error) {
-      alert('Loyalty reward rule was not saved. Please check the LoyaltyRewardRules table.')
-      showDataLoadWarning('Loyalty reward save failed.', error)
-      console.log(error)
-      return
-    }
-    clearLoyaltyRuleForm()
-    await getLoyaltyRules()
-  }
-
-  async function deleteLoyaltyRule(rule) {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required to delete loyalty rewards:')) return
-    if (!window.confirm(`Delete reward rule "${rule.reward_name}"?`)) return
-    const { error } = await supabase.from('LoyaltyRewardRules').delete().eq('id', rule.id)
-    if (error) {
-      alert('Loyalty reward rule was not deleted.')
-      showDataLoadWarning('Loyalty reward delete failed.', error)
-      console.log(error)
-      return
-    }
-    await getLoyaltyRules()
-  }
-
   function getCommissionRuleTargetOptions(scope = commissionRuleScope) {
     const optionMap = new Map()
     const addOption = (value, label = value) => {
@@ -1720,15 +1525,14 @@ function formatMoney(value) {
     setManagerReportsLoading(true)
     setManagerReportsError('')
 
-    const [productSalesResult, paymentsResult, receiptsResult, cashUpsResult, bookingsResult, correctionsResult, minuteExpiriesResult, rewardLogsResult] = await Promise.all([
+    const [productSalesResult, paymentsResult, receiptsResult, cashUpsResult, bookingsResult, correctionsResult, minuteExpiriesResult] = await Promise.all([
       supabase.from('ProductSales').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('Payments').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('Receipts').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('CashUps').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('Bookings').select('*').gte('appointment_time', start).lte('appointment_time', end),
       supabase.from('CorrectionLogs').select('*').gte('created_at', start).lte('created_at', end),
-      supabase.from('CustomerMinuteExpiries').select('*').gte('created_at', start).lte('created_at', end),
-      supabase.from('CustomerRewardLogs').select('*').gte('created_at', start).lte('created_at', end)
+      supabase.from('CustomerMinuteExpiries').select('*').gte('created_at', start).lte('created_at', end)
     ])
 
     setManagerReportsLoading(false)
@@ -1746,7 +1550,6 @@ function formatMoney(value) {
     const reportBookings = bookingsResult.data || []
     const corrections = correctionsResult.error ? [] : correctionsResult.data || []
     const minuteExpiries = minuteExpiriesResult.error ? [] : minuteExpiriesResult.data || []
-    const rewardLogs = rewardLogsResult.error ? [] : rewardLogsResult.data || []
 
     const productSalesByStaffMap = new Map()
     const productSummaryMap = new Map()
@@ -2007,27 +1810,6 @@ function formatMoney(value) {
       staff_name: cashUp.cash_up_completed_by_staff || cashUp.manager_name || 'Unknown staff',
       locked: cashUp.is_locked ? 'Yes' : 'No'
     }))
-    const loyaltyPointsRows = rewardLogs
-      .filter((log) => Number(log.points_changed || 0) > 0 || String(log.transaction_type || '').toLowerCase() === 'issued')
-      .map((log) => ({
-        date: log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : '',
-        customer_name: log.customer_name || 'Customer',
-        reward_name: log.reward_name || '',
-        reward_type: formatStatus(log.reward_type),
-        points: Number(log.points_changed || 0),
-        staff_name: log.staff_name || 'Unknown staff'
-      }))
-    const rewardRedeemedRows = rewardLogs
-      .filter((log) => String(log.transaction_type || '').toLowerCase() === 'redeemed')
-      .map((log) => ({
-        date: log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : '',
-        customer_name: log.customer_name || 'Customer',
-        reward_name: log.reward_name || '',
-        reward_type: formatStatus(log.reward_type),
-        credit_amount: Number(log.credit_amount || 0),
-        free_minutes: Number(log.free_minutes || 0),
-        staff_name: log.staff_name || 'Unknown staff'
-      }))
     const expiredMinutesRows = minuteExpiries.map((entry) => ({
       customer_name: entry.customer_name || 'Customer',
       minute_type: formatStatus(entry.minute_type),
@@ -2060,11 +1842,7 @@ function formatMoney(value) {
       customerRegistrations: customerRegistrationRows,
       patchTestExpiry: patchTestExpiryRows,
       noShowsCancellations: noShowCancellationRows,
-      cashUpSummary: cashUpSummaryRows,
-      loyaltyPointsIssued: loyaltyPointsRows,
-      rewardsRedeemed: rewardRedeemedRows,
-      referralRewards: rewardRedeemedRows.filter((row) => String(row.reward_type || '').toLowerCase().includes('referral') || String(row.reward_type || '').toLowerCase().includes('refer')),
-      birthdayRewards: rewardRedeemedRows.filter((row) => String(row.reward_type || '').toLowerCase().includes('birthday'))
+      cashUpSummary: cashUpSummaryRows
     })
   }
 
@@ -2239,55 +2017,6 @@ function formatMoney(value) {
           { key: 'staff_name', label: 'Staff' },
           { key: 'locked', label: 'Locked' }
         ]
-      },
-      loyalty_points_issued: {
-        title: 'Loyalty Points Issued',
-        rows: data.loyaltyPointsIssued || [],
-        columns: [
-          { key: 'date', label: 'Date/time' },
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'reward_name', label: 'Reward' },
-          { key: 'reward_type', label: 'Type' },
-          { key: 'points', label: 'Points' },
-          { key: 'staff_name', label: 'Staff' }
-        ]
-      },
-      rewards_redeemed: {
-        title: 'Rewards Redeemed',
-        rows: data.rewardsRedeemed || [],
-        columns: [
-          { key: 'date', label: 'Date/time' },
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'reward_name', label: 'Reward' },
-          { key: 'reward_type', label: 'Type' },
-          { key: 'credit_amount', label: 'Credit', format: money },
-          { key: 'free_minutes', label: 'Free minutes' },
-          { key: 'staff_name', label: 'Staff' }
-        ]
-      },
-      referral_rewards: {
-        title: 'Referral Rewards',
-        rows: data.referralRewards || [],
-        columns: [
-          { key: 'date', label: 'Date/time' },
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'reward_name', label: 'Reward' },
-          { key: 'credit_amount', label: 'Credit', format: money },
-          { key: 'free_minutes', label: 'Free minutes' },
-          { key: 'staff_name', label: 'Staff' }
-        ]
-      },
-      birthday_rewards: {
-        title: 'Birthday Rewards',
-        rows: data.birthdayRewards || [],
-        columns: [
-          { key: 'date', label: 'Date/time' },
-          { key: 'customer_name', label: 'Customer' },
-          { key: 'reward_name', label: 'Reward' },
-          { key: 'credit_amount', label: 'Credit', format: money },
-          { key: 'free_minutes', label: 'Free minutes' },
-          { key: 'staff_name', label: 'Staff' }
-        ]
       }
     }
     return definitions[reportType] || definitions.daily_takings
@@ -2339,7 +2068,6 @@ function formatMoney(value) {
     setCollapsePromos(true)
     setCollapseCommissionSettings(true)
     setCollapseDuplicateCustomers(true)
-    setCollapseLoyaltyRewards(true)
   }
 
   function openManagerSection(sectionName, currentlyOpen) {
@@ -2357,7 +2085,6 @@ function formatMoney(value) {
     if (sectionName === 'promos') setCollapsePromos(false)
     if (sectionName === 'commission') setCollapseCommissionSettings(false)
     if (sectionName === 'duplicates') setCollapseDuplicateCustomers(false)
-    if (sectionName === 'loyalty') setCollapseLoyaltyRewards(false)
   }
 
   function scrollToTop() {
@@ -4116,15 +3843,11 @@ function formatMoney(value) {
     const productsTotal = Number(getProductCartTotal().toFixed(2))
     const promo = getSelectedPromo()
     const promoTotal = promo ? Number(promo.promo_price || 0) : 0
-    const reward = getSelectedRewardRule()
-    const rewardCredit = reward ? Math.min(getRewardCreditAmount(reward), topUpTotal + productsTotal + promoTotal) : 0
-    const grandTotal = Number(Math.max(0, topUpTotal + productsTotal + promoTotal - rewardCredit).toFixed(2))
+    const grandTotal = Number((topUpTotal + productsTotal + promoTotal).toFixed(2))
 
     return {
       purchase,
       promo,
-      reward,
-      rewardCredit,
       topUpMinutesToAdd,
       topUpTotal,
       promoTotal,
@@ -4132,8 +3855,7 @@ function formatMoney(value) {
       grandTotal,
       hasTopUp: topUpMinutesToAdd > 0,
       hasPromo: Boolean(promo),
-      hasProducts: productCart.length > 0,
-      hasReward: Boolean(reward)
+      hasProducts: productCart.length > 0
     }
   }
 
@@ -4199,11 +3921,6 @@ function formatMoney(value) {
   async function applySunbedCheckout(customer) {
     const summary = getSunbedCheckoutSummary(customer)
     if (summary.grandTotal <= 0 && !summary.hasPromo && !summary.hasProducts && !summary.hasTopUp) return true
-
-    if (summary.hasReward) {
-      const rewardRedeemed = await redeemSelectedReward(customer, 'sunbed_checkout')
-      if (!rewardRedeemed) return false
-    }
 
     const receiptProducts = getProductReceiptItems()
     const receiptCashReceived = Number(cashReceived || 0)
@@ -6114,7 +5831,6 @@ function formatMoney(value) {
     setShopTestFreeUse(true)
     setShowBookingTopUp(false)
     setShowBookingProducts(false)
-    setSelectedRewardRuleId('')
     setBookingSaving(false)
     setBookingProductId('')
     setBookingProductQuantity(1)
@@ -8588,7 +8304,6 @@ function formatMoney(value) {
     const summary = getSunbedCheckoutSummary(selectedCustomer)
     const changeDue = Math.max(0, Number(cashReceived || 0) - summary.grandTotal)
     const promoItems = getPromoSelectedCartItems()
-    const availableRewards = getActiveLoyaltyRulesForCustomer(selectedCustomer, 'sunbeds')
 
     return (
       <div style={{ background: '#0b0b0b', padding: '16px', borderRadius: '14px', marginTop: '0', marginBottom: '15px', border: '1px solid rgba(212,168,83,0.45)' }}>
@@ -8601,20 +8316,6 @@ function formatMoney(value) {
           {summary.hasPromo && <p style={{ margin: 0 }}>Offer / Promo: <strong>{summary.promo.promo_name}</strong> - £{summary.promoTotal.toFixed(2)}</p>}
           <p style={{ margin: 0 }}>Top-up minutes cost: <strong>£{summary.topUpTotal.toFixed(2)}</strong></p>
           <p style={{ margin: 0 }}>Products total: <strong>£{summary.productsTotal.toFixed(2)}</strong></p>
-          {availableRewards.length > 0 && (
-            <label style={{ display: 'grid', gap: '5px', marginTop: '6px' }}>
-              Apply reward
-              <select value={selectedRewardRuleId} onChange={(e) => setSelectedRewardRuleId(e.target.value)} style={{ width: '100%', padding: '10px' }}>
-                <option value="">No reward</option>
-                {availableRewards.map((rule) => (
-                  <option key={rule.id} value={rule.id}>
-                    {rule.reward_name} - {Number(rule.points_earned || 0)} pts / {Number(rule.free_minutes || 0)} mins / {formatMoney(rule.credit_amount || 0)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {summary.hasReward && <p style={{ margin: 0 }}>Reward credit: <strong>-{formatMoney(summary.rewardCredit)}</strong></p>}
           <p style={{ margin: 0, color: '#d4a853', fontWeight: 'bold' }}>Grand total to pay: £{summary.grandTotal.toFixed(2)}</p>
         </div>
         <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
@@ -8747,12 +8448,6 @@ function formatMoney(value) {
     const productRevenue = customerProductSalesHistory.reduce((total, sale) => total + Number(sale.total_amount || 0), 0)
     const totalAvailableMinutes = Number(customer.standard_minutes_balance || 0) + Number(customer.hybrid_minutes_balance || 0) + Number(customer.weekly_minutes_balance || 0) + Number(customer.free_minutes_balance || 0)
     const patchWarning = getPatchExpiryWarning(customer)
-    const customerLoyaltyLogs = customerRewardLogs.filter((log) => Number(log.customer_id) === Number(customer.id))
-    const loyaltyPoints = Number(customer.loyalty_points || 0) + customerLoyaltyLogs.reduce((total, log) => total + Number(log.points_changed || 0), 0)
-    const rewardsEarned = customerLoyaltyLogs.filter((log) => ['earned', 'issued'].includes(String(log.transaction_type || '').toLowerCase()))
-    const rewardsRedeemed = customerLoyaltyLogs.filter((log) => String(log.transaction_type || '').toLowerCase() === 'redeemed')
-    const birthdayRewardStatus = rewardsRedeemed.some((log) => String(log.reward_type || '').toLowerCase() === 'birthday') ? 'Redeemed' : loyaltyRules.some((rule) => rule.is_active !== false && rule.reward_type === 'birthday') ? 'Available if eligible' : 'Not configured'
-    const referralRewardStatus = rewardsRedeemed.some((log) => String(log.reward_type || '').toLowerCase() === 'referral') ? 'Redeemed' : loyaltyRules.some((rule) => rule.is_active !== false && rule.reward_type === 'referral') ? 'Available if eligible' : 'Not configured'
     const panelStyle = { background: '#0b0b0b', border: '1px solid #2f2a20', borderRadius: '10px', padding: '12px' }
     const tableWrapStyle = { maxHeight: '340px', overflow: 'auto', border: '1px solid #2f2a20', borderRadius: '10px' }
     const tableStyle = { width: '100%', borderCollapse: 'collapse', minWidth: '760px' }
@@ -8797,7 +8492,6 @@ function formatMoney(value) {
           <div style={statStyle}><span>Last Visit</span><h3 style={{ fontSize: '16px' }}>{stats.lastVisitDate ? new Date(stats.lastVisitDate).toLocaleDateString('en-GB') : 'None'}</h3></div>
           <div style={statStyle}><span>Next Booking</span><h3 style={{ fontSize: '16px' }}>{nextBooking?.appointment_time ? new Date(nextBooking.appointment_time).toLocaleString('en-GB') : 'None'}</h3></div>
           <div style={statStyle}><span>Minutes Remaining</span><h3>{totalAvailableMinutes}</h3></div>
-          <div style={statStyle}><span>Loyalty Points</span><h3>{loyaltyPoints}</h3></div>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -8820,12 +8514,6 @@ function formatMoney(value) {
             <p><strong>Customer Since:</strong><br />{customer.created_at ? new Date(customer.created_at).toLocaleDateString('en-GB') : '-'}</p>
             <p><strong>Last Visit:</strong><br />{stats.lastVisitDate ? new Date(stats.lastVisitDate).toLocaleString('en-GB') : '-'}</p>
             <p><strong>Next Booking:</strong><br />{nextBooking?.appointment_time ? new Date(nextBooking.appointment_time).toLocaleString('en-GB') : '-'}</p>
-            <p><strong>Loyalty Points:</strong><br />{loyaltyPoints}</p>
-            <p><strong>Rewards Earned:</strong><br />{rewardsEarned.length}</p>
-            <p><strong>Rewards Redeemed:</strong><br />{rewardsRedeemed.length}</p>
-            <p><strong>Birthday Reward:</strong><br />{birthdayRewardStatus}</p>
-            <p><strong>Referral Reward:</strong><br />{referralRewardStatus}</p>
-            {customerRewardLogsError && <p style={{ color: '#ffcc66' }}>{customerRewardLogsError}</p>}
           </div>
         )}
 
@@ -9593,54 +9281,6 @@ function formatMoney(value) {
     )
   }
 
-  function renderLoyaltyRewardsPanel() {
-    if (!showManagerView) return null
-
-    return renderCollapsibleSection(
-      'Loyalty / Rewards',
-      collapseLoyaltyRewards,
-      setCollapseLoyaltyRewards,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        {loyaltyRulesError && <p style={{ color: '#ffcc66' }}>Loyalty rewards table not loaded: {loyaltyRulesError}</p>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <input placeholder="Reward name" value={loyaltyRuleName} onChange={(e) => setLoyaltyRuleName(e.target.value)} style={{ padding: '10px' }} />
-          <select value={loyaltyRuleType} onChange={(e) => setLoyaltyRuleType(e.target.value)} style={{ padding: '10px' }}>
-            {LOYALTY_REWARD_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-          </select>
-          <input type="number" step="1" placeholder="Points earned" value={loyaltyRulePoints} onChange={(e) => setLoyaltyRulePoints(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="1" placeholder="Free minutes" value={loyaltyRuleFreeMinutes} onChange={(e) => setLoyaltyRuleFreeMinutes(e.target.value)} style={{ padding: '10px' }} />
-          <input type="number" step="0.01" placeholder="Credit amount" value={loyaltyRuleCredit} onChange={(e) => setLoyaltyRuleCredit(e.target.value)} style={{ padding: '10px' }} />
-          <select value={loyaltyRuleAppliesTo} onChange={(e) => setLoyaltyRuleAppliesTo(e.target.value)} style={{ padding: '10px' }}>
-            {LOYALTY_APPLIES_TO.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-            <input type="checkbox" checked={loyaltyRuleActive} onChange={(e) => setLoyaltyRuleActive(e.target.checked)} />
-            Active
-          </label>
-          <button onClick={saveLoyaltyRule}>{loyaltyRuleEditingId ? 'Save Reward' : 'Add Reward'}</button>
-          {loyaltyRuleEditingId && <button onClick={clearLoyaltyRuleForm}>Cancel Edit</button>}
-        </div>
-
-        <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid #333', borderRadius: '10px' }}>
-          {loyaltyRules.length === 0 ? (
-            <p style={{ color: '#aaa', padding: '10px', margin: 0 }}>No loyalty reward rules saved yet.</p>
-          ) : loyaltyRules.map((rule) => (
-            <div key={rule.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
-              <span>
-                <strong>{rule.reward_name}</strong> — {formatStatus(rule.reward_type)}<br />
-                <small style={{ color: '#aaa' }}>
-                  {Number(rule.points_earned || 0)} pts / {Number(rule.free_minutes || 0)} mins / {formatMoney(rule.credit_amount || 0)} / {formatStatus(rule.applies_to || 'all')} / {rule.is_active === false ? 'Inactive' : 'Active'}
-                </small>
-              </span>
-              <button onClick={() => editLoyaltyRule(rule)}>Edit</button>
-              <button onClick={() => deleteLoyaltyRule(rule)}>Delete</button>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
   function getDuplicateCustomerMatches() {
     const clean = (value) => String(value || '').trim().toLowerCase()
     const nameKey = (customer) => [customer.first_name, customer.last_name].filter(Boolean).join(' ').trim().toLowerCase() || clean(customer.name)
@@ -10109,7 +9749,6 @@ function formatMoney(value) {
       { key: 'daily', label: 'Daily Takings', isOpen: !collapseDailyTakings },
       { key: 'reports', label: 'Reports', isOpen: !collapseReports },
       { key: 'commission', label: 'Commission Settings', isOpen: !collapseCommissionSettings },
-      { key: 'loyalty', label: 'Loyalty / Rewards', isOpen: !collapseLoyaltyRewards },
       { key: 'duplicates', label: 'Duplicate Customers Report', isOpen: !collapseDuplicateCustomers }
     ]
 
@@ -11444,7 +11083,6 @@ function formatMoney(value) {
       {showManagerView && renderDailyTakingsPanel()}
       {showManagerView && renderManagerReportsPanel()}
       {showManagerView && renderCommissionSettingsPanel()}
-      {showManagerView && renderLoyaltyRewardsPanel()}
       {showManagerView && renderDuplicateCustomersReportPanel()}
 
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '18px' }}>
