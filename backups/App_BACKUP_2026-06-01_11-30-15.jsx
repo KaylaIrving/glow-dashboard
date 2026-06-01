@@ -9704,57 +9704,6 @@ function formatMoney(value) {
     )
   }
 
-  function renderV2ProductStockList() {
-    const visibleProducts = products
-      .slice()
-      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-    const cellStyle = { padding: '9px', borderBottom: '1px solid rgba(212,168,83,0.14)', verticalAlign: 'top' }
-
-    return (
-      <div className="v2-product-stock-panel">
-        <div className="v2-panel-heading">
-          <div>
-            <h2>Products / Stock</h2>
-            <p>Read-only product and stock view for staff. Editing stays in Manager View.</p>
-          </div>
-        </div>
-        <div className="v2-product-stock-table">
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
-            <thead>
-              <tr>
-                <th style={cellStyle}>Product name</th>
-                <th style={cellStyle}>Category</th>
-                <th style={cellStyle}>Subcategories</th>
-                <th style={cellStyle}>Price</th>
-                <th style={cellStyle}>Stock quantity</th>
-                <th style={cellStyle}>Status</th>
-                <th style={cellStyle}>Low stock warning</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleProducts.length === 0 ? (
-                <tr><td style={cellStyle} colSpan="7">No products found.</td></tr>
-              ) : visibleProducts.map((product) => {
-                const stockStatus = getProductStockStatus(product)
-                return (
-                  <tr key={product.id || product.name}>
-                    <td style={cellStyle}><strong>{product.name || 'Unnamed product'}</strong></td>
-                    <td style={cellStyle}>{getProductCategoryLabel(product.category)}</td>
-                    <td style={cellStyle}>{getProductSubcategories(product).join(', ') || '-'}</td>
-                    <td style={cellStyle}>{formatMoney(product.price || 0)}</td>
-                    <td style={cellStyle}>{getProductStockQuantity(product)}</td>
-                    <td style={cellStyle}>{isProductActive(product) ? 'Active' : 'Inactive'}</td>
-                    <td style={{ ...cellStyle, ...getProductStockStatusStyle(product) }}>{stockStatus}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )
-  }
-
   function renderDailyTakingsPanel() {
     const summary = getDailyTakingsSummary()
     const sprayTanReceiptsTotal = getDailySprayTanReceiptTotal()
@@ -9847,7 +9796,7 @@ function formatMoney(value) {
         </div>
 
         <div className="cash-up-v2-columns">
-        <section className="cash-up-v2-section cash-up-v2-start">
+        <section className="cash-up-v2-section">
         <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
           <h3 style={{ marginTop: 0 }}>Start of Day Cash</h3>
           <p style={{ color: '#aaa', marginTop: 0 }}>Start of Day Float before trading begins.</p>
@@ -9934,7 +9883,7 @@ function formatMoney(value) {
         </div>
 
         </section>
-        <section className="cash-up-v2-section cash-up-v2-end">
+        <section className="cash-up-v2-section">
         <h3>End of Day Cash Up</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '12px' }}>
           <div style={itemStyle}><span>Starting float</span><h2>{formatMoney(startFloat)}</h2></div>
@@ -11415,6 +11364,10 @@ function formatMoney(value) {
     if (tab === 'customers') setShowCustomerManagement(true)
     if (tab === 'cashup') setCollapseCashUp(false)
     if (tab === 'staffcalendar') setCollapseStaffCalendar(false)
+    if (tab === 'products') {
+      if (!showManagerView) openManagerView()
+      openManagerSection('products')
+    }
     if (tab === 'reports') {
       if (!showManagerView) openManagerView()
       openManagerSection('reports')
@@ -11560,13 +11513,13 @@ function formatMoney(value) {
       {v2ActiveTab === 'cashup' && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
       {v2ActiveTab === 'staffcalendar' && renderStaffCalendarPanel()}
       {renderStaffScheduleModal()}
-      {v2ActiveTab === 'products' && renderV2ProductStockList()}
+      {v2ActiveTab === 'products' && showManagerView && renderProductsManagementPanel()}
       {v2ActiveTab === 'reports' && showManagerView && renderManagerReportsPanel()}
       {v2ActiveTab === 'manager' && renderManagerSectionNav()}
-      {['reports', 'manager'].includes(v2ActiveTab) && !showManagerView && (
+      {['products', 'reports', 'manager'].includes(v2ActiveTab) && !showManagerView && (
         <div className="v2-manager-locked-panel">
           <h2>Manager View Locked</h2>
-          <p>Manager View is locked. Unlock to access manager tools.</p>
+          <p>Enter manager PIN 3090 to open this section.</p>
           <button type="button" onClick={openManagerView}>Unlock Manager View</button>
         </div>
       )}
