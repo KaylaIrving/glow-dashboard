@@ -145,7 +145,6 @@ function App() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()))
   const [dashboardView, setDashboardView] = useState('sunbeds')
-  const [v2ActiveTab, setV2ActiveTab] = useState('dashboard')
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalBooking, setModalBooking] = useState(null)
@@ -11337,101 +11336,10 @@ function formatMoney(value) {
   const modalStartBlocked = modalBooking ? isStartBlockedByLiveSession(modalBooking) : false
   const selectedDateShopClosures = getShopClosuresForSelectedDate()
   const pendingStaffScheduleCount = getPendingStaffScheduleCount()
-  const v2TabTitle = {
-    dashboard: 'Dashboard',
-    customers: 'Customers',
-    sunbeds: 'Sunbeds',
-    spraytan: 'Spray Tans',
-    products: 'Products',
-    cashup: 'Till / Cash Up',
-    reports: 'Reports',
-    staffcalendar: 'Staff Calendar',
-    manager: 'Manager'
-  }[v2ActiveTab] || 'Dashboard'
-
-  function openV2Tab(tab) {
-    setV2ActiveTab(tab)
-    if (tab === 'sunbeds' || tab === 'dashboard') setDashboardView('sunbeds')
-    if (tab === 'spraytan') setDashboardView('spraytan')
-    if (tab === 'customers') setShowCustomerManagement(true)
-    if (tab === 'cashup') setCollapseCashUp(false)
-    if (tab === 'staffcalendar') setCollapseStaffCalendar(false)
-    if (tab === 'products') {
-      if (!showManagerView) openManagerView()
-      openManagerSection('products')
-    }
-    if (tab === 'reports') {
-      if (!showManagerView) openManagerView()
-      openManagerSection('reports')
-    }
-    if (tab === 'manager' && !showManagerView) openManagerView()
-  }
-
-  const renderV2SidebarButton = (tab, label, extra = '') => (
-    <button
-      type="button"
-      onClick={() => openV2Tab(tab)}
-      className={v2ActiveTab === tab ? 'v2-sidebar-tab active' : 'v2-sidebar-tab'}
-    >
-      {label}{extra}
-    </button>
-  )
 
   return (
     <div className="glow-app-shell" style={{ padding: '24px', background: '#050505', minHeight: '100vh', color: 'white' }}>
-      <aside className="v2-real-sidebar">
-        <div className="v2-real-logo">
-          <img src="/logo.png" alt="Glow Tanning" />
-        </div>
-        <div className="v2-real-clock">
-          <strong>{formatClock(currentTime)}</strong>
-          <span>{currentTime.toLocaleDateString('en-GB')}</span>
-        </div>
-        <nav className="v2-real-nav">
-          {renderV2SidebarButton('dashboard', 'Dashboard')}
-          {renderV2SidebarButton('customers', 'Customers')}
-          {renderV2SidebarButton('sunbeds', 'Sunbeds')}
-          {renderV2SidebarButton('spraytan', 'Spray Tans')}
-          {renderV2SidebarButton('products', 'Products')}
-          {renderV2SidebarButton('cashup', 'Till / Cash Up')}
-          {renderV2SidebarButton('reports', 'Reports')}
-          {currentStaffUser && renderV2SidebarButton('staffcalendar', 'Staff Calendar', pendingStaffScheduleCount > 0 ? ` • ${pendingStaffScheduleCount}` : '')}
-          {renderV2SidebarButton('manager', 'Manager')}
-        </nav>
-        <div className="v2-real-staff">
-          {currentStaffUser ? (
-            <>
-              <span>Signed in</span>
-              <strong>{currentStaffUser.name}</strong>
-              <button type="button" onClick={() => setStaffSelectorOpen(true)}>Switch User</button>
-            </>
-          ) : (
-            <button type="button" onClick={() => setStaffSelectorOpen(true)}>Staff Sign In</button>
-          )}
-          {showManagerView && <button type="button" onClick={lockManagerView}>Lock Manager</button>}
-        </div>
-      </aside>
-
-      <div className="v2-real-topbar">
-        <div>
-          <span>Glow V2</span>
-          <h1>{v2TabTitle}</h1>
-        </div>
-        <div className="v2-real-upcoming">
-          <strong>Upcoming within 20 minutes</strong>
-          {upcomingBookings.length === 0 ? <span>No bookings due.</span> : (
-            <div>
-              {upcomingBookings.map((booking) => (
-                <button key={booking.id} onClick={() => openBooking(booking)} style={{ background: getCalendarBookingColour(booking), color: 'white' }}>
-                  {isWixBooking(booking) ? 'Wix ' : ''}{new Date(booking.appointment_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} {booking.customer_name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="top-dashboard-header v2-sidebar" style={{ display: 'grid', gridTemplateColumns: '180px 1fr auto auto', gap: '16px', alignItems: 'center', marginBottom: '24px' }}>
+      <div className="top-dashboard-header" style={{ display: 'grid', gridTemplateColumns: '180px 1fr auto auto', gap: '16px', alignItems: 'center', marginBottom: '24px' }}>
         <div className="glow-header" style={{ margin: 0, justifyContent: 'flex-start' }}>
           <img src="/logo.png" alt="Glow Tanning" style={{ height: '90px', objectFit: 'contain', filter: 'drop-shadow(0 0 20px rgba(255,200,50,0.35))' }} />
         </div>
@@ -11501,34 +11409,32 @@ function formatMoney(value) {
         </div>
       )}
 
-      {v2ActiveTab === 'dashboard' && renderStaffOwnSchedulePanel()}
-      {v2ActiveTab === 'customers' && renderCustomerManagementPanel()}
-      {v2ActiveTab === 'cashup' && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
-      {v2ActiveTab === 'staffcalendar' && renderStaffCalendarPanel()}
+      {renderStaffOwnSchedulePanel()}
+      {showCustomerManagement && renderCustomerManagementPanel()}
+      {!collapseCashUp && <div id="cash-up-panel">{renderCashUpPanel()}</div>}
+      {renderStaffCalendarPanel()}
       {renderStaffScheduleModal()}
-      {v2ActiveTab === 'products' && showManagerView && renderProductsManagementPanel()}
-      {v2ActiveTab === 'reports' && showManagerView && renderManagerReportsPanel()}
-      {v2ActiveTab === 'manager' && renderManagerSectionNav()}
-      {['products', 'reports', 'manager'].includes(v2ActiveTab) && !showManagerView && (
-        <div className="v2-manager-locked-panel">
-          Manager View is locked. Enter manager PIN 3090 to open this section.
-        </div>
-      )}
-      {v2ActiveTab === 'manager' && showManagerView && renderStaffManagementPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderMaintenancePanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderProductsManagementPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderPromosPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderCorrectionsPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderWixBookingSyncPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderReceiptHistoryPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderExportsPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderDailyTakingsPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderManagerReportsPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderCommissionSettingsPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderLoyaltyRewardsPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderDuplicateCustomersReportPanel()}
+      {renderManagerSectionNav()}
+      {showManagerView && renderStaffManagementPanel()}
+      {showManagerView && renderMaintenancePanel()}
+      {showManagerView && renderProductsManagementPanel()}
+      {showManagerView && renderPromosPanel()}
+      {showManagerView && renderCorrectionsPanel()}
+      {showManagerView && renderWixBookingSyncPanel()}
+      {showManagerView && renderReceiptHistoryPanel()}
+      {showManagerView && renderExportsPanel()}
+      {showManagerView && renderDailyTakingsPanel()}
+      {showManagerView && renderManagerReportsPanel()}
+      {showManagerView && renderCommissionSettingsPanel()}
+      {showManagerView && renderLoyaltyRewardsPanel()}
+      {showManagerView && renderDuplicateCustomersReportPanel()}
 
-      {(v2ActiveTab === 'dashboard' || v2ActiveTab === 'sunbeds') && (
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '18px' }}>
+        <button onClick={() => setDashboardView('sunbeds')} style={{ background: dashboardView === 'sunbeds' ? '#d4a853' : '#111', color: dashboardView === 'sunbeds' ? '#050505' : 'white' }}>Sunbeds</button>
+        <button onClick={() => setDashboardView('spraytan')} style={{ background: dashboardView === 'spraytan' ? '#d4a853' : '#111', color: dashboardView === 'spraytan' ? '#050505' : 'white' }}>Spray Tans</button>
+      </div>
+
+      {dashboardView === 'sunbeds' && (
         <>
       <h2 style={{ textAlign: 'center' }}>Sunbeds</h2>
 
@@ -11633,7 +11539,7 @@ function formatMoney(value) {
         </>
       )}
 
-      {v2ActiveTab === 'spraytan' && renderManualSprayTanCalendarView()}
+      {dashboardView === 'spraytan' && renderManualSprayTanCalendarView()}
       {renderSprayTanBookingModal()}
 
       {modalOpen && (
