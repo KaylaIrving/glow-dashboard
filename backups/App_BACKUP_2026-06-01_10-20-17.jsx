@@ -8322,13 +8322,21 @@ function formatMoney(value) {
     return (
       <label style={{ display: 'grid', gap: '5px', marginBottom: '12px' }}>
         Minutes
-        <select
+        <input
+          type="number"
+          list="sunbed-minute-options"
+          min="2"
+          max="20"
+          step="1"
+          placeholder="Choose 2-20 mins"
           value={selectedMinutes}
           onChange={(event) => setSelectedMinutes(event.target.value)}
           style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
-        >
+        />
+        <datalist id="sunbed-minute-options">
           {COMMON_BOOKING_MINUTES.map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
-        </select>
+        </datalist>
+        <small style={{ color: '#aaa' }}>Choose a minute value from 2 to 20.</small>
       </label>
     )
   }
