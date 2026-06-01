@@ -4429,8 +4429,10 @@ function formatMoney(value) {
     if (!booking?.appointment_time) return null
     const appointmentStart = new Date(booking.appointment_time)
     if (Number.isNaN(appointmentStart.getTime())) return null
+    const liveEnd = booking.booking_end ? new Date(booking.booking_end) : null
     const plannedEnd = new Date(appointmentStart.getTime() + getTotalBlockMinutes(booking) * 60000)
-    return { start: appointmentStart, end: plannedEnd }
+    const end = liveEnd && !Number.isNaN(liveEnd.getTime()) && liveEnd > plannedEnd ? liveEnd : plannedEnd
+    return { start: appointmentStart, end }
   }
 
   function getCalendarDisplayStartTimeString(booking) {
@@ -8319,24 +8321,32 @@ function formatMoney(value) {
   }
 
   function renderBookingMinutesControl() {
+    const commonValue = COMMON_BOOKING_MINUTES.includes(Number(selectedMinutes)) ? String(Number(selectedMinutes)) : ''
+
     return (
       <label style={{ display: 'grid', gap: '5px', marginBottom: '12px' }}>
         Minutes
-        <input
-          type="number"
-          list="sunbed-minute-options"
-          min="2"
-          max="20"
-          step="1"
-          placeholder="Choose 2-20 mins"
-          value={selectedMinutes}
-          onChange={(event) => setSelectedMinutes(event.target.value)}
-          style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
-        />
-        <datalist id="sunbed-minute-options">
-          {COMMON_BOOKING_MINUTES.map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
-        </datalist>
-        <small style={{ color: '#aaa' }}>Choose a minute value from 2 to 20.</small>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+          <select
+            value={commonValue}
+            onChange={(event) => setSelectedMinutes(event.target.value)}
+            style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
+          >
+            <option value="">Type custom</option>
+            {COMMON_BOOKING_MINUTES.map((minute) => <option key={minute} value={minute}>{minute} mins</option>)}
+          </select>
+          <input
+            type="number"
+            min="2"
+            max="20"
+            step="1"
+            placeholder="2-20"
+            value={selectedMinutes}
+            onChange={(event) => setSelectedMinutes(event.target.value)}
+            style={{ width: '100%', padding: '12px', boxSizing: 'border-box' }}
+          />
+        </div>
+        <small style={{ color: '#aaa' }}>Select a common time or type any value from 2 to 20 minutes.</small>
       </label>
     )
   }
