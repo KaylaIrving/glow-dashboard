@@ -272,7 +272,7 @@ function App() {
   const [customerBookingsHistory, setCustomerBookingsHistory] = useState([])
   const [customerProductSalesHistory, setCustomerProductSalesHistory] = useState([])
   const [customerMinuteExpiries, setCustomerMinuteExpiries] = useState([])
-  const [customerProfileTab, setCustomerProfileTab] = useState('details')
+  const [customerProfileTab, setCustomerProfileTab] = useState('summary')
   const [customerProfileBookingFilter, setCustomerProfileBookingFilter] = useState('all')
   const [customerProfileNotes, setCustomerProfileNotes] = useState([])
   const [customerProfileNoteText, setCustomerProfileNoteText] = useState('')
@@ -5155,6 +5155,7 @@ function formatMoney(value) {
   async function runWixBookingSync({ automatic = false } = {}) {
     if (!automatic) {
       if (!requireStaffSignIn()) return
+      if (!requireManagerAccess('Manager PIN required to sync Wix bookings:')) return
     }
 
     if (!wixSyncEndpoint) {
@@ -8795,13 +8796,13 @@ function formatMoney(value) {
   function renderCustomerProfilePanel(customer) {
     if (!customer) return null
     const tabs = [
-      ['details', 'Details'],
-      ['balances', 'Minutes / Packages'],
-      ['booking_history', 'Bookings'],
-      ['purchases', 'Purchases / Payments'],
-      ['spray_tans', 'Spray Tans / Patch Tests'],
-      ['notes', 'Notes / Logs'],
-      ['registration', 'Forms / Terms']
+      ['summary', 'Summary'],
+      ['balances', 'Balances'],
+      ['booking_history', 'Booking History'],
+      ['purchases', 'Purchases'],
+      ['spray_tans', 'Spray Tans'],
+      ['registration', 'Registration'],
+      ['notes', 'Notes']
     ]
     const splitName = splitCustomerName(customer)
     const stats = getCustomerProfileStats(customer)
@@ -8904,7 +8905,7 @@ function formatMoney(value) {
           ))}
         </div>
 
-        {customerProfileTab === 'details' && (
+        {customerProfileTab === 'summary' && (
           <div style={{ ...panelStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
             <p><strong>First Name:</strong><br />{customer.first_name || splitName.firstName || '-'}</p>
             <p><strong>Last Name:</strong><br />{customer.last_name || splitName.lastName || '-'}</p>
@@ -9284,8 +9285,6 @@ function formatMoney(value) {
           <div>
             {renderCustomerProfilePanel(selectedCustomer)}
 
-            {customerProfileTab === 'details' && (
-              <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '15px' }}>
               <div><label>First name</label><input value={managerFirstName} onChange={(e) => setManagerFirstName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
               <div><label>Last name</label><input value={managerLastName} onChange={(e) => setManagerLastName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
@@ -9364,11 +9363,7 @@ function formatMoney(value) {
               <button onClick={deactivateManagedCustomer}>Deactivate Customer</button>
               <button onClick={openMinuteCorrection}>Correct Minutes</button>
             </div>
-              </>
-            )}
 
-            {customerProfileTab === 'balances' && (
-              <>
             {showMinuteCorrection && (
               <div style={{ background: '#111', border: '1px solid #333', borderRadius: '14px', padding: '15px', marginBottom: '20px' }}>
                 <h3>Manager Minute Correction</h3>
@@ -9409,11 +9404,7 @@ function formatMoney(value) {
                 </div>
               ))}
             </div>
-              </>
-            )}
 
-            {customerProfileTab === 'purchases' && (
-              <>
             <div style={{ background: '#111', padding: '15px', borderRadius: '14px', border: '1px solid #333', maxHeight: '320px', overflowY: 'auto', marginBottom: '15px' }}>
               <h3 style={{ marginTop: 0 }}>Receipt History</h3>
               {customerReceipts.length === 0 ? <p style={{ color: '#aaa' }}>No receipts found.</p> : customerReceipts.map((receipt) => renderReceiptSummary(receipt))}
@@ -9430,10 +9421,6 @@ function formatMoney(value) {
                   </div>
                 ))}
               </div>
-            </div>
-              </>
-            )}
-            {customerProfileTab === 'notes' && (
               <div style={{ background: '#111', padding: '15px', borderRadius: '14px', border: '1px solid #333', maxHeight: '420px', overflowY: 'auto' }}>
                 <h3 style={{ marginTop: 0 }}>Customer Logs</h3>
                 {customerLogs.length === 0 ? <p style={{ color: '#aaa' }}>No logs found.</p> : customerLogs.map((log) => (
@@ -9444,7 +9431,7 @@ function formatMoney(value) {
                   </div>
                 ))}
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>
