@@ -408,14 +408,6 @@ function App() {
   const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const [wixSyncStatus, setWixSyncStatus] = useState('Not run yet')
-  const [wixSyncHealth, setWixSyncHealth] = useState(() => {
-    if (typeof window === 'undefined') return { state: 'never', lastSyncAt: '', error: '' }
-    try {
-      return JSON.parse(window.localStorage.getItem('glow_wix_sync_health') || '') || { state: 'never', lastSyncAt: '', error: '' }
-    } catch {
-      return { state: 'never', lastSyncAt: '', error: '' }
-    }
-  })
   const [wixImportedCount, setWixImportedCount] = useState(0)
   const [wixFailedCount, setWixFailedCount] = useState(0)
   const [wixSyncRunning, setWixSyncRunning] = useState(false)
@@ -5123,35 +5115,6 @@ function formatMoney(value) {
     }
   }
 
-  function updateWixSyncHealth(nextHealth) {
-    const merged = { ...wixSyncHealth, ...nextHealth }
-    setWixSyncHealth(merged)
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('glow_wix_sync_health', JSON.stringify(merged))
-    }
-  }
-
-  function getWixSyncHealthDisplay() {
-    if (!wixSyncHealth?.lastSyncAt) {
-      if (wixSyncHealth?.state === 'failed') return { icon: '🔴', text: 'Sync Failed', detail: wixSyncHealth.error || 'Sync failed - check connection', className: 'failed' }
-      return { icon: '⚪', text: 'Never Synced', detail: '', className: 'never' }
-    }
-
-    const lastSyncDate = new Date(wixSyncHealth.lastSyncAt)
-    const minutesAgo = Math.max(0, Math.round((currentTime - lastSyncDate) / 60000))
-    const lastSyncTime = lastSyncDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-
-    if (wixSyncHealth.state === 'failed') {
-      return { icon: '🔴', text: 'Sync Failed', detail: wixSyncHealth.error || 'Sync failed - check connection', className: 'failed' }
-    }
-
-    if (minutesAgo <= 10) {
-      return { icon: '🟢', text: 'Wix Connected', detail: `Last sync: ${lastSyncTime}`, className: 'connected' }
-    }
-
-    return { icon: '🟡', text: 'Sync Pending', detail: `Last sync ${minutesAgo} mins ago`, className: 'pending' }
-  }
-
   async function runWixBookingSync({ automatic = false } = {}) {
     if (!automatic) {
       if (!requireStaffSignIn()) return
@@ -5160,7 +5123,6 @@ function formatMoney(value) {
 
     if (!wixSyncEndpoint) {
       setWixSyncStatus('Wix API connection pending. Add VITE_WIX_SYNC_ENDPOINT and Wix credentials in Vercel to enable live sync.')
-      updateWixSyncHealth({ state: 'failed', error: 'Sync failed - check connection' })
       setWixImportedCount(0)
       setWixFailedCount(0)
       return
@@ -5192,7 +5154,6 @@ function formatMoney(value) {
       setWixImportedCount(imported)
       setWixFailedCount(failed)
       setWixSyncStatus(`Wix sync complete: ${imported} imported/updated, ${failed} failed.`)
-      updateWixSyncHealth({ state: failed > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: failed > 0 ? `${failed} booking(s) failed` : '' })
       if (imported > 0) {
         await getBookings()
         await getCustomers()
@@ -5200,7 +5161,6 @@ function formatMoney(value) {
     } catch (error) {
       setWixFailedCount((count) => count + 1)
       setWixSyncStatus(error.message || 'Wix sync failed.')
-      updateWixSyncHealth({ state: 'failed', lastSyncAt: new Date().toISOString(), error: 'Sync failed - check connection' })
       if (!automatic) showDataLoadWarning('Wix booking sync failed. Check Vercel API route and credentials.', error)
       console.error('Wix booking sync failed:', error)
     } finally {
@@ -11517,7 +11477,6 @@ function formatMoney(value) {
   const modalStartBlocked = modalBooking ? isStartBlockedByLiveSession(modalBooking) : false
   const selectedDateShopClosures = getShopClosuresForSelectedDate()
   const pendingStaffScheduleCount = getPendingStaffScheduleCount()
-  const wixHealthDisplay = getWixSyncHealthDisplay()
   const v2TabTitle = {
     customers: 'Customers',
     sunbeds: 'Sunbeds',
@@ -11584,29 +11543,6 @@ function formatMoney(value) {
             <button type="button" onClick={() => setStaffSelectorOpen(true)}>Staff Sign In</button>
           )}
           {showManagerView && <button type="button" onClick={lockManagerView}>Lock Manager</button>}
-          <div className="v2-sidebar-control-row">
-            <button
-              type="button"
-              className="v2-sidebar-sync-button"
-              title="Sync Wix Bookings"
-              onClick={() => runWixBookingSync()}
-              disabled={wixSyncRunning}
-            >
-              🔄 Sync
-            </button>
-            <button
-              type="button"
-              className="v2-sidebar-stop-button"
-              title="Emergency Stop All Beds"
-              onClick={emergencyStopAllBeds}
-            >
-              ⏹ Stop
-            </button>
-          </div>
-          <div className={`v2-wix-status ${wixHealthDisplay.className}`}>
-            <strong>{wixHealthDisplay.icon} {wixHealthDisplay.text}</strong>
-            {wixHealthDisplay.detail && <span>{wixHealthDisplay.detail}</span>}
-          </div>
         </div>
       </aside>
 
@@ -11730,7 +11666,18 @@ function formatMoney(value) {
 
       {v2ActiveTab === 'sunbeds' && (
         <>
-      <h2 style={{ textAlign: 'center' }}>Sunbeds</h2>
+      <div className="v2-sunbed-action-bar">
+        <h2>Sunbeds</h2>
+        <div>
+          <button type="button" onClick={() => runWixBookingSync()} disabled={wixSyncRunning}>
+            {wixSyncRunning ? 'Syncing Wix...' : 'Sync Wix Bookings'}
+          </button>
+          <button type="button" className="emergency-stop-button" onClick={emergencyStopAllBeds}>
+            Emergency Stop All Beds
+          </button>
+        </div>
+        <p>{wixSyncStatus}</p>
+      </div>
 
       <div className="sunbeds-grid premium-sunbeds-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
         {beds.map((bed) => {
