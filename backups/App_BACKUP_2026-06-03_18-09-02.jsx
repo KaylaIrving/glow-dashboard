@@ -36,17 +36,6 @@ const MANAGER_REPORT_TYPES = [
 // '10 minute sunbed bed 1': { bedId: 1, minutes: 10 }
 // Keep empty for now so Wix cannot silently guess the wrong bed/minutes.
 const WIX_SERVICE_BOOKING_MAP = {}
-const WIX_LIVE_SERVICE_DEFAULTS = {
-  'hybrid tanning lay down sunbed': { service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  "stand up 'tone & tan' sunbed": { service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  'prestige tanning lay down sunbed': { service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  'full body spray tan': { service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Full Body', default_status: 'pending' },
-  'express full body spray tan': { service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Express Tan', default_status: 'pending' },
-  'legs only spray tan': { service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Legs Only', default_status: 'pending' },
-  'upper body & face spray tan': { service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Upper Body & Face', default_status: 'pending' },
-  'face & neck spray tan': { service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Face & Neck', default_status: 'pending' },
-  'spray tan patch test': { service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: 'Patch Test', default_status: 'pending' }
-}
 
 const SPRAY_TAN_SERVICES = [
   { name: 'Full Body', price: 30 },
@@ -4922,7 +4911,7 @@ function formatMoney(value) {
   }
 
   function normalizeWixServiceKey(serviceName) {
-    return String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
+    return String(serviceName || '').trim().toLowerCase()
   }
 
   function getWixBookingServiceName(wixBookingPayload) {
@@ -4952,21 +4941,15 @@ function formatMoney(value) {
     return (mappings || []).find((mapping) => normalizeWixServiceKey(mapping.wix_service_name) === serviceKey && mapping.is_active !== false) || null
   }
 
-  function getAnyWixMappingForService(serviceName, mappings = wixServiceMappings) {
-    const serviceKey = normalizeWixServiceKey(serviceName)
-    return (mappings || []).find((mapping) => normalizeWixServiceKey(mapping.wix_service_name) === serviceKey) || null
-  }
-
   function getWixMappingDraft(serviceName) {
-    const saved = getAnyWixMappingForService(serviceName)
-    const liveDefault = WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(serviceName)] || {}
+    const saved = getSavedWixMappingForService(serviceName)
     const draft = wixServiceMappingDrafts[serviceName] || {}
     return {
-      service_type: saved?.glow_service_type || liveDefault.service_type || 'sunbed',
-      bed_id: saved?.bed_id || liveDefault.bed_id || '',
-      minutes: saved?.minutes || liveDefault.minutes || 15,
-      spraytan_service: saved?.spraytan_service || liveDefault.spraytan_service || 'Full Body',
-      default_status: saved?.default_status || liveDefault.default_status || (saved?.glow_service_type === 'spraytan' ? 'pending' : 'booked'),
+      service_type: saved?.glow_service_type || 'sunbed',
+      bed_id: saved?.bed_id || beds[0]?.id || '',
+      minutes: saved?.minutes || 12,
+      spraytan_service: saved?.spraytan_service || 'Full Body',
+      default_status: saved?.default_status || (saved?.glow_service_type === 'spraytan' ? 'pending' : 'booked'),
       ...draft
     }
   }
@@ -4983,13 +4966,13 @@ function formatMoney(value) {
 
   function applyWixServiceMapping(wixBookingPayload, mappings = wixServiceMappings) {
     const serviceName = getWixBookingServiceName(wixBookingPayload)
-    const mapping = getAnyWixMappingForService(serviceName, mappings)
+    const mapping = getSavedWixMappingForService(serviceName, mappings)
 
     if (!mapping) {
       throw new Error(`Wix service "${serviceName || 'Unknown service'}" needs mapping in Manager > Integrations > Wix > Service Booking Map.`)
     }
 
-    if (mapping.glow_service_type === 'ignore' || mapping.is_active === false) return null
+    if (mapping.glow_service_type === 'ignore') return null
 
     const defaultApproval = mapping.default_status === 'pending' ? 'pending' : 'approved'
     if (mapping.glow_service_type === 'sunbed') {
@@ -4998,7 +4981,6 @@ function formatMoney(value) {
         booking_type: 'sunbed',
         bed_id: Number(mapping.bed_id),
         minutes: Number(mapping.minutes || 0),
-        wix_service_name: serviceName,
         approval_status: defaultApproval
       }
     }
@@ -5012,7 +4994,6 @@ function formatMoney(value) {
       service_name: sprayService,
       wix_service_name: serviceName,
       approval_status: defaultApproval,
-      spraytan_duration_minutes: Number(mapping.minutes || wixBookingPayload.spraytan_duration_minutes || (mapping.glow_service_type === 'patch_test' ? 10 : 30)),
       patch_test_required: mapping.glow_service_type === 'spraytan',
       patch_test_completed: false
     }
@@ -10517,28 +10498,25 @@ function formatMoney(value) {
     )
   }
 
-  async function saveWixServiceMapping(serviceName, { archive = false } = {}) {
+  async function saveWixServiceMapping(serviceName) {
     if (!requireManagerAccess('Manager PIN required to save Wix service mapping:')) return
     const draft = getWixMappingDraft(serviceName)
     setWixServiceMappingSaving(true)
 
     const payload = {
       wix_service_name: serviceName,
-      glow_service_type: archive ? 'ignore' : draft.service_type,
-      bed_id: !archive && draft.service_type === 'sunbed' ? Number(draft.bed_id || 0) : null,
-      minutes: !archive && ['sunbed', 'spraytan', 'patch_test'].includes(draft.service_type) ? Number(draft.minutes || 0) : null,
-      spraytan_service: !archive && ['spraytan', 'patch_test'].includes(draft.service_type) ? (draft.service_type === 'patch_test' ? 'Patch Test' : draft.spraytan_service) : null,
-      default_status: archive ? 'ignored' : draft.default_status,
-      is_active: !archive,
-      notes: archive ? 'Archived/ignored from Glow manager service map.' : null,
+      glow_service_type: draft.service_type,
+      bed_id: draft.service_type === 'sunbed' ? Number(draft.bed_id || 0) : null,
+      minutes: draft.service_type === 'sunbed' ? Number(draft.minutes || 0) : null,
+      spraytan_service: ['spraytan', 'patch_test'].includes(draft.service_type) ? (draft.service_type === 'patch_test' ? 'Patch Test' : draft.spraytan_service) : null,
+      default_status: draft.default_status,
+      is_active: true,
       updated_at: new Date().toISOString()
     }
 
-    const existingMapping = getAnyWixMappingForService(serviceName)
-    const saveQuery = existingMapping?.id
-      ? supabase.from('wix_service_booking_map').update(payload).eq('id', existingMapping.id)
-      : supabase.from('wix_service_booking_map').insert(payload)
-    const { error } = await saveQuery
+    const { error } = await supabase
+      .from('wix_service_booking_map')
+      .upsert(payload, { onConflict: 'wix_service_name' })
 
     setWixServiceMappingSaving(false)
     if (error) {
@@ -10547,7 +10525,7 @@ function formatMoney(value) {
       return
     }
 
-    showToast(archive ? `Archived Wix service ${serviceName}.` : `Saved Wix mapping for ${serviceName}.`, 'success')
+    showToast(`Saved Wix mapping for ${serviceName}.`, 'success')
     await getWixServiceBookingMappings()
   }
 
@@ -10560,16 +10538,8 @@ function formatMoney(value) {
         .map((error) => error.serviceName || '')
         .filter(Boolean)
       : []
-    const mappedServices = wixServiceMappings.filter((mapping) => mapping.is_active !== false).map((mapping) => mapping.wix_service_name).filter(Boolean)
-    const serviceMap = new Map()
-    ;[...diagnosticServices, ...failedServices, ...mappedServices].filter(Boolean).forEach((service) => {
-      const trimmed = String(service).trim().replace(/\s+/g, ' ')
-      const key = normalizeWixServiceKey(trimmed)
-      const archived = getAnyWixMappingForService(trimmed)?.is_active === false
-      if (!key || archived) return
-      if (!serviceMap.has(key)) serviceMap.set(key, trimmed)
-    })
-    return [...serviceMap.values()].sort((a, b) => a.localeCompare(b))
+    const mappedServices = wixServiceMappings.map((mapping) => mapping.wix_service_name).filter(Boolean)
+    return [...new Set([...diagnosticServices, ...failedServices, ...mappedServices].filter(Boolean))].sort((a, b) => a.localeCompare(b))
   }
 
   function renderWixBookingSyncPanel() {
@@ -10578,17 +10548,6 @@ function formatMoney(value) {
     const syncErrors = Array.isArray(diagnostics.errors) ? diagnostics.errors : []
     const endpointErrors = Array.isArray(diagnostics.endpointErrors) ? diagnostics.endpointErrors : []
     const wixServicesForMapping = getWixServicesForMapping()
-    const liveServiceKeys = Object.keys(WIX_LIVE_SERVICE_DEFAULTS)
-    const liveServicesMapped = liveServiceKeys.filter((serviceKey) => {
-      const mapping = getAnyWixMappingForService(serviceKey)
-      return mapping && mapping.is_active !== false
-    }).length
-    const oldOrUnmappedServices = wixServicesForMapping.filter((serviceName) => {
-      const key = normalizeWixServiceKey(serviceName)
-      return !liveServiceKeys.includes(key) || !getAnyWixMappingForService(serviceName)
-    })
-    const mappingFailureErrors = syncErrors.filter((error) => String(error.message || '').toLowerCase().includes('needs mapping'))
-    const oldServiceMappingFailures = mappingFailureErrors.filter((error) => error.serviceName && !liveServiceKeys.includes(normalizeWixServiceKey(error.serviceName)))
 
     return renderCollapsibleSection(
       'Wix Booking Sync',
@@ -10614,18 +10573,6 @@ function formatMoney(value) {
           <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
             <span>Records failed</span>
             <h3 style={{ marginBottom: 0 }}>{wixFailedCount}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Current live services mapped</span>
-            <h3 style={{ marginBottom: 0 }}>{liveServicesMapped} / {liveServiceKeys.length}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Old/unmapped services</span>
-            <h3 style={{ marginBottom: 0 }}>{oldOrUnmappedServices.length}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Bookings failed from old names</span>
-            <h3 style={{ marginBottom: 0 }}>{oldServiceMappingFailures.length}</h3>
           </div>
         </div>
 
@@ -10658,7 +10605,7 @@ function formatMoney(value) {
                 const draft = getWixMappingDraft(serviceName)
                 const needsMapping = !saved
                 return (
-                  <div key={serviceName} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) repeat(5, minmax(130px, 1fr)) minmax(130px, auto)', gap: '8px', alignItems: 'end', padding: '10px', border: `1px solid ${needsMapping ? 'rgba(255,204,102,0.55)' : '#2f2a20'}`, background: needsMapping ? '#1c170c' : '#0b0b0b', overflowX: 'auto' }}>
+                  <div key={serviceName} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) repeat(5, minmax(130px, 1fr)) auto', gap: '8px', alignItems: 'end', padding: '10px', border: `1px solid ${needsMapping ? 'rgba(255,204,102,0.55)' : '#2f2a20'}`, background: needsMapping ? '#1c170c' : '#0b0b0b', overflowX: 'auto' }}>
                     <div>
                       <strong>{serviceName}</strong>
                       <br />
@@ -10670,7 +10617,7 @@ function formatMoney(value) {
                         <option value="sunbed">Sunbed</option>
                         <option value="spraytan">Spray Tan</option>
                         <option value="patch_test">Patch Test</option>
-                        <option value="ignore">Ignore / Archive old Wix service</option>
+                        <option value="ignore">Ignore</option>
                       </select>
                     </label>
                     <label style={{ display: 'grid', gap: '4px' }}>
@@ -10680,8 +10627,8 @@ function formatMoney(value) {
                       </select>
                     </label>
                     <label style={{ display: 'grid', gap: '4px' }}>
-                      Minutes / duration
-                      <select value={draft.minutes} disabled={draft.service_type === 'ignore'} onChange={(e) => updateWixMappingDraft(serviceName, 'minutes', e.target.value)} style={{ padding: '8px' }}>
+                      Minutes
+                      <select value={draft.minutes} disabled={draft.service_type !== 'sunbed'} onChange={(e) => updateWixMappingDraft(serviceName, 'minutes', e.target.value)} style={{ padding: '8px' }}>
                         {COMMON_BOOKING_MINUTES.map((minute) => <option key={minute} value={minute}>{minute}</option>)}
                       </select>
                     </label>
@@ -10698,14 +10645,9 @@ function formatMoney(value) {
                         <option value="pending">Pending Approval</option>
                       </select>
                     </label>
-                    <div style={{ display: 'grid', gap: '6px' }}>
-                      <button type="button" onClick={() => saveWixServiceMapping(serviceName, { archive: draft.service_type === 'ignore' })} disabled={wixServiceMappingSaving}>
-                        {wixServiceMappingSaving ? 'Saving...' : 'Save'}
-                      </button>
-                      <button type="button" onClick={() => saveWixServiceMapping(serviceName, { archive: true })} disabled={wixServiceMappingSaving} style={{ padding: '7px 9px', fontSize: '12px', borderColor: 'rgba(255,204,102,0.35)' }}>
-                        Archive / Ignore
-                      </button>
-                    </div>
+                    <button type="button" onClick={() => saveWixServiceMapping(serviceName)} disabled={wixServiceMappingSaving}>
+                      {wixServiceMappingSaving ? 'Saving...' : 'Save'}
+                    </button>
                   </div>
                 )
               })}

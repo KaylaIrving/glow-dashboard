@@ -5,6 +5,20 @@ function firstValue(...values) {
   return values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || ''
 }
 
+function normalizeServiceKey(serviceName) {
+  return String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function uniqueServiceNames(serviceNames) {
+  const services = new Map()
+  serviceNames.filter(Boolean).forEach((serviceName) => {
+    const trimmed = String(serviceName).trim().replace(/\s+/g, ' ')
+    const key = normalizeServiceKey(trimmed)
+    if (key && !services.has(key)) services.set(key, trimmed)
+  })
+  return [...services.values()].sort((a, b) => a.localeCompare(b))
+}
+
 function normalizeDate(value) {
   if (!value) return null
   const date = new Date(value)
@@ -148,7 +162,7 @@ export default async function handler(req, res) {
     const bookingsData = await wixFetch(WIX_BOOKINGS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
     const wixBookings = bookingsData.bookings || bookingsData.items || []
     bookings = wixBookings.map(normalizeBooking).filter((booking) => booking.wix_booking_id)
-    services = [...new Set(bookings.map((booking) => booking.wix_service_name || booking.service_name).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+    services = uniqueServiceNames(bookings.map((booking) => booking.wix_service_name || booking.service_name))
   } catch (error) {
     errors.push(`Bookings: ${error.message}`)
   }
