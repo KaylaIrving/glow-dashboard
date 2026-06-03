@@ -1235,34 +1235,6 @@ button,
   border-color: rgba(255, 120, 117, 0.48);
 }
 
-.glow-toast {
-  position: fixed;
-  right: 22px;
-  bottom: 22px;
-  z-index: 1400;
-  max-width: min(360px, calc(100vw - 44px));
-  padding: 12px 14px;
-  border: 1px solid rgba(212, 168, 83, 0.45);
-  background: rgba(9, 9, 9, 0.96);
-  color: #f5f0e8;
-  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.44);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.glow-toast.success {
-  border-color: rgba(74, 146, 96, 0.6);
-}
-
-.glow-toast.warning {
-  border-color: rgba(212, 168, 83, 0.68);
-}
-
-.glow-toast.error {
-  border-color: rgba(255, 120, 117, 0.68);
-  color: #ffb3ad;
-}
-
 .v2-real-topbar {
   margin-bottom: 12px;
   display: grid;

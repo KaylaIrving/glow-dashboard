@@ -272,7 +272,7 @@ function App() {
   const [customerBookingsHistory, setCustomerBookingsHistory] = useState([])
   const [customerProductSalesHistory, setCustomerProductSalesHistory] = useState([])
   const [customerMinuteExpiries, setCustomerMinuteExpiries] = useState([])
-  const [customerProfileTab, setCustomerProfileTab] = useState('overview')
+  const [customerProfileTab, setCustomerProfileTab] = useState('details')
   const [customerProfileBookingFilter, setCustomerProfileBookingFilter] = useState('all')
   const [customerProfileNotes, setCustomerProfileNotes] = useState([])
   const [customerProfileNoteText, setCustomerProfileNoteText] = useState('')
@@ -419,8 +419,7 @@ function App() {
   const [wixImportedCount, setWixImportedCount] = useState(0)
   const [wixFailedCount, setWixFailedCount] = useState(0)
   const [wixSyncRunning, setWixSyncRunning] = useState(false)
-  const [toastMessage, setToastMessage] = useState(null)
-  const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
+  const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || ''
   const [managerReceipts, setManagerReceipts] = useState([])
   const [receiptSearchDate, setReceiptSearchDate] = useState(formatLocalDate(new Date()))
   const [receiptSearchCustomer, setReceiptSearchCustomer] = useState('')
@@ -4932,20 +4931,10 @@ function formatMoney(value) {
   }
 
   async function findOrCreateWixCustomer(wixBookingPayload) {
-    const wixFirstName = wixBookingPayload.first_name || wixBookingPayload.wix_customer_first_name || ''
-    const wixLastName = wixBookingPayload.last_name || wixBookingPayload.wix_customer_last_name || ''
-    const wixCustomerName = wixBookingPayload.customer_name || wixBookingPayload.wix_customer_name || wixBookingPayload.name || `${wixFirstName} ${wixLastName}`.trim() || 'Wix Customer'
+    const wixCustomerName = wixBookingPayload.customer_name || wixBookingPayload.wix_customer_name || wixBookingPayload.name || 'Wix Customer'
     const wixCustomerEmail = wixBookingPayload.customer_email || wixBookingPayload.wix_customer_email || wixBookingPayload.email || null
-    const wixCustomerPhone = wixBookingPayload.customer_phone || wixBookingPayload.wix_customer_phone || wixBookingPayload.phone || wixBookingPayload.mobile || null
+    const wixCustomerPhone = wixBookingPayload.customer_phone || wixBookingPayload.wix_customer_phone || wixBookingPayload.phone || null
     const wixContactId = wixBookingPayload.wix_contact_id || wixBookingPayload.contact_id || null
-    const wixAddress = wixBookingPayload.address || wixBookingPayload.wix_customer_address || ''
-    const wixDateOfBirth = wixBookingPayload.date_of_birth || wixBookingPayload.dob || ''
-    const wixNotes = [
-      wixBookingPayload.customer_notes,
-      wixBookingPayload.registration_answers ? `Registration: ${wixBookingPayload.registration_answers}` : '',
-      wixBookingPayload.consultation_answers ? `Consultation: ${wixBookingPayload.consultation_answers}` : ''
-    ].filter(Boolean).join('\n')
-    const wixHealthNotes = wixBookingPayload.medical_questionnaire_answers || wixBookingPayload.medical_answers || ''
     const duplicateFilters = []
 
     if (wixContactId) duplicateFilters.push(`wix_contact_id.eq.${wixContactId}`)
@@ -4964,14 +4953,8 @@ function formatMoney(value) {
         const existingCustomer = existingCustomers[0]
         const safeUpdates = {}
         if (wixCustomerName && (!existingCustomer.name || existingCustomer.customer_source === 'wix')) safeUpdates.name = wixCustomerName
-        if (wixFirstName && !existingCustomer.first_name) safeUpdates.first_name = wixFirstName
-        if (wixLastName && !existingCustomer.last_name) safeUpdates.last_name = wixLastName
         if (wixCustomerPhone && !existingCustomer.phone) safeUpdates.phone = wixCustomerPhone
         if (wixCustomerEmail && !existingCustomer.email) safeUpdates.email = wixCustomerEmail
-        if (wixAddress && !existingCustomer.address) safeUpdates.address = wixAddress
-        if (wixDateOfBirth && !existingCustomer.date_of_birth) safeUpdates.date_of_birth = wixDateOfBirth
-        if (wixNotes && !existingCustomer.notes) safeUpdates.notes = wixNotes
-        if (wixHealthNotes && !existingCustomer.health_notes) safeUpdates.health_notes = wixHealthNotes
         if (wixContactId && !existingCustomer.wix_contact_id) safeUpdates.wix_contact_id = wixContactId
         if (!existingCustomer.customer_source) safeUpdates.customer_source = 'wix'
         if (Object.keys(safeUpdates).length > 0) {
@@ -4991,14 +4974,8 @@ function formatMoney(value) {
       .from('Customers')
       .insert({
         name: wixCustomerName,
-        first_name: wixFirstName || null,
-        last_name: wixLastName || null,
         phone: wixCustomerPhone,
         email: wixCustomerEmail,
-        address: wixAddress || null,
-        date_of_birth: wixDateOfBirth || null,
-        notes: wixNotes || null,
-        health_notes: wixHealthNotes || null,
         wix_contact_id: wixContactId,
         customer_source: 'wix',
         minutes_balance: 0,
@@ -5022,19 +4999,6 @@ function formatMoney(value) {
       .maybeSingle()
     if (error) throw error
     return data || null
-  }
-
-  async function upsertWixCustomerRecord(wixCustomerPayload) {
-    // Wix customer/profile sync is normalized by /api/wix-sync so the client can safely
-    // upsert into the existing Customers table without exposing Wix credentials.
-    if (!wixCustomerPayload) return null
-    return findOrCreateWixCustomer({
-      ...wixCustomerPayload,
-      customer_name: wixCustomerPayload.customer_name || wixCustomerPayload.name || `${wixCustomerPayload.first_name || ''} ${wixCustomerPayload.last_name || ''}`.trim(),
-      customer_email: wixCustomerPayload.customer_email || wixCustomerPayload.email,
-      customer_phone: wixCustomerPayload.customer_phone || wixCustomerPayload.phone || wixCustomerPayload.mobile,
-      wix_contact_id: wixCustomerPayload.wix_contact_id || wixCustomerPayload.contact_id
-    })
   }
 
   function buildWixBookingPayload(wixBookingPayload, customer) {
@@ -5167,12 +5131,6 @@ function formatMoney(value) {
     }
   }
 
-  function showToast(message, type = 'success') {
-    setToastMessage({ message, type })
-    window.clearTimeout(window.glowToastTimer)
-    window.glowToastTimer = window.setTimeout(() => setToastMessage(null), 4200)
-  }
-
   function getWixSyncHealthDisplay() {
     if (!wixSyncHealth?.lastSyncAt) {
       if (wixSyncHealth?.state === 'failed') return { icon: '🔴', text: 'Sync Failed', detail: wixSyncHealth.error || 'Sync failed - check connection', className: 'failed' }
@@ -5213,23 +5171,12 @@ function formatMoney(value) {
     let failed = 0
 
     try {
-      // Vercel fetches Wix data server-side with WIX_API_KEY/WIX_SITE_ID, then returns
-      // normalized { customers: [...], bookings: [...] } for this dashboard to store.
+      // TODO Wix API/webhook: Vercel should fetch Wix bookings server-side, verify credentials,
+      // normalize bookings into the helper payload shape, then return { bookings: [...] } here.
       const response = await fetch(wixSyncEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       if (!response.ok) throw new Error(`Wix sync endpoint returned ${response.status}`)
       const payload = await response.json()
-      const wixCustomers = Array.isArray(payload?.customers) ? payload.customers : []
       const wixBookings = Array.isArray(payload?.bookings) ? payload.bookings : []
-
-      for (const wixCustomer of wixCustomers) {
-        try {
-          await upsertWixCustomerRecord(wixCustomer)
-          imported += 1
-        } catch (customerError) {
-          failed += 1
-          console.error('Wix customer sync failed for one customer:', { wixCustomer, customerError })
-        }
-      }
 
       for (const wixBooking of wixBookings) {
         try {
@@ -5243,20 +5190,17 @@ function formatMoney(value) {
 
       setWixImportedCount(imported)
       setWixFailedCount(failed)
-      const syncSummary = `Wix sync complete: ${imported} imported/updated, ${failed} failed.`
-      setWixSyncStatus(syncSummary)
-      updateWixSyncHealth({ state: failed > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: failed > 0 ? `${failed} record(s) failed` : '' })
+      setWixSyncStatus(`Wix sync complete: ${imported} imported/updated, ${failed} failed.`)
+      updateWixSyncHealth({ state: failed > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: failed > 0 ? `${failed} booking(s) failed` : '' })
       if (imported > 0) {
         await getBookings()
         await getCustomers()
       }
-      if (!automatic) showToast(syncSummary, failed > 0 ? 'warning' : 'success')
     } catch (error) {
       setWixFailedCount((count) => count + 1)
       setWixSyncStatus(error.message || 'Wix sync failed.')
       updateWixSyncHealth({ state: 'failed', lastSyncAt: new Date().toISOString(), error: 'Sync failed - check connection' })
       if (!automatic) showDataLoadWarning('Wix booking sync failed. Check Vercel API route and credentials.', error)
-      if (!automatic) showToast('Wix sync failed. Check connection.', 'error')
       console.error('Wix booking sync failed:', error)
     } finally {
       setWixSyncRunning(false)
@@ -7319,7 +7263,7 @@ function formatMoney(value) {
     setManagerWarningFlag(Boolean(customer.warning_flag))
     setManagerWarningLevel(customer.warning_level || 'none')
     setManagerWarningNote(customer.warning_note || '')
-    setCustomerProfileTab('overview')
+    setCustomerProfileTab('summary')
     setCustomerProfileNoteText('')
     setCustomerProfileNoteEditingId('')
     clearMinuteCorrection()
@@ -7360,7 +7304,7 @@ function formatMoney(value) {
     setCustomerProductSalesHistory([])
     setCustomerMinuteExpiries([])
     setCustomerProfileNotes([])
-    setCustomerProfileTab('overview')
+    setCustomerProfileTab('summary')
     setCustomerProfileNoteText('')
     setCustomerProfileNoteEditingId('')
   }
@@ -8851,14 +8795,13 @@ function formatMoney(value) {
   function renderCustomerProfilePanel(customer) {
     if (!customer) return null
     const tabs = [
-      ['overview', 'Overview'],
-      ['contact', 'Contact Details'],
-      ['medical', 'Medical'],
-      ['bookings', 'Bookings'],
-      ['sunbed_history', 'Sunbed History'],
-      ['spray_tans', 'Spray Tans'],
-      ['notes', 'Notes'],
-      ['sync_log', 'Sync Log']
+      ['details', 'Details'],
+      ['balances', 'Minutes / Packages'],
+      ['booking_history', 'Bookings'],
+      ['purchases', 'Purchases / Payments'],
+      ['spray_tans', 'Spray Tans / Patch Tests'],
+      ['notes', 'Notes / Logs'],
+      ['registration', 'Forms / Terms']
     ]
     const splitName = splitCustomerName(customer)
     const stats = getCustomerProfileStats(customer)
@@ -8873,11 +8816,6 @@ function formatMoney(value) {
     const statusTone = customer.is_active === false || inactive ? 'muted' : stats.totalVisits === 0 ? 'info' : 'good'
     const sunbedBookings = customerBookingsHistory.filter(isSunbedBooking)
     const sprayBookings = customerBookingsHistory.filter(isSprayTanBooking)
-    const allCustomerBookings = [...customerBookingsHistory].sort((a, b) => new Date(b.appointment_time || b.created_at || 0) - new Date(a.appointment_time || a.created_at || 0))
-    const upcomingCustomerBookings = allCustomerBookings.filter((booking) => booking.appointment_time && new Date(booking.appointment_time) >= now && !['cancelled', 'canceled', 'deleted', 'no_show', 'completed', 'force_stopped'].includes(String(booking.status || '').toLowerCase()))
-    const completedCustomerBookings = allCustomerBookings.filter((booking) => ['completed'].includes(String(booking.status || '').toLowerCase()))
-    const cancelledCustomerBookings = allCustomerBookings.filter((booking) => ['cancelled', 'canceled', 'deleted'].includes(String(booking.status || '').toLowerCase()))
-    const noShowCustomerBookings = allCustomerBookings.filter((booking) => ['no_show'].includes(String(booking.status || '').toLowerCase()))
     const filteredSunbedBookings = sunbedBookings.filter((booking) => {
       if (customerProfileBookingFilter === 'all') return true
       if (!booking.appointment_time) return false
@@ -8966,7 +8904,7 @@ function formatMoney(value) {
           ))}
         </div>
 
-        {customerProfileTab === 'overview' && (
+        {customerProfileTab === 'details' && (
           <div style={{ ...panelStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
             <p><strong>First Name:</strong><br />{customer.first_name || splitName.firstName || '-'}</p>
             <p><strong>Last Name:</strong><br />{customer.last_name || splitName.lastName || '-'}</p>
@@ -9008,24 +8946,7 @@ function formatMoney(value) {
           </div>
         )}
 
-        {customerProfileTab === 'bookings' && (
-          <div style={{ display: 'grid', gap: '10px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
-              <div style={statStyle}><span>Upcoming</span><h3>{upcomingCustomerBookings.length}</h3></div>
-              <div style={statStyle}><span>Completed</span><h3>{completedCustomerBookings.length}</h3></div>
-              <div style={statStyle}><span>Cancelled</span><h3>{cancelledCustomerBookings.length}</h3></div>
-              <div style={statStyle}><span>No Shows</span><h3>{noShowCustomerBookings.length}</h3></div>
-            </div>
-            {renderTable(['Date', 'Type', 'Service / Bed', 'Minutes', 'Staff', 'Status'], allCustomerBookings, (booking) => {
-              const date = booking.appointment_time ? new Date(booking.appointment_time) : null
-              const type = isSprayTanBooking(booking) ? 'Spray Tan' : 'Sunbed'
-              const service = isSprayTanBooking(booking) ? booking.spraytan_service || booking.spraytan_column || '-' : getBedName(booking.bed_id)
-              return <tr key={booking.id}><td style={tdStyle}>{date ? date.toLocaleString('en-GB') : '-'}</td><td style={tdStyle}>{type}</td><td style={tdStyle}>{service}</td><td style={tdStyle}>{booking.minutes || booking.spraytan_duration_minutes || '-'}</td><td style={tdStyle}>{booking.created_by_staff_name || booking.staff_name || booking.assigned_artist_name || booking.spraytan_artist || 'Unknown'}</td><td style={tdStyle}>{isSprayTanBooking(booking) ? getSprayTanStatusLabel(booking) : formatStatus(booking.status)}</td></tr>
-            }, 'No bookings found.')}
-          </div>
-        )}
-
-        {customerProfileTab === 'sunbed_history' && (
+        {customerProfileTab === 'booking_history' && (
           <div style={{ display: 'grid', gap: '10px' }}>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>{['today', 'week', 'month', 'all'].map((filter) => <button key={filter} type="button" onClick={() => setCustomerProfileBookingFilter(filter)}>{formatStatus(filter)}</button>)}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
@@ -9066,34 +8987,7 @@ function formatMoney(value) {
           </div>
         )}
 
-        {customerProfileTab === 'medical' && (
-          <div style={{ ...panelStyle, display: 'grid', gap: '10px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
-              <p><strong>Warning Level:</strong><br />{customer.warning_flag ? formatStatus(getCustomerWarningLevel(customer)) : 'None'}</p>
-              <p><strong>Warning Note:</strong><br />{customer.warning_note || '-'}</p>
-              <p><strong>Health / Allergies / Medication:</strong><br />{customer.health_notes || customer.medical_notes || '-'}</p>
-              <p><strong>Spray Tan Notes:</strong><br />{customer.spraytan_notes || '-'}</p>
-              <p><strong>Patch Test:</strong><br />{patchWarning || (customer.patch_test_expiry_date ? 'Valid' : 'Not recorded')}</p>
-            </div>
-          </div>
-        )}
-
-        {customerProfileTab === 'sync_log' && (
-          <div style={{ ...panelStyle, display: 'grid', gap: '10px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
-              <div style={statStyle}><span>Sync Status</span><h3 style={{ fontSize: '16px' }}>{wixSyncRunning ? 'Syncing...' : wixSyncHealth.state === 'connected' ? 'Wix Connected' : wixSyncHealth.state === 'failed' ? 'Sync Failed' : 'Never Synced'}</h3></div>
-              <div style={statStyle}><span>Last Sync Time</span><h3 style={{ fontSize: '16px' }}>{wixSyncHealth.lastSyncAt ? new Date(wixSyncHealth.lastSyncAt).toLocaleString('en-GB') : 'Never'}</h3></div>
-              <div style={statStyle}><span>Records Imported</span><h3>{wixImportedCount}</h3></div>
-              <div style={statStyle}><span>Errors</span><h3>{wixFailedCount}</h3></div>
-            </div>
-            <p><strong>Customer source:</strong> {formatStatus(customer.customer_source || 'dashboard')}</p>
-            <p><strong>Wix contact ID:</strong> {customer.wix_contact_id || '-'}</p>
-            <p><strong>Latest sync message:</strong> {wixSyncStatus}</p>
-            {wixSyncHealth.error && <p style={{ color: '#ffb3ad' }}><strong>Sync error:</strong> {wixSyncHealth.error}</p>}
-          </div>
-        )}
-
-        {false && customerProfileTab === 'registration' && (
+        {customerProfileTab === 'registration' && (
           <div style={{ ...panelStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
             <p><strong>Pregnant:</strong><br />{customer.registration_pregnant ? 'Yes' : 'No / not recorded'}</p>
             <p><strong>Allergies:</strong><br />{customer.registration_allergies || customer.health_notes || '-'}</p>
@@ -9390,7 +9284,7 @@ function formatMoney(value) {
           <div>
             {renderCustomerProfilePanel(selectedCustomer)}
 
-            {customerProfileTab === 'contact' && (
+            {customerProfileTab === 'details' && (
               <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '15px' }}>
               <div><label>First name</label><input value={managerFirstName} onChange={(e) => setManagerFirstName(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
@@ -9473,7 +9367,7 @@ function formatMoney(value) {
               </>
             )}
 
-            {customerProfileTab === 'overview' && (
+            {customerProfileTab === 'balances' && (
               <>
             {showMinuteCorrection && (
               <div style={{ background: '#111', border: '1px solid #333', borderRadius: '14px', padding: '15px', marginBottom: '20px' }}>
@@ -9518,7 +9412,7 @@ function formatMoney(value) {
               </>
             )}
 
-            {customerProfileTab === 'overview' && (
+            {customerProfileTab === 'purchases' && (
               <>
             <div style={{ background: '#111', padding: '15px', borderRadius: '14px', border: '1px solid #333', maxHeight: '320px', overflowY: 'auto', marginBottom: '15px' }}>
               <h3 style={{ marginTop: 0 }}>Receipt History</h3>
@@ -11636,16 +11530,7 @@ function formatMoney(value) {
   const modalStartBlocked = modalBooking ? isStartBlockedByLiveSession(modalBooking) : false
   const selectedDateShopClosures = getShopClosuresForSelectedDate()
   const pendingStaffScheduleCount = getPendingStaffScheduleCount()
-  const wixHealthDisplay = wixSyncRunning
-    ? { icon: '\u{1F7E1}', text: 'Syncing...', detail: '', className: 'pending' }
-    : getWixSyncHealthDisplay()
-  const wixHealthIcon = wixHealthDisplay.className === 'connected'
-    ? '\u{1F7E2}'
-    : wixHealthDisplay.className === 'failed'
-      ? '\u{1F534}'
-      : wixHealthDisplay.className === 'never'
-        ? '\u26AA'
-        : '\u{1F7E1}'
+  const wixHealthDisplay = getWixSyncHealthDisplay()
   const v2TabTitle = {
     customers: 'Customers',
     sunbeds: 'Sunbeds',
@@ -11732,7 +11617,7 @@ function formatMoney(value) {
             </button>
           </div>
           <div className={`v2-wix-status ${wixHealthDisplay.className}`}>
-            <strong>{wixHealthIcon} {wixHealthDisplay.text}</strong>
+            <strong>{wixHealthDisplay.icon} {wixHealthDisplay.text}</strong>
             {wixHealthDisplay.detail && <span>{wixHealthDisplay.detail}</span>}
           </div>
         </div>
@@ -12094,12 +11979,6 @@ function formatMoney(value) {
       {renderStaffSelectorModal()}
       {renderSaleReceiptModal()}
       {renderCashUpLockConfirmModal()}
-
-      {toastMessage && (
-        <div className={`glow-toast ${toastMessage.type || 'success'}`}>
-          {toastMessage.message}
-        </div>
-      )}
 
       {showBackToTop && (
         <button onClick={scrollToTop} title="Back to top" style={{ position: 'fixed', right: '24px', bottom: '24px', width: '58px', height: '58px', borderRadius: '50%', fontSize: '26px', zIndex: 1001 }}>
