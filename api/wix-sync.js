@@ -11,6 +11,17 @@ function normalizeDate(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
+function describeShape(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 2) return typeof value
+  if (Array.isArray(value)) return value.length ? [describeShape(value[0], depth + 1)] : []
+  return Object.fromEntries(
+    Object.entries(value).slice(0, 40).map(([key, child]) => [
+      key,
+      child && typeof child === 'object' ? describeShape(child, depth + 1) : typeof child
+    ])
+  )
+}
+
 function normalizeContact(contact) {
   const info = contact.info || {}
   const primary = contact.primaryInfo || info.primaryInfo || {}
@@ -36,7 +47,8 @@ function normalizeContact(contact) {
     medical_questionnaire_answers: JSON.stringify(extendedFields.medical || extendedFields.medicalQuestionnaire || {}),
     consultation_answers: JSON.stringify(extendedFields.consultation || extendedFields.consultationAnswers || {}),
     customer_notes: firstValue(contact.notes, info.notes),
-    customer_source: 'wix'
+    customer_source: 'wix',
+    wix_raw_shape: describeShape(contact)
   }
 }
 
@@ -82,7 +94,8 @@ function normalizeBooking(booking) {
     patch_test_required: bookingType === 'spraytan' && !lowerService.includes('patch'),
     patch_test_completed: false,
     patch_test_date: null,
-    approval_status: bookingType === 'spraytan' ? 'pending' : 'approved'
+    approval_status: bookingType === 'spraytan' ? 'pending' : 'approved',
+    wix_raw_shape: describeShape(booking)
   }
 }
 

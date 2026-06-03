@@ -419,14 +419,6 @@ function App() {
   const [wixImportedCount, setWixImportedCount] = useState(0)
   const [wixFailedCount, setWixFailedCount] = useState(0)
   const [wixSyncRunning, setWixSyncRunning] = useState(false)
-  const [wixSyncDiagnostics, setWixSyncDiagnostics] = useState(() => {
-    if (typeof window === 'undefined') return null
-    try {
-      return JSON.parse(window.localStorage.getItem('glow_wix_sync_diagnostics') || 'null')
-    } catch {
-      return null
-    }
-  })
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
   const [managerReceipts, setManagerReceipts] = useState([])
@@ -5181,33 +5173,6 @@ function formatMoney(value) {
     window.glowToastTimer = window.setTimeout(() => setToastMessage(null), 4200)
   }
 
-  function getMissingColumnFromError(error) {
-    const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`
-    const quotedMatch = text.match(/'([^']+)'\s+column/i)
-    if (quotedMatch?.[1]) return quotedMatch[1]
-    const columnMatch = text.match(/column\s+["']?([A-Za-z0-9_]+)["']?\s+does not exist/i)
-    return columnMatch?.[1] || ''
-  }
-
-  function makeWixRecordError(table, record, error) {
-    return {
-      table,
-      recordId: record?.wix_contact_id || record?.wix_booking_id || record?.id || record?.email || record?.customer_email || 'unknown',
-      message: error?.message || String(error),
-      code: error?.code || '',
-      details: error?.details || '',
-      hint: error?.hint || '',
-      missingColumn: getMissingColumnFromError(error)
-    }
-  }
-
-  function persistWixSyncDiagnostics(diagnostics) {
-    setWixSyncDiagnostics(diagnostics)
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('glow_wix_sync_diagnostics', JSON.stringify(diagnostics))
-    }
-  }
-
   function getWixSyncHealthDisplay() {
     if (!wixSyncHealth?.lastSyncAt) {
       if (wixSyncHealth?.state === 'failed') return { icon: '🔴', text: 'Sync Failed', detail: wixSyncHealth.error || 'Sync failed - check connection', className: 'failed' }
@@ -5244,19 +5209,8 @@ function formatMoney(value) {
 
     setWixSyncRunning(true)
     setWixSyncStatus(automatic ? 'Automatic Wix sync running...' : 'Syncing Wix bookings...')
-    const diagnostics = {
-      startedAt: new Date().toISOString(),
-      finishedAt: '',
-      status: 'syncing',
-      found: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
-      imported: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
-      failed: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
-      errors: [],
-      endpointErrors: [],
-      sampleFailedCustomer: null,
-      sampleFailedBooking: null
-    }
-    persistWixSyncDiagnostics(diagnostics)
+    let imported = 0
+    let failed = 0
 
     try {
       // Vercel fetches Wix data server-side with WIX_API_KEY/WIX_SITE_ID, then returns
@@ -5266,25 +5220,13 @@ function formatMoney(value) {
       const payload = await response.json()
       const wixCustomers = Array.isArray(payload?.customers) ? payload.customers : []
       const wixBookings = Array.isArray(payload?.bookings) ? payload.bookings : []
-      diagnostics.found.customers = wixCustomers.length
-      diagnostics.found.bookings = wixBookings.length
-      diagnostics.found.total = wixCustomers.length + wixBookings.length
-      diagnostics.endpointErrors = Array.isArray(payload?.errors) ? payload.errors : []
 
       for (const wixCustomer of wixCustomers) {
         try {
           await upsertWixCustomerRecord(wixCustomer)
-          diagnostics.imported.customers += 1
-          diagnostics.imported.total += 1
+          imported += 1
         } catch (customerError) {
-          diagnostics.failed.customers += 1
-          diagnostics.failed.total += 1
-          const errorDetail = makeWixRecordError('customers', wixCustomer, customerError)
-          if (diagnostics.errors.length < 10) diagnostics.errors.push(errorDetail)
-          if (!diagnostics.sampleFailedCustomer) {
-            diagnostics.sampleFailedCustomer = wixCustomer?.wix_raw_shape || wixCustomer
-            console.error('Raw Wix failed customer record shape:', diagnostics.sampleFailedCustomer)
-          }
+          failed += 1
           console.error('Wix customer sync failed for one customer:', { wixCustomer, customerError })
         }
       }
@@ -5292,40 +5234,24 @@ function formatMoney(value) {
       for (const wixBooking of wixBookings) {
         try {
           await upsertWixBooking(wixBooking)
-          diagnostics.imported.bookings += 1
-          diagnostics.imported.total += 1
+          imported += 1
         } catch (bookingError) {
-          diagnostics.failed.bookings += 1
-          diagnostics.failed.total += 1
-          const errorDetail = makeWixRecordError('bookings', wixBooking, bookingError)
-          if (diagnostics.errors.length < 10) diagnostics.errors.push(errorDetail)
-          if (!diagnostics.sampleFailedBooking) {
-            diagnostics.sampleFailedBooking = wixBooking?.wix_raw_shape || wixBooking
-            console.error('Raw Wix failed booking record shape:', diagnostics.sampleFailedBooking)
-          }
+          failed += 1
           console.error('Wix booking sync failed for one booking:', { wixBooking, bookingError })
         }
       }
 
-      diagnostics.finishedAt = new Date().toISOString()
-      diagnostics.status = diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'success'
-      setWixImportedCount(diagnostics.imported.total)
-      setWixFailedCount(diagnostics.failed.total)
-      const syncSummary = `Wix sync complete: ${diagnostics.found.total} found, ${diagnostics.imported.total} imported/updated, ${diagnostics.failed.total} failed.`
+      setWixImportedCount(imported)
+      setWixFailedCount(failed)
+      const syncSummary = `Wix sync complete: ${imported} imported/updated, ${failed} failed.`
       setWixSyncStatus(syncSummary)
-      updateWixSyncHealth({ state: diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: diagnostics.failed.total > 0 ? `${diagnostics.failed.total} record(s) failed` : diagnostics.endpointErrors[0] || '' })
-      persistWixSyncDiagnostics(diagnostics)
-      if (diagnostics.imported.total > 0) {
+      updateWixSyncHealth({ state: failed > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: failed > 0 ? `${failed} record(s) failed` : '' })
+      if (imported > 0) {
         await getBookings()
         await getCustomers()
       }
-      if (!automatic) showToast(syncSummary, diagnostics.failed.total > 0 ? 'warning' : 'success')
+      if (!automatic) showToast(syncSummary, failed > 0 ? 'warning' : 'success')
     } catch (error) {
-      diagnostics.finishedAt = new Date().toISOString()
-      diagnostics.status = 'failed'
-      diagnostics.failed.total += 1
-      diagnostics.errors.push(makeWixRecordError('sync', { id: 'endpoint' }, error))
-      persistWixSyncDiagnostics(diagnostics)
       setWixFailedCount((count) => count + 1)
       setWixSyncStatus(error.message || 'Wix sync failed.')
       updateWixSyncHealth({ state: 'failed', lastSyncAt: new Date().toISOString(), error: 'Sync failed - check connection' })
@@ -10393,9 +10319,6 @@ function formatMoney(value) {
 
   function renderWixBookingSyncPanel() {
     if (!showManagerView) return null
-    const diagnostics = wixSyncDiagnostics || {}
-    const syncErrors = Array.isArray(diagnostics.errors) ? diagnostics.errors : []
-    const endpointErrors = Array.isArray(diagnostics.endpointErrors) ? diagnostics.endpointErrors : []
 
     return renderCollapsibleSection(
       'Wix Booking Sync',
@@ -10411,64 +10334,14 @@ function formatMoney(value) {
             <h3 style={{ marginBottom: 0 }}>{wixSyncStatus}</h3>
           </div>
           <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Records found from Wix</span>
-            <h3 style={{ marginBottom: 0 }}>{diagnostics.found?.total ?? 0}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Successfully imported</span>
+            <span>Imported bookings</span>
             <h3 style={{ marginBottom: 0 }}>{wixImportedCount}</h3>
           </div>
           <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Records failed</span>
+            <span>Failed bookings</span>
             <h3 style={{ marginBottom: 0 }}>{wixFailedCount}</h3>
           </div>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          {['customers', 'bookings', 'forms', 'notes'].map((table) => (
-            <div key={table} style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-              <strong style={{ color: '#d4a853' }}>{formatStatus(table)}</strong>
-              <p style={{ margin: '6px 0 0', color: '#ccc' }}>Found {diagnostics.found?.[table] || 0} / Imported {diagnostics.imported?.[table] || 0} / Failed {diagnostics.failed?.[table] || 0}</p>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
-          <h3 style={{ marginTop: 0 }}>Integrations / Wix Diagnostics</h3>
-          <p style={{ color: '#aaa' }}>
-            Started: {diagnostics.startedAt ? new Date(diagnostics.startedAt).toLocaleString('en-GB') : '-'} / Finished: {diagnostics.finishedAt ? new Date(diagnostics.finishedAt).toLocaleString('en-GB') : '-'}
-          </p>
-          {endpointErrors.length > 0 && (
-            <div style={{ border: '1px solid rgba(255,120,117,0.45)', padding: '10px', marginBottom: '10px', color: '#ffb3ad' }}>
-              <strong>Wix API endpoint errors</strong>
-              {endpointErrors.map((error, index) => <p key={`${error}-${index}`} style={{ marginBottom: 0 }}>{error}</p>)}
-            </div>
-          )}
-          {syncErrors.length === 0 ? (
-            <p style={{ color: '#aaa', marginBottom: 0 }}>No row-level sync errors captured yet.</p>
-          ) : (
-            <div style={{ display: 'grid', gap: '8px' }}>
-              {syncErrors.slice(0, 10).map((error, index) => (
-                <div key={`${error.table}-${error.recordId}-${index}`} style={{ borderBottom: '1px solid #292929', paddingBottom: '8px' }}>
-                  <strong style={{ color: '#ffcc66' }}>{formatStatus(error.table)} / {error.recordId}</strong>
-                  <p style={{ margin: '4px 0', color: '#f5f0e8' }}>{error.message}</p>
-                  {error.missingColumn && <p style={{ margin: '4px 0', color: '#ffb3ad' }}>Missing Supabase column: <strong>{error.missingColumn}</strong></p>}
-                  {error.code && <p style={{ margin: '4px 0', color: '#aaa' }}>Code: {error.code}</p>}
-                  {error.details && <p style={{ margin: '4px 0', color: '#aaa' }}>Details: {error.details}</p>}
-                  {error.hint && <p style={{ margin: '4px 0', color: '#aaa' }}>Hint: {error.hint}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-          {(diagnostics.sampleFailedCustomer || diagnostics.sampleFailedBooking) && (
-            <details style={{ marginTop: '12px' }}>
-              <summary style={{ cursor: 'pointer', color: '#d4a853', fontWeight: 'bold' }}>Raw failed Wix record shapes</summary>
-              {diagnostics.sampleFailedCustomer && <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto', background: '#050505', padding: '10px' }}>Customer shape: {JSON.stringify(diagnostics.sampleFailedCustomer, null, 2)}</pre>}
-              {diagnostics.sampleFailedBooking && <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto', background: '#050505', padding: '10px' }}>Booking shape: {JSON.stringify(diagnostics.sampleFailedBooking, null, 2)}</pre>}
-            </details>
-          )}
-        </div>
-
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={() => runWixBookingSync()} disabled={wixSyncRunning}>
             {wixSyncRunning ? 'Syncing...' : 'Sync Wix Bookings'}
