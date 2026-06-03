@@ -1182,7 +1182,7 @@ button,
 
 .v2-sidebar-control-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 
@@ -1196,12 +1196,6 @@ button,
   background: linear-gradient(180deg, #d7b15f 0%, #a9792d 100%) !important;
   color: #050505 !important;
   border-color: rgba(246, 218, 145, 0.65) !important;
-}
-
-.v2-sidebar-errors-button {
-  background: rgba(212, 168, 83, 0.12) !important;
-  color: #f5d99c !important;
-  border-color: rgba(212, 168, 83, 0.38) !important;
 }
 
 .v2-sidebar-stop-button {

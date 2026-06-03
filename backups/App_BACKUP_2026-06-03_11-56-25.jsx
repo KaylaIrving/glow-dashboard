@@ -427,7 +427,6 @@ function App() {
       return null
     }
   })
-  const [showWixSyncErrors, setShowWixSyncErrors] = useState(false)
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
   const [managerReceipts, setManagerReceipts] = useState([])
@@ -5191,14 +5190,9 @@ function formatMoney(value) {
   }
 
   function makeWixRecordError(table, record, error) {
-    const firstName = record?.first_name || record?.wix_customer_first_name || ''
-    const lastName = record?.last_name || record?.wix_customer_last_name || ''
     return {
       table,
       recordId: record?.wix_contact_id || record?.wix_booking_id || record?.id || record?.email || record?.customer_email || 'unknown',
-      wixContactId: record?.wix_contact_id || record?.contact_id || '',
-      customerName: record?.customer_name || record?.wix_customer_name || record?.name || `${firstName} ${lastName}`.trim() || '',
-      email: record?.email || record?.customer_email || record?.wix_customer_email || '',
       message: error?.message || String(error),
       code: error?.code || '',
       details: error?.details || '',
@@ -5286,7 +5280,7 @@ function formatMoney(value) {
           diagnostics.failed.customers += 1
           diagnostics.failed.total += 1
           const errorDetail = makeWixRecordError('customers', wixCustomer, customerError)
-          diagnostics.errors.push(errorDetail)
+          if (diagnostics.errors.length < 10) diagnostics.errors.push(errorDetail)
           if (!diagnostics.sampleFailedCustomer) {
             diagnostics.sampleFailedCustomer = wixCustomer?.wix_raw_shape || wixCustomer
             console.error('Raw Wix failed customer record shape:', diagnostics.sampleFailedCustomer)
@@ -5304,7 +5298,7 @@ function formatMoney(value) {
           diagnostics.failed.bookings += 1
           diagnostics.failed.total += 1
           const errorDetail = makeWixRecordError('bookings', wixBooking, bookingError)
-          diagnostics.errors.push(errorDetail)
+          if (diagnostics.errors.length < 10) diagnostics.errors.push(errorDetail)
           if (!diagnostics.sampleFailedBooking) {
             diagnostics.sampleFailedBooking = wixBooking?.wix_raw_shape || wixBooking
             console.error('Raw Wix failed booking record shape:', diagnostics.sampleFailedBooking)
@@ -10454,7 +10448,7 @@ function formatMoney(value) {
             <p style={{ color: '#aaa', marginBottom: 0 }}>No row-level sync errors captured yet.</p>
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
-              {syncErrors.slice(0, 20).map((error, index) => (
+              {syncErrors.slice(0, 10).map((error, index) => (
                 <div key={`${error.table}-${error.recordId}-${index}`} style={{ borderBottom: '1px solid #292929', paddingBottom: '8px' }}>
                   <strong style={{ color: '#ffcc66' }}>{formatStatus(error.table)} / {error.recordId}</strong>
                   <p style={{ margin: '4px 0', color: '#f5f0e8' }}>{error.message}</p>
@@ -10479,9 +10473,6 @@ function formatMoney(value) {
           <button onClick={() => runWixBookingSync()} disabled={wixSyncRunning}>
             {wixSyncRunning ? 'Syncing...' : 'Sync Wix Bookings'}
           </button>
-          <button onClick={() => setShowWixSyncErrors(true)} disabled={syncErrors.length === 0}>
-            View Sync Errors
-          </button>
           <button onClick={runWixTestImport} disabled={wixSyncRunning}>
             {wixSyncRunning ? 'Testing Import...' : 'Test Import'}
           </button>
@@ -10489,63 +10480,6 @@ function formatMoney(value) {
         <p style={{ color: '#aaa', marginBottom: 0 }}>
           Live sync is pending the Vercel Wix API route and Wix credentials. Test Import creates or updates one sample pending spray tan booking for the selected date using a fixed Wix booking ID.
         </p>
-      </div>
-    )
-  }
-
-  function renderWixSyncErrorsModal() {
-    if (!showWixSyncErrors) return null
-    const diagnostics = wixSyncDiagnostics || {}
-    const syncErrors = Array.isArray(diagnostics.errors) ? diagnostics.errors : []
-    const visibleErrors = syncErrors.slice(0, 20)
-
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
-        <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.45)', borderRadius: '10px', padding: '20px', width: '980px', maxWidth: '96vw', maxHeight: '88vh', overflow: 'auto', boxShadow: '0 24px 70px rgba(0,0,0,0.68)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '12px' }}>
-            <div>
-              <h2 style={{ margin: '0 0 6px', color: '#d4a853' }}>Wix Sync Errors</h2>
-              <p style={{ color: '#aaa', margin: 0 }}>
-                Showing first {visibleErrors.length} of {syncErrors.length} failed records from the latest sync.
-              </p>
-            </div>
-            <button type="button" onClick={() => setShowWixSyncErrors(false)}>Close</button>
-          </div>
-
-          {syncErrors.length === 0 ? (
-            <p style={{ color: '#aaa' }}>No failed records have been captured yet. Run Sync Wix Bookings again if the failure count still appears.</p>
-          ) : (
-            <div style={{ overflowX: 'auto', border: '1px solid #2f2a20' }}>
-              <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#0b0b0b', color: '#d4a853' }}>
-                    <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Table</th>
-                    <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Wix Contact ID</th>
-                    <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Customer Name</th>
-                    <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Email</th>
-                    <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Error Message</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleErrors.map((error, index) => (
-                    <tr key={`${error.table}-${error.recordId}-${index}`}>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top' }}>{formatStatus(error.table)}</td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top', overflowWrap: 'anywhere' }}>{error.wixContactId || error.recordId || '-'}</td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top' }}>{error.customerName || '-'}</td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top', overflowWrap: 'anywhere' }}>{error.email || '-'}</td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top' }}>
-                        <strong style={{ color: '#ffcc66' }}>{error.message}</strong>
-                        {error.missingColumn && <><br /><span style={{ color: '#ffb3ad' }}>Missing column: {error.missingColumn}</span></>}
-                        {error.details && <><br /><span style={{ color: '#aaa' }}>{error.details}</span></>}
-                        {error.hint && <><br /><span style={{ color: '#aaa' }}>Hint: {error.hint}</span></>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
       </div>
     )
   }
@@ -11917,15 +11851,6 @@ function formatMoney(value) {
             </button>
             <button
               type="button"
-              className="v2-sidebar-errors-button"
-              title="View Wix Sync Errors"
-              onClick={() => setShowWixSyncErrors(true)}
-              disabled={!wixSyncDiagnostics?.errors?.length}
-            >
-              Errors
-            </button>
-            <button
-              type="button"
               className="v2-sidebar-stop-button"
               title="Emergency Stop All Beds"
               onClick={emergencyStopAllBeds}
@@ -12295,7 +12220,6 @@ function formatMoney(value) {
 
       {renderStaffSelectorModal()}
       {renderSaleReceiptModal()}
-      {renderWixSyncErrorsModal()}
       {renderCashUpLockConfirmModal()}
 
       {toastMessage && (
