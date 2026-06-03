@@ -428,9 +428,6 @@ function App() {
     }
   })
   const [showWixSyncErrors, setShowWixSyncErrors] = useState(false)
-  const [wixServiceMappings, setWixServiceMappings] = useState([])
-  const [wixServiceMappingDrafts, setWixServiceMappingDrafts] = useState({})
-  const [wixServiceMappingSaving, setWixServiceMappingSaving] = useState(false)
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
   const [managerReceipts, setManagerReceipts] = useState([])
@@ -485,7 +482,6 @@ function App() {
     getCommissionRules()
     getLoyaltyRules()
     getStaffSchedule()
-    getWixServiceBookingMappings()
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
@@ -4910,95 +4906,6 @@ function formatMoney(value) {
     return WIX_SERVICE_BOOKING_MAP[key] || null
   }
 
-  function normalizeWixServiceKey(serviceName) {
-    return String(serviceName || '').trim().toLowerCase()
-  }
-
-  function getWixBookingServiceName(wixBookingPayload) {
-    return wixBookingPayload.service_name || wixBookingPayload.wix_service_name || wixBookingPayload.spraytan_service || ''
-  }
-
-  async function getWixServiceBookingMappings({ silent = false } = {}) {
-    const { data, error } = await supabase
-      .from('wix_service_booking_map')
-      .select('*')
-      .order('wix_service_name', { ascending: true })
-
-    if (error) {
-      if (!silent) {
-        console.error('Wix service booking map failed to load:', error)
-        showToast('Wix service map could not be loaded.', 'error')
-      }
-      return wixServiceMappings
-    }
-
-    setWixServiceMappings(data || [])
-    return data || []
-  }
-
-  function getSavedWixMappingForService(serviceName, mappings = wixServiceMappings) {
-    const serviceKey = normalizeWixServiceKey(serviceName)
-    return (mappings || []).find((mapping) => normalizeWixServiceKey(mapping.wix_service_name) === serviceKey && mapping.is_active !== false) || null
-  }
-
-  function getWixMappingDraft(serviceName) {
-    const saved = getSavedWixMappingForService(serviceName)
-    const draft = wixServiceMappingDrafts[serviceName] || {}
-    return {
-      service_type: saved?.glow_service_type || 'sunbed',
-      bed_id: saved?.bed_id || beds[0]?.id || '',
-      minutes: saved?.minutes || 12,
-      spraytan_service: saved?.spraytan_service || 'Full Body',
-      default_status: saved?.default_status || (saved?.glow_service_type === 'spraytan' ? 'pending' : 'booked'),
-      ...draft
-    }
-  }
-
-  function updateWixMappingDraft(serviceName, field, value) {
-    setWixServiceMappingDrafts((current) => ({
-      ...current,
-      [serviceName]: {
-        ...(current[serviceName] || {}),
-        [field]: value
-      }
-    }))
-  }
-
-  function applyWixServiceMapping(wixBookingPayload, mappings = wixServiceMappings) {
-    const serviceName = getWixBookingServiceName(wixBookingPayload)
-    const mapping = getSavedWixMappingForService(serviceName, mappings)
-
-    if (!mapping) {
-      throw new Error(`Wix service "${serviceName || 'Unknown service'}" needs mapping in Manager > Integrations > Wix > Service Booking Map.`)
-    }
-
-    if (mapping.glow_service_type === 'ignore') return null
-
-    const defaultApproval = mapping.default_status === 'pending' ? 'pending' : 'approved'
-    if (mapping.glow_service_type === 'sunbed') {
-      return {
-        ...wixBookingPayload,
-        booking_type: 'sunbed',
-        bed_id: Number(mapping.bed_id),
-        minutes: Number(mapping.minutes || 0),
-        approval_status: defaultApproval
-      }
-    }
-
-    const sprayService = mapping.glow_service_type === 'patch_test' ? 'Patch Test' : mapping.spraytan_service || wixBookingPayload.spraytan_service || serviceName
-    return {
-      ...wixBookingPayload,
-      booking_type: 'spraytan',
-      spraytan_column: mapping.glow_service_type === 'patch_test' ? 'patch_test' : String(sprayService || '').toLowerCase().includes('express') ? 'express_tan' : 'spray_tan',
-      spraytan_service: sprayService,
-      service_name: sprayService,
-      wix_service_name: serviceName,
-      approval_status: defaultApproval,
-      patch_test_required: mapping.glow_service_type === 'spraytan',
-      patch_test_completed: false
-    }
-  }
-
   function getWixMappedStatus(wixBookingPayload, bookingType) {
     const rawStatus = String(wixBookingPayload.wix_status || wixBookingPayload.status || '').trim().toLowerCase()
     const cancelled = ['cancelled', 'canceled', 'declined', 'voided'].some((status) => rawStatus.includes(status))
@@ -5292,7 +5199,6 @@ function formatMoney(value) {
       wixContactId: record?.wix_contact_id || record?.contact_id || '',
       customerName: record?.customer_name || record?.wix_customer_name || record?.name || `${firstName} ${lastName}`.trim() || '',
       email: record?.email || record?.customer_email || record?.wix_customer_email || '',
-      serviceName: getWixBookingServiceName(record),
       message: error?.message || String(error),
       code: error?.code || '',
       details: error?.details || '',
@@ -5353,7 +5259,6 @@ function formatMoney(value) {
       failed: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       errors: [],
       endpointErrors: [],
-      services: [],
       sampleFailedCustomer: null,
       sampleFailedBooking: null
     }
@@ -5367,14 +5272,10 @@ function formatMoney(value) {
       const payload = await response.json()
       const wixCustomers = Array.isArray(payload?.customers) ? payload.customers : []
       const wixBookings = Array.isArray(payload?.bookings) ? payload.bookings : []
-      const serviceMappings = await getWixServiceBookingMappings({ silent: true })
       diagnostics.found.customers = wixCustomers.length
       diagnostics.found.bookings = wixBookings.length
       diagnostics.found.total = wixCustomers.length + wixBookings.length
       diagnostics.endpointErrors = Array.isArray(payload?.errors) ? payload.errors : []
-      diagnostics.services = Array.isArray(payload?.services)
-        ? payload.services
-        : [...new Set(wixBookings.map(getWixBookingServiceName).filter(Boolean))]
 
       for (const wixCustomer of wixCustomers) {
         try {
@@ -5396,9 +5297,7 @@ function formatMoney(value) {
 
       for (const wixBooking of wixBookings) {
         try {
-          const mappedWixBooking = applyWixServiceMapping(wixBooking, serviceMappings)
-          if (!mappedWixBooking) continue
-          await upsertWixBooking(mappedWixBooking)
+          await upsertWixBooking(wixBooking)
           diagnostics.imported.bookings += 1
           diagnostics.imported.total += 1
         } catch (bookingError) {
@@ -5477,7 +5376,7 @@ function formatMoney(value) {
     const mappedStatus = getWixMappedStatus(wixBookingPayload, 'sunbed')
 
     if (!appointmentTime || !bedId || minutes <= 0) {
-      throw new Error(`Wix service "${serviceName || 'Unknown service'}" needs mapping in Manager > Integrations > Wix > Service Booking Map.`)
+      throw new Error('Wix booking could not be mapped yet. Add the service to WIX_SERVICE_BOOKING_MAP with bedId and minutes.')
     }
 
     const customer = await findOrCreateWixCustomer(wixBookingPayload)
@@ -10498,56 +10397,11 @@ function formatMoney(value) {
     )
   }
 
-  async function saveWixServiceMapping(serviceName) {
-    if (!requireManagerAccess('Manager PIN required to save Wix service mapping:')) return
-    const draft = getWixMappingDraft(serviceName)
-    setWixServiceMappingSaving(true)
-
-    const payload = {
-      wix_service_name: serviceName,
-      glow_service_type: draft.service_type,
-      bed_id: draft.service_type === 'sunbed' ? Number(draft.bed_id || 0) : null,
-      minutes: draft.service_type === 'sunbed' ? Number(draft.minutes || 0) : null,
-      spraytan_service: ['spraytan', 'patch_test'].includes(draft.service_type) ? (draft.service_type === 'patch_test' ? 'Patch Test' : draft.spraytan_service) : null,
-      default_status: draft.default_status,
-      is_active: true,
-      updated_at: new Date().toISOString()
-    }
-
-    const { error } = await supabase
-      .from('wix_service_booking_map')
-      .upsert(payload, { onConflict: 'wix_service_name' })
-
-    setWixServiceMappingSaving(false)
-    if (error) {
-      console.error('Wix service mapping save failed:', error)
-      showToast(error.message || 'Wix service mapping was not saved.', 'error')
-      return
-    }
-
-    showToast(`Saved Wix mapping for ${serviceName}.`, 'success')
-    await getWixServiceBookingMappings()
-  }
-
-  function getWixServicesForMapping() {
-    const diagnostics = wixSyncDiagnostics || {}
-    const diagnosticServices = Array.isArray(diagnostics.services) ? diagnostics.services : []
-    const failedServices = Array.isArray(diagnostics.errors)
-      ? diagnostics.errors
-        .filter((error) => String(error.message || '').toLowerCase().includes('needs mapping'))
-        .map((error) => error.serviceName || '')
-        .filter(Boolean)
-      : []
-    const mappedServices = wixServiceMappings.map((mapping) => mapping.wix_service_name).filter(Boolean)
-    return [...new Set([...diagnosticServices, ...failedServices, ...mappedServices].filter(Boolean))].sort((a, b) => a.localeCompare(b))
-  }
-
   function renderWixBookingSyncPanel() {
     if (!showManagerView) return null
     const diagnostics = wixSyncDiagnostics || {}
     const syncErrors = Array.isArray(diagnostics.errors) ? diagnostics.errors : []
     const endpointErrors = Array.isArray(diagnostics.endpointErrors) ? diagnostics.endpointErrors : []
-    const wixServicesForMapping = getWixServicesForMapping()
 
     return renderCollapsibleSection(
       'Wix Booking Sync',
@@ -10583,76 +10437,6 @@ function formatMoney(value) {
               <p style={{ margin: '6px 0 0', color: '#ccc' }}>Found {diagnostics.found?.[table] || 0} / Imported {diagnostics.imported?.[table] || 0} / Failed {diagnostics.failed?.[table] || 0}</p>
             </div>
           ))}
-        </div>
-
-        <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.28)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
-            <div>
-              <h3 style={{ margin: '0 0 4px', color: '#d4a853' }}>Service Booking Map</h3>
-              <p style={{ color: '#aaa', margin: 0 }}>Manager &gt; Integrations &gt; Wix &gt; Service Booking Map</p>
-            </div>
-            <button type="button" onClick={() => runWixBookingSync()} disabled={wixSyncRunning}>
-              {wixSyncRunning ? 'Retrying...' : 'Retry Failed Bookings'}
-            </button>
-          </div>
-
-          {wixServicesForMapping.length === 0 ? (
-            <p style={{ color: '#aaa' }}>No Wix services found yet. Run Sync Wix Bookings to fetch the current Wix service list.</p>
-          ) : (
-            <div style={{ display: 'grid', gap: '10px' }}>
-              {wixServicesForMapping.map((serviceName) => {
-                const saved = getSavedWixMappingForService(serviceName)
-                const draft = getWixMappingDraft(serviceName)
-                const needsMapping = !saved
-                return (
-                  <div key={serviceName} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) repeat(5, minmax(130px, 1fr)) auto', gap: '8px', alignItems: 'end', padding: '10px', border: `1px solid ${needsMapping ? 'rgba(255,204,102,0.55)' : '#2f2a20'}`, background: needsMapping ? '#1c170c' : '#0b0b0b', overflowX: 'auto' }}>
-                    <div>
-                      <strong>{serviceName}</strong>
-                      <br />
-                      <span style={{ color: needsMapping ? '#ffcc66' : '#8fbf9b' }}>{needsMapping ? 'Needs mapping' : 'Mapped'}</span>
-                    </div>
-                    <label style={{ display: 'grid', gap: '4px' }}>
-                      Glow service type
-                      <select value={draft.service_type} onChange={(e) => updateWixMappingDraft(serviceName, 'service_type', e.target.value)} style={{ padding: '8px' }}>
-                        <option value="sunbed">Sunbed</option>
-                        <option value="spraytan">Spray Tan</option>
-                        <option value="patch_test">Patch Test</option>
-                        <option value="ignore">Ignore</option>
-                      </select>
-                    </label>
-                    <label style={{ display: 'grid', gap: '4px' }}>
-                      Bed
-                      <select value={draft.bed_id} disabled={draft.service_type !== 'sunbed'} onChange={(e) => updateWixMappingDraft(serviceName, 'bed_id', e.target.value)} style={{ padding: '8px' }}>
-                        {beds.map((bed) => <option key={bed.id} value={bed.id}>{getBedName(bed.id)}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ display: 'grid', gap: '4px' }}>
-                      Minutes
-                      <select value={draft.minutes} disabled={draft.service_type !== 'sunbed'} onChange={(e) => updateWixMappingDraft(serviceName, 'minutes', e.target.value)} style={{ padding: '8px' }}>
-                        {COMMON_BOOKING_MINUTES.map((minute) => <option key={minute} value={minute}>{minute}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ display: 'grid', gap: '4px' }}>
-                      Spray tan type
-                      <select value={draft.service_type === 'patch_test' ? 'Patch Test' : draft.spraytan_service} disabled={!['spraytan', 'patch_test'].includes(draft.service_type)} onChange={(e) => updateWixMappingDraft(serviceName, 'spraytan_service', e.target.value)} style={{ padding: '8px' }}>
-                        {SPRAY_TAN_SERVICES.map((service) => <option key={service.name} value={service.name}>{service.name}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ display: 'grid', gap: '4px' }}>
-                      Default status
-                      <select value={draft.default_status} disabled={draft.service_type === 'ignore'} onChange={(e) => updateWixMappingDraft(serviceName, 'default_status', e.target.value)} style={{ padding: '8px' }}>
-                        <option value="booked">Booked</option>
-                        <option value="pending">Pending Approval</option>
-                      </select>
-                    </label>
-                    <button type="button" onClick={() => saveWixServiceMapping(serviceName)} disabled={wixServiceMappingSaving}>
-                      {wixServiceMappingSaving ? 'Saving...' : 'Save'}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
 
         <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>

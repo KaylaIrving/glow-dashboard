@@ -134,6 +134,7 @@ export default async function handler(req, res) {
   const errors = []
   let customers = []
   let bookings = []
+  let services = []
 
   try {
     const contactsData = await wixFetch(WIX_CONTACTS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
@@ -147,6 +148,7 @@ export default async function handler(req, res) {
     const bookingsData = await wixFetch(WIX_BOOKINGS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
     const wixBookings = bookingsData.bookings || bookingsData.items || []
     bookings = wixBookings.map(normalizeBooking).filter((booking) => booking.wix_booking_id)
+    services = [...new Set(bookings.map((booking) => booking.wix_service_name || booking.service_name).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   } catch (error) {
     errors.push(`Bookings: ${error.message}`)
   }
@@ -154,10 +156,12 @@ export default async function handler(req, res) {
   res.status(errors.length ? 207 : 200).json({
     customers,
     bookings,
+    services,
     syncLog: {
       status: errors.length ? 'partial' : 'success',
       importedCustomers: customers.length,
       importedBookings: bookings.length,
+      servicesFound: services.length,
       errors,
       syncedAt: new Date().toISOString()
     },
