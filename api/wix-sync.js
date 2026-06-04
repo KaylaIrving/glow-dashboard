@@ -9,14 +9,21 @@ function normalizeServiceKey(serviceName) {
   return String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
-function uniqueServiceNames(serviceNames) {
+function uniqueServices(serviceRows) {
   const services = new Map()
-  serviceNames.filter(Boolean).forEach((serviceName) => {
-    const trimmed = String(serviceName).trim().replace(/\s+/g, ' ')
-    const key = normalizeServiceKey(trimmed)
-    if (key && !services.has(key)) services.set(key, trimmed)
+  serviceRows.filter(Boolean).forEach((service) => {
+    const serviceId = String(service.wix_service_id || '').trim()
+    const serviceName = String(service.wix_service_name || '').trim().replace(/\s+/g, ' ')
+    const key = serviceId || normalizeServiceKey(serviceName)
+    if (key && !services.has(key)) {
+      services.set(key, {
+        wix_service_id: serviceId || null,
+        wix_service_name: serviceName,
+        is_active: true
+      })
+    }
   })
-  return [...services.values()].sort((a, b) => a.localeCompare(b))
+  return [...services.values()].sort((a, b) => a.wix_service_name.localeCompare(b.wix_service_name))
 }
 
 function normalizeDate(value) {
@@ -79,6 +86,13 @@ function getBookingServiceName(booking) {
 
 function normalizeBooking(booking) {
   const serviceName = getBookingServiceName(booking)
+  const serviceId = firstValue(
+    booking.wix_service_id,
+    booking.serviceId,
+    booking.bookedEntity?.id,
+    booking.bookedEntity?.serviceId,
+    booking.service?.id
+  )
   const lowerService = serviceName.toLowerCase()
   const bookingType = lowerService.includes('spray') || lowerService.includes('patch') ? 'spraytan' : 'sunbed'
   const contact = booking.contactDetails || booking.customer || booking.contact || {}
@@ -89,6 +103,7 @@ function normalizeBooking(booking) {
   return {
     wix_booking_id: booking.id || booking.bookingId || '',
     booking_source: 'wix',
+    wix_service_id: serviceId,
     wix_status: booking.status || booking.wixStatus || '',
     booking_type: bookingType,
     service_name: serviceName,
@@ -162,7 +177,10 @@ export default async function handler(req, res) {
     const bookingsData = await wixFetch(WIX_BOOKINGS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
     const wixBookings = bookingsData.bookings || bookingsData.items || []
     bookings = wixBookings.map(normalizeBooking).filter((booking) => booking.wix_booking_id)
-    services = uniqueServiceNames(bookings.map((booking) => booking.wix_service_name || booking.service_name))
+    services = uniqueServices(bookings.map((booking) => ({
+      wix_service_id: booking.wix_service_id,
+      wix_service_name: booking.wix_service_name || booking.service_name
+    })))
   } catch (error) {
     errors.push(`Bookings: ${error.message}`)
   }
