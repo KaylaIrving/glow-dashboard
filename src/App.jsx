@@ -36,17 +36,22 @@ const MANAGER_REPORT_TYPES = [
 // '10 minute sunbed bed 1': { bedId: 1, minutes: 10 }
 // Keep empty for now so Wix cannot silently guess the wrong bed/minutes.
 const WIX_SERVICE_BOOKING_MAP = {}
-const WIX_LIVE_SERVICE_DEFAULTS = {
-  'hybrid tanning lay down sunbed': { service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  "stand up 'tone & tan' sunbed": { service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  'prestige tanning lay down sunbed': { service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  'full body spray tan': { service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Full Body', default_status: 'pending' },
-  'express full body spray tan': { service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Express Tan', default_status: 'pending' },
-  'legs only spray tan': { service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Legs Only', default_status: 'pending' },
-  'upper body & face spray tan': { service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Upper Body & Face', default_status: 'pending' },
-  'face & neck spray tan': { service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Face & Neck', default_status: 'pending' },
-  'spray tan patch test': { service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: 'Patch Test', default_status: 'pending' }
-}
+const WIX_REQUIRED_SERVICE_MAPPINGS = [
+  { wix_service_name: 'Hybrid Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Prestige Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: "Stand Up 'Tone & Tan' Sunbed", service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Stand Up Tone & Tan Sunbed', service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Full Body Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'EXPRESS Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'EXPRESS Full Body Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'Spray Tan patch test', service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: 'Spray Tan patch test', default_status: 'pending' },
+  { wix_service_name: 'BLUE Light Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'BLUE Light Full Body Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'Upper Body & Face Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Upper Body & Face Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'Face & Neck Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Face & Neck Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'Legs Only Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Legs Only Spray Tan', default_status: 'pending' }
+]
+const WIX_LIVE_SERVICE_DEFAULTS = Object.fromEntries(
+  WIX_REQUIRED_SERVICE_MAPPINGS.map((mapping) => [mapping.wix_service_name.trim().replace(/\s+/g, ' ').toLowerCase(), mapping])
+)
 
 const SPRAY_TAN_SERVICES = [
   { name: 'Full Body', price: 30 },
@@ -496,7 +501,7 @@ function App() {
     getCommissionRules()
     getLoyaltyRules()
     getStaffSchedule()
-    getWixServiceBookingMappings()
+    ensureDefaultWixServiceMappings().then((mappings) => backfillExistingWixBookings(mappings))
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
@@ -4517,7 +4522,7 @@ function formatMoney(value) {
   }
 
   function isSprayTanBooking(booking) {
-    return String(booking?.booking_type || 'sunbed').toLowerCase() === 'spraytan'
+    return ['spraytan', 'patch_test'].includes(String(booking?.booking_type || 'sunbed').toLowerCase())
   }
 
   function isSunbedBooking(booking) {
@@ -4971,12 +4976,107 @@ function formatMoney(value) {
     const activeServices = (services || []).map(normalizeWixServiceRecord).filter((service) => service.is_active && service.wix_service_id)
     for (const service of activeServices) {
       const mapping = (mappings || []).find((row) => String(row.wix_service_id || '').trim() === service.wix_service_id)
+        || (mappings || []).find((row) => !row.wix_service_id && normalizeWixServiceKey(row.wix_service_name) === normalizeWixServiceKey(service.wix_service_name))
       if (!mapping || mapping.wix_service_name === service.wix_service_name) continue
       const { error } = await supabase
         .from('wix_service_booking_map')
-        .update({ wix_service_name: service.wix_service_name, updated_at: new Date().toISOString() })
+        .update({ wix_service_id: service.wix_service_id, wix_service_name: service.wix_service_name, updated_at: new Date().toISOString() })
         .eq('id', mapping.id)
       if (error) console.error('Wix renamed service mapping update failed:', { service, mapping, error })
+    }
+  }
+
+  async function ensureDefaultWixServiceMappings(services = []) {
+    const activeServices = (services || []).map(normalizeWixServiceRecord).filter((service) => service.is_active)
+    const currentMappings = await getWixServiceBookingMappings({ silent: true })
+    const inserts = []
+
+    for (const required of WIX_REQUIRED_SERVICE_MAPPINGS) {
+      const matchingWixService = activeServices.find((service) => normalizeWixServiceKey(service.wix_service_name) === normalizeWixServiceKey(required.wix_service_name))
+      const serviceRecord = matchingWixService || { wix_service_id: '', wix_service_name: required.wix_service_name }
+      const existing = getAnyWixMappingForService(serviceRecord, currentMappings)
+      if (existing) {
+        if (matchingWixService?.wix_service_id && !existing.wix_service_id) {
+          const { error } = await supabase
+            .from('wix_service_booking_map')
+            .update({ wix_service_id: matchingWixService.wix_service_id, wix_service_name: matchingWixService.wix_service_name, updated_at: new Date().toISOString() })
+            .eq('id', existing.id)
+          if (error) console.error('Wix default mapping service ID update failed:', { required, error })
+        }
+        continue
+      }
+
+      inserts.push({
+        wix_service_id: matchingWixService?.wix_service_id || null,
+        wix_service_name: matchingWixService?.wix_service_name || required.wix_service_name,
+        glow_service_type: required.service_type,
+        bed_id: required.service_type === 'sunbed' ? Number(required.bed_id) : null,
+        minutes: Number(required.minutes || 0),
+        spraytan_service: ['spraytan', 'patch_test'].includes(required.service_type) ? required.spraytan_service : null,
+        default_status: required.default_status,
+        is_active: true,
+        notes: 'Auto-created Glow default Wix service mapping.',
+        updated_at: new Date().toISOString()
+      })
+    }
+
+    if (inserts.length > 0) {
+      const { error } = await supabase.from('wix_service_booking_map').insert(inserts)
+      if (error) console.error('Default Wix service mappings failed to save:', error)
+    }
+
+    const refreshed = await getWixServiceBookingMappings({ silent: true })
+    return refreshed
+  }
+
+  async function backfillExistingWixBookings(mappings = wixServiceMappings) {
+    const { data: wixBookings, error } = await supabase
+      .from('Bookings')
+      .select('*')
+      .or('booking_source.eq.wix,source.eq.wix')
+      .limit(1000)
+
+    if (error) {
+      console.error('Wix booking backfill query failed:', error)
+      return
+    }
+
+    let updatedCount = 0
+    for (const booking of wixBookings || []) {
+      try {
+        const mappedBooking = applyWixServiceMapping(booking, mappings)
+        if (!mappedBooking) continue
+        const updatePayload = {
+          booking_type: mappedBooking.booking_type,
+          wix_service_name: getWixBookingServiceName(mappedBooking) || booking.wix_service_name || null,
+          last_wix_sync_at: new Date().toISOString()
+        }
+
+        if (mappedBooking.booking_type === 'sunbed') {
+          if (booking.bed_id && booking.minutes) continue
+          updatePayload.bed_id = Number(mappedBooking.bed_id)
+          updatePayload.minutes = Number(mappedBooking.minutes)
+          updatePayload.approval_status = mappedBooking.approval_status || booking.approval_status || 'approved'
+        } else {
+          if (booking.spraytan_service && booking.spraytan_duration_minutes) continue
+          updatePayload.spraytan_service = mappedBooking.spraytan_service
+          updatePayload.spraytan_column = mappedBooking.spraytan_column
+          updatePayload.spraytan_duration_minutes = mappedBooking.spraytan_duration_minutes
+          updatePayload.approval_status = mappedBooking.approval_status || booking.approval_status || 'pending'
+          updatePayload.patch_test_required = mappedBooking.patch_test_required
+        }
+
+        const { error: updateError } = await supabase.from('Bookings').update(updatePayload).eq('id', booking.id)
+        if (updateError) throw updateError
+        updatedCount += 1
+      } catch (bookingError) {
+        console.error('Wix booking backfill failed for one booking:', { booking, bookingError })
+      }
+    }
+
+    if (updatedCount > 0) {
+      await getBookings()
+      showToast(`Backfilled ${updatedCount} Wix booking(s).`, 'success')
     }
   }
 
@@ -4988,7 +5088,7 @@ function formatMoney(value) {
       if (!response.ok) throw new Error(`Wix services endpoint returned ${response.status}`)
       const payload = await response.json()
       const services = Array.isArray(payload?.services) ? payload.services.map(normalizeWixServiceRecord).filter((service) => service.is_active) : []
-      const mappings = await getWixServiceBookingMappings({ silent: true })
+      const mappings = await ensureDefaultWixServiceMappings(services)
       await reconcileRenamedWixServices(services, mappings)
       const refreshedMappings = await getWixServiceBookingMappings({ silent: true })
       const nextDiagnostics = { ...(wixSyncDiagnostics || {}), services, servicesRefreshedAt: new Date().toISOString() }
@@ -5015,7 +5115,7 @@ function formatMoney(value) {
       if (idMatch) return idMatch
     }
     const serviceKey = normalizeWixServiceKey(normalized.wix_service_name)
-    return (mappings || []).find((mapping) => !mapping.wix_service_id && normalizeWixServiceKey(mapping.wix_service_name) === serviceKey) || null
+    return (mappings || []).find((mapping) => normalizeWixServiceKey(mapping.wix_service_name) === serviceKey) || null
   }
 
   function getWixMappingDraft(service) {
@@ -5048,15 +5148,17 @@ function formatMoney(value) {
     const serviceName = getWixBookingServiceName(wixBookingPayload)
     const serviceId = getWixBookingServiceId(wixBookingPayload)
     const mapping = getAnyWixMappingForService({ wix_service_id: serviceId, wix_service_name: serviceName }, mappings)
+      || WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(serviceName)]
 
     if (!mapping) {
       throw new Error(`Wix service "${serviceName || 'Unknown service'}" needs mapping in Manager > Integrations > Wix > Service Booking Map.`)
     }
 
-    if (mapping.glow_service_type === 'ignore' || mapping.is_active === false) return null
+    const mappedServiceType = mapping.glow_service_type || mapping.service_type
+    if (mappedServiceType === 'ignore' || mapping.is_active === false) return null
 
     const defaultApproval = mapping.default_status === 'pending' ? 'pending' : 'approved'
-    if (mapping.glow_service_type === 'sunbed') {
+    if (mappedServiceType === 'sunbed') {
       return {
         ...wixBookingPayload,
         booking_type: 'sunbed',
@@ -5068,18 +5170,18 @@ function formatMoney(value) {
       }
     }
 
-    const sprayService = mapping.glow_service_type === 'patch_test' ? 'Patch Test' : mapping.spraytan_service || wixBookingPayload.spraytan_service || serviceName
+    const sprayService = mapping.spraytan_service || wixBookingPayload.spraytan_service || serviceName
     return {
       ...wixBookingPayload,
-      booking_type: 'spraytan',
-      spraytan_column: mapping.glow_service_type === 'patch_test' ? 'patch_test' : String(sprayService || '').toLowerCase().includes('express') ? 'express_tan' : 'spray_tan',
+      booking_type: mappedServiceType === 'patch_test' ? 'patch_test' : 'spraytan',
+      spraytan_column: mappedServiceType === 'patch_test' ? 'patch_test' : String(sprayService || '').toLowerCase().includes('express') ? 'express_tan' : 'spray_tan',
       spraytan_service: sprayService,
       service_name: sprayService,
       wix_service_id: serviceId,
       wix_service_name: serviceName,
       approval_status: defaultApproval,
-      spraytan_duration_minutes: Number(mapping.minutes || wixBookingPayload.spraytan_duration_minutes || (mapping.glow_service_type === 'patch_test' ? 10 : 30)),
-      patch_test_required: mapping.glow_service_type === 'spraytan',
+      spraytan_duration_minutes: Number(mapping.minutes || wixBookingPayload.spraytan_duration_minutes || (mappedServiceType === 'patch_test' ? 10 : 30)),
+      patch_test_required: mappedServiceType === 'spraytan',
       patch_test_completed: false
     }
   }
@@ -5088,7 +5190,7 @@ function formatMoney(value) {
     const rawStatus = String(wixBookingPayload.wix_status || wixBookingPayload.status || '').trim().toLowerCase()
     const cancelled = ['cancelled', 'canceled', 'declined', 'voided'].some((status) => rawStatus.includes(status))
     if (cancelled) return { status: 'cancelled', approval_status: 'cancelled' }
-    if (bookingType === 'spraytan') return { status: 'booked', approval_status: wixBookingPayload.approval_status || 'pending' }
+    if (['spraytan', 'patch_test'].includes(String(bookingType).toLowerCase())) return { status: 'booked', approval_status: wixBookingPayload.approval_status || 'pending' }
     return { status: 'booked', approval_status: wixBookingPayload.approval_status || 'approved' }
   }
 
@@ -5230,7 +5332,7 @@ function formatMoney(value) {
     const serviceName = wixBookingPayload.spraytan_service || wixBookingPayload.service_name || wixBookingPayload.wix_service_name || ''
     const bookingType = wixBookingPayload.booking_type || 'spraytan'
     const appointmentTime = wixBookingPayload.appointment_time || wixBookingPayload.start_time || wixBookingPayload.startDate
-    const isSprayTan = bookingType === 'spraytan'
+    const isSprayTan = ['spraytan', 'patch_test'].includes(String(bookingType).toLowerCase())
     const servicePrice = isSprayTan ? getSprayTanServicePrice(serviceName) : 0
     const depositRequired = Number(wixBookingPayload.deposit_required ?? (isSprayTan && serviceName !== 'Patch Test' ? servicePrice * 0.5 : 0))
     const depositPaid = Number(wixBookingPayload.deposit_paid || 0)
@@ -5254,6 +5356,8 @@ function formatMoney(value) {
       last_wix_sync_at: new Date().toISOString(),
       approval_status: mappedStatus.approval_status,
       booking_type: bookingType,
+      bed_id: !isSprayTan ? Number(wixBookingPayload.bed_id || 0) || null : null,
+      minutes: !isSprayTan ? Number(wixBookingPayload.minutes || 0) || null : null,
       spraytan_service: isSprayTan ? serviceName || null : null,
       spraytan_artist: isSprayTan ? wixBookingPayload.spraytan_artist || null : null,
       deposit_required: isSprayTan ? depositRequired : null,
@@ -5454,7 +5558,7 @@ function formatMoney(value) {
       const wixCustomers = Array.isArray(payload?.customers) ? payload.customers : []
       const wixBookings = Array.isArray(payload?.bookings) ? payload.bookings : []
       const activeWixServices = Array.isArray(payload?.services) ? payload.services.map(normalizeWixServiceRecord).filter((service) => service.is_active) : []
-      const loadedServiceMappings = await getWixServiceBookingMappings({ silent: true })
+      const loadedServiceMappings = await ensureDefaultWixServiceMappings(activeWixServices)
       await reconcileRenamedWixServices(activeWixServices, loadedServiceMappings)
       const serviceMappings = await getWixServiceBookingMappings({ silent: true })
       diagnostics.found.customers = wixCustomers.length
@@ -5515,6 +5619,7 @@ function formatMoney(value) {
         await getBookings()
         await getCustomers()
       }
+      await backfillExistingWixBookings(serviceMappings)
       if (!automatic) showToast(syncSummary, diagnostics.failed.total > 0 ? 'warning' : 'success')
     } catch (error) {
       diagnostics.finishedAt = new Date().toISOString()
