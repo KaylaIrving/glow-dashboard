@@ -45,6 +45,14 @@ function normalizeDate(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
+function addMinutesToIsoDate(startIso, minutes) {
+  if (!startIso) return null
+  const startDate = new Date(startIso)
+  const durationMinutes = Number(minutes || 0)
+  if (Number.isNaN(startDate.getTime()) || durationMinutes <= 0) return null
+  return new Date(startDate.getTime() + durationMinutes * 60000).toISOString()
+}
+
 function describeShape(value, depth = 0) {
   if (!value || typeof value !== 'object' || depth > 2) return typeof value
   if (Array.isArray(value)) return value.length ? [describeShape(value[0], depth + 1)] : []
@@ -114,6 +122,7 @@ function normalizeBooking(booking) {
   const servicePrice = lowerService.includes('express') ? 35 : lowerService.includes('face') ? 8 : lowerService.includes('legs') ? 18 : lowerService.includes('upper') ? 22 : lowerService.includes('patch') ? 0 : 30
   const isSprayLike = bookingType === 'spraytan' || bookingType === 'patch_test'
   const depositRequired = bookingType === 'spraytan' && servicePrice > 0 ? servicePrice * 0.5 : 0
+  const durationMinutes = Number(requiredMapping?.minutes || requiredMapping?.spraytan_duration_minutes || booking.durationMinutes || booking.duration || (lowerService.includes('patch') ? 10 : 30))
 
   return {
     wix_booking_id: booking.id || booking.bookingId || '',
@@ -130,10 +139,12 @@ function normalizeBooking(booking) {
     customer_phone: firstValue(contact.phone, contact.mobile, contact.phoneNumber),
     wix_contact_id: firstValue(contact.contactId, contact.id, booking.contactId),
     appointment_time: startTime,
+    booking_start: startTime,
+    booking_end: addMinutesToIsoDate(startTime, durationMinutes),
     spraytan_column: bookingType === 'patch_test' ? 'patch_test' : lowerService.includes('express') ? 'express_tan' : 'spray_tan',
     spraytan_service: requiredMapping?.spraytan_service || (lowerService.includes('patch') ? 'Spray Tan patch test' : serviceName),
     spraytan_artist: firstValue(booking.staffMemberName, booking.staffName, booking.resourceName, 'Unassigned'),
-    spraytan_duration_minutes: Number(requiredMapping?.spraytan_duration_minutes || booking.durationMinutes || booking.duration || (lowerService.includes('patch') ? 10 : 30)),
+    spraytan_duration_minutes: durationMinutes,
     deposit_required: depositRequired,
     deposit_paid: Number(booking.depositPaid || 0),
     deposit_status: Number(booking.depositPaid || 0) >= depositRequired && depositRequired > 0 ? 'paid' : 'pending',
