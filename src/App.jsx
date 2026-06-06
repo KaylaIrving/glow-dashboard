@@ -2540,9 +2540,10 @@ function formatMoney(value) {
 
   function getBookingSource(booking) {
     if (!booking) return 'dashboard'
-    if (booking.booking_source) return booking.booking_source
+    if (String(booking.booking_source || '').toLowerCase() === 'wix') return 'wix'
+    if (String(booking.source || '').toLowerCase() === 'wix') return 'wix'
     if (booking.wix_booking_id) return 'wix'
-    if (booking.source === 'wix') return 'wix'
+    if (booking.booking_source) return booking.booking_source
     return 'dashboard'
   }
 
@@ -4506,10 +4507,14 @@ function formatMoney(value) {
   }
 
   function getBookingCalendarDisplayInterval(booking) {
-    if (!booking?.appointment_time) return null
-    const appointmentStart = new Date(booking.appointment_time)
+    const startSource = booking?.booking_start || booking?.appointment_time
+    if (!startSource) return null
+    const appointmentStart = new Date(startSource)
     if (Number.isNaN(appointmentStart.getTime())) return null
-    const plannedEnd = new Date(appointmentStart.getTime() + getTotalBlockMinutes(booking) * 60000)
+    const explicitEnd = booking?.booking_end ? new Date(booking.booking_end) : null
+    const plannedEnd = explicitEnd && !Number.isNaN(explicitEnd.getTime())
+      ? explicitEnd
+      : new Date(appointmentStart.getTime() + getTotalBlockMinutes(booking) * 60000)
     return { start: appointmentStart, end: plannedEnd }
   }
 
@@ -4530,7 +4535,7 @@ function formatMoney(value) {
   }
 
   function isSprayTanBooking(booking) {
-    return ['spraytan', 'patch_test'].includes(String(booking?.booking_type || 'sunbed').toLowerCase())
+    return ['spraytan', 'express_tan', 'patch_test'].includes(String(booking?.booking_type || 'sunbed').toLowerCase())
   }
 
   function isSunbedBooking(booking) {
@@ -4538,7 +4543,11 @@ function formatMoney(value) {
   }
 
   function getBookingsForSelectedDate() {
-    return bookings.filter((booking) => isSunbedBooking(booking) && booking.appointment_time && formatLocalDate(new Date(booking.appointment_time)) === selectedDate)
+    return bookings.filter((booking) => {
+      if (!isSunbedBooking(booking)) return false
+      const interval = getBookingCalendarDisplayInterval(booking)
+      return interval && formatLocalDate(interval.start) === selectedDate
+    })
   }
 
   function getSprayTanBookingsForSelectedDate() {
@@ -5380,6 +5389,14 @@ function formatMoney(value) {
     return data || null
   }
 
+  function isExistingWixBookingRecord(booking) {
+    return Boolean(
+      booking?.wix_booking_id
+      || String(booking?.source || '').toLowerCase() === 'wix'
+      || String(booking?.booking_source || '').toLowerCase() === 'wix'
+    )
+  }
+
   async function upsertWixCustomerRecord(wixCustomerPayload) {
     // Wix customer/profile sync is normalized by /api/wix-sync so the client can safely
     // upsert into the existing Customers table without exposing Wix credentials.
@@ -5467,7 +5484,7 @@ function formatMoney(value) {
   async function updateWixBookingStatus(wixBookingId, wixStatus, approvalStatus = null) {
     const existingBooking = await checkWixBookingExists(wixBookingId)
     if (!existingBooking) throw new Error('Wix booking was not found.')
-    if (existingBooking.booking_source && existingBooking.booking_source !== 'wix') {
+    if (!isExistingWixBookingRecord(existingBooking)) {
       throw new Error('Matched booking is not a Wix booking. Refusing to update dashboard-created booking.')
     }
 
@@ -5717,7 +5734,7 @@ function formatMoney(value) {
     if (wixBookingPayload.booking_type === 'spraytan') {
       const existingBooking = await checkWixBookingExists(wixBookingPayload.wix_booking_id)
       if (!existingBooking) return insertWixBooking(wixBookingPayload)
-      if (existingBooking.booking_source && existingBooking.booking_source !== 'wix') {
+      if (!isExistingWixBookingRecord(existingBooking)) {
         throw new Error('Matched booking is not a Wix booking. Refusing to update dashboard-created booking.')
       }
       const customer = await findOrCreateWixCustomer(wixBookingPayload)
@@ -5771,14 +5788,14 @@ function formatMoney(value) {
 
     const { data: existingBooking, error: lookupError } = await supabase
       .from('Bookings')
-      .select('id,booking_source')
+      .select('id,source,booking_source,wix_booking_id')
       .eq('wix_booking_id', wixBookingPayload.wix_booking_id)
       .maybeSingle()
 
     if (lookupError) throw lookupError
 
     if (existingBooking) {
-      if (existingBooking.booking_source && existingBooking.booking_source !== 'wix') {
+      if (!isExistingWixBookingRecord(existingBooking)) {
         throw new Error('Matched booking is not a Wix booking. Refusing to update dashboard-created booking.')
       }
       const { data, error } = await supabase
