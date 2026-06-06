@@ -5661,6 +5661,9 @@ function formatMoney(value) {
       status: 'syncing',
       found: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       imported: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
+      updated: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
+      skipped: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
+      warnings: { customers: 0, bookings: 0, runtime: 0, total: 0, messages: [] },
       failed: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       errors: [],
       endpointErrors: [],
@@ -5722,10 +5725,20 @@ function formatMoney(value) {
         try {
           const mappedWixBooking = applyWixServiceMapping(wixBooking, serviceMappings)
           attemptedBookingPayload = mappedWixBooking || wixBooking
-          if (!mappedWixBooking) continue
+          if (!mappedWixBooking) {
+            diagnostics.skipped.bookings += 1
+            diagnostics.skipped.total += 1
+            continue
+          }
+          const existingWixBooking = await checkWixBookingExists(mappedWixBooking.wix_booking_id)
           await upsertWixBooking(mappedWixBooking)
-          diagnostics.imported.bookings += 1
-          diagnostics.imported.total += 1
+          if (existingWixBooking) {
+            diagnostics.updated.bookings += 1
+            diagnostics.updated.total += 1
+          } else {
+            diagnostics.imported.bookings += 1
+            diagnostics.imported.total += 1
+          }
         } catch (bookingError) {
           diagnostics.failed.bookings += 1
           diagnostics.failed.total += 1
@@ -5742,9 +5755,10 @@ function formatMoney(value) {
       diagnostics.finishedAt = new Date().toISOString()
       diagnostics.status = diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'success'
       diagnostics.failedReasons = groupWixFailureReasons(diagnostics.errors, diagnostics.endpointErrors)
-      setWixImportedCount(diagnostics.imported.total)
+      const successfulTotal = diagnostics.imported.total + diagnostics.updated.total
+      setWixImportedCount(successfulTotal)
       setWixFailedCount(diagnostics.failed.total)
-      const syncSummary = `Wix sync complete: ${diagnostics.found.total} found, ${diagnostics.imported.total} imported/updated, ${diagnostics.failed.total} failed.`
+      const syncSummary = `Wix sync complete: ${diagnostics.found.total} found, ${diagnostics.imported.total} imported, ${diagnostics.updated.total} updated, ${diagnostics.skipped.total} skipped, ${diagnostics.warnings.total} warning(s), ${diagnostics.failed.total} failed.`
       const firstRealError = diagnostics.errors[0]
         ? `${formatStatus(diagnostics.errors[0].table)} ${diagnostics.errors[0].recordId}: ${diagnostics.errors[0].message}`
         : diagnostics.endpointErrors[0] || ''
@@ -5752,7 +5766,7 @@ function formatMoney(value) {
       setWixSyncStatus(syncStatusMessage)
       updateWixSyncHealth({ state: diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: firstRealError })
       persistWixSyncDiagnostics(diagnostics)
-      if (diagnostics.imported.total > 0) {
+      if (successfulTotal > 0) {
         await getBookings()
         await getCustomers()
       }
@@ -10926,8 +10940,12 @@ function formatMoney(value) {
             <h3 style={{ marginBottom: 0 }}>{diagnostics.found?.total ?? 0}</h3>
           </div>
           <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Successfully imported</span>
-            <h3 style={{ marginBottom: 0 }}>{wixImportedCount}</h3>
+            <span>Imported / updated</span>
+            <h3 style={{ marginBottom: 0 }}>{diagnostics.imported?.total || 0} / {diagnostics.updated?.total || 0}</h3>
+          </div>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Skipped / warnings</span>
+            <h3 style={{ marginBottom: 0 }}>{diagnostics.skipped?.total || 0} / {diagnostics.warnings?.total || 0}</h3>
           </div>
           <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
             <span>Records failed</span>
@@ -10951,7 +10969,9 @@ function formatMoney(value) {
           {['customers', 'bookings', 'forms', 'notes'].map((table) => (
             <div key={table} style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
               <strong style={{ color: '#d4a853' }}>{formatStatus(table)}</strong>
-              <p style={{ margin: '6px 0 0', color: '#ccc' }}>Found {diagnostics.found?.[table] || 0} / Imported {diagnostics.imported?.[table] || 0} / Failed {diagnostics.failed?.[table] || 0}</p>
+              <p style={{ margin: '6px 0 0', color: '#ccc' }}>
+                Found {diagnostics.found?.[table] || 0} / Imported {diagnostics.imported?.[table] || 0} / Updated {diagnostics.updated?.[table] || 0} / Skipped {diagnostics.skipped?.[table] || 0} / Failed {diagnostics.failed?.[table] || 0}
+              </p>
             </div>
           ))}
         </div>

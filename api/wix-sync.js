@@ -292,6 +292,9 @@ export default async function handler(req, res) {
     debugSummary: {
       found: { customers: contactsFound, bookings: bookingsFound, total: contactsFound + bookingsFound },
       returned: { customers: customers.length, bookings: bookings.length, total: customers.length + bookings.length },
+      updated: { customers: 0, bookings: 0, total: 0 },
+      skipped: { customers: 0, bookings: 0, total: 0 },
+      warnings: { customers: 0, bookings: 0, runtime: 0, total: 0, messages: [] },
       failed: {
         customers: failedRecords.filter((record) => record.table === 'customers').length,
         bookings: failedRecords.filter((record) => record.table === 'bookings').length,
@@ -306,6 +309,11 @@ export default async function handler(req, res) {
       foundTotal: contactsFound + bookingsFound,
       importedCustomers: customers.length,
       importedBookings: bookings.length,
+      updatedCustomers: 0,
+      updatedBookings: 0,
+      skippedCustomers: 0,
+      skippedBookings: 0,
+      warnings: { customers: 0, bookings: 0, runtime: 0, total: 0, messages: [] },
       failedCustomers: failedRecords.filter((record) => record.table === 'customers').length,
       failedBookings: failedRecords.filter((record) => record.table === 'bookings').length,
       failedTotal: failedRecords.length,
