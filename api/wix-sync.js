@@ -18,9 +18,9 @@ function inferWixServiceMapping(serviceName) {
   const key = normalizeServiceKey(serviceName)
   if (!key) return null
   if (key.includes('patch')) return { booking_type: 'patch_test', spraytan_service: serviceName || 'Spray Tan patch test', spraytan_duration_minutes: 10 }
-  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { booking_type: 'sunbed', bed_id: 1, minutes: 15 }
-  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light')) return { booking_type: 'sunbed', bed_id: 2, minutes: 15 }
   if (key.includes('prestige') || key.includes('excellence')) return { booking_type: 'sunbed', bed_id: 3, minutes: 15 }
+  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { booking_type: 'sunbed', bed_id: 1, minutes: 15 }
+  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light') || key.includes('relaxing premium') || key.includes('vitamin d') || key.includes('red light') || key.includes('lay down sunbed') || key === 'lay down sunbed') return { booking_type: 'sunbed', bed_id: 2, minutes: 15 }
   if (key.includes('spray')) {
     const duration = key.includes('patch') ? 10 : key.includes('upper') || key.includes('face') || key.includes('legs') ? 15 : 30
     return { booking_type: 'spraytan', spraytan_service: serviceName, spraytan_duration_minutes: duration }

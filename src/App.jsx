@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from './supabase'
 import './App.css'
@@ -57,9 +57,9 @@ function inferWixServiceMapping(serviceName) {
   const key = String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
   if (!key) return null
   if (key.includes('patch')) return { service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: serviceName || 'Spray Tan patch test', default_status: 'pending' }
-  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' }
-  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light')) return { service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' }
   if (key.includes('prestige') || key.includes('excellence')) return { service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light') || key.includes('relaxing premium') || key.includes('vitamin d') || key.includes('red light') || key.includes('lay down sunbed') || key === 'lay down sunbed') return { service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' }
   if (key.includes('spray')) {
     const duration = key.includes('upper') || key.includes('face') || key.includes('legs') ? 15 : 30
     return { service_type: 'spraytan', bed_id: '', minutes: duration, spraytan_service: serviceName, default_status: 'pending' }
@@ -169,6 +169,7 @@ const PURCHASE_OPTIONS = {
 function App() {
   const [beds, setBeds] = useState([])
   const [bookings, setBookings] = useState([])
+  const bookingsLoadingRef = useRef(false)
   const [customers, setCustomers] = useState([])
   const [staff, setStaff] = useState([])
   const [products, setProducts] = useState([])
@@ -460,7 +461,7 @@ function App() {
   const [showWixSyncErrors, setShowWixSyncErrors] = useState(false)
   const [wixServiceMappings, setWixServiceMappings] = useState([])
   const [wixServiceMappingDrafts, setWixServiceMappingDrafts] = useState({})
-  const [wixServiceMappingSaving, setWixServiceMappingSaving] = useState(false)
+  const [wixServiceMappingSaving, setWixServiceMappingSaving] = useState({})
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
   const [managerReceipts, setManagerReceipts] = useState([])
@@ -522,7 +523,7 @@ function App() {
 
   useEffect(() => {
     autoCompleteFinishedSessions()
-  }, [currentTime, bookings])
+  }, [currentTime])
 
   useEffect(() => {
     if (!wixSyncEndpoint) return undefined
@@ -564,6 +565,7 @@ function App() {
   }, [products])
 
   useEffect(() => {
+    getBookings()
     getDailyTakings()
     getCashUpForSelectedDate()
     getFloatMovements()
@@ -804,13 +806,25 @@ function formatMoney(value) {
   }
 
   async function getBookings() {
-    const { data, error } = await supabase.from('Bookings').select('*').order('appointment_time', { ascending: true })
-    if (error) {
+    if (bookingsLoadingRef.current) return false
+    bookingsLoadingRef.current = true
+    try {
+      const { data, error } = await supabase.from('Bookings').select('*').order('appointment_time', { ascending: true })
+      if (error) {
+        showDataLoadWarning('Bookings could not be loaded. Please check the connection before making changes.', error)
+        return false
+      }
+      setDataLoadWarning((currentWarning) => (
+        currentWarning === 'Bookings could not be loaded. Please check the connection before making changes.' ? '' : currentWarning
+      ))
+      setBookings(data || [])
+      return true
+    } catch (error) {
       showDataLoadWarning('Bookings could not be loaded. Please check the connection before making changes.', error)
-      return
+      return false
+    } finally {
+      bookingsLoadingRef.current = false
     }
-    clearDataLoadWarning()
-    setBookings(data || [])
   }
 
   async function getCustomers() {
@@ -6588,9 +6602,12 @@ function formatMoney(value) {
   }
 
   async function autoCompleteFinishedSessions() {
+    const liveCompletionStatuses = ['undressing', 'running', 'cooldown', 'active', 'time_sent', 'sent', 'customer_started', 'waiting_to_start', 'in_use']
     for (const booking of bookings) {
       if (!isSunbedBooking(booking)) continue
-      if (booking.booking_end && new Date(booking.booking_end) <= currentTime && !['completed', 'force_stopped', 'no_show'].includes(booking.status)) {
+      const status = String(booking.status || '').toLowerCase()
+      if (!liveCompletionStatuses.includes(status)) continue
+      if (booking.booking_end && new Date(booking.booking_end) <= currentTime && !['completed', 'force_stopped', 'no_show'].includes(status)) {
         await addRuntimeHoursForBooking(booking)
         await supabase.from('Bookings').update({ status: 'completed', tmax_status: 'completed' }).eq('id', booking.id)
         getBookings()
@@ -10849,38 +10866,45 @@ function formatMoney(value) {
   async function saveWixServiceMapping(service, { archive = false } = {}) {
     if (!requireManagerAccess('Manager PIN required to save Wix service mapping:')) return
     const normalizedService = normalizeWixServiceRecord(service)
+    const rowKey = getWixServiceDraftKey(normalizedService)
     const draft = getWixMappingDraft(normalizedService)
-    setWixServiceMappingSaving(true)
+    setWixServiceMappingSaving((current) => ({ ...current, [rowKey]: true }))
 
-    const payload = {
-      wix_service_id: normalizedService.wix_service_id || null,
-      wix_service_name: normalizedService.wix_service_name,
-      glow_service_type: archive ? 'ignore' : draft.service_type,
-      bed_id: !archive && draft.service_type === 'sunbed' ? Number(draft.bed_id || 0) : null,
-      minutes: !archive && ['sunbed', 'spraytan', 'patch_test'].includes(draft.service_type) ? Number(draft.minutes || 0) : null,
-      spraytan_service: !archive && ['spraytan', 'patch_test'].includes(draft.service_type) ? (draft.service_type === 'patch_test' ? 'Patch Test' : draft.spraytan_service) : null,
-      default_status: archive ? 'ignored' : draft.default_status,
-      is_active: !archive,
-      notes: archive ? 'Archived/ignored from Glow manager service map.' : null,
-      updated_at: new Date().toISOString()
+    try {
+      const payload = {
+        wix_service_id: normalizedService.wix_service_id || null,
+        wix_service_name: normalizedService.wix_service_name,
+        glow_service_type: archive ? 'ignore' : draft.service_type,
+        bed_id: !archive && draft.service_type === 'sunbed' ? Number(draft.bed_id || 0) : null,
+        minutes: !archive && ['sunbed', 'spraytan', 'patch_test'].includes(draft.service_type) ? Number(draft.minutes || 0) : null,
+        spraytan_service: !archive && ['spraytan', 'patch_test'].includes(draft.service_type) ? (draft.service_type === 'patch_test' ? 'Patch Test' : draft.spraytan_service) : null,
+        default_status: archive ? 'ignored' : draft.default_status,
+        is_active: !archive,
+        notes: archive ? 'Archived/ignored from Glow manager service map.' : null,
+        updated_at: new Date().toISOString()
+      }
+
+      const existingMapping = getAnyWixMappingForService(normalizedService)
+      const saveQuery = existingMapping?.id
+        ? supabase.from('wix_service_booking_map').update(payload).eq('id', existingMapping.id)
+        : supabase.from('wix_service_booking_map').insert(payload)
+      const { error } = await saveQuery
+
+      if (error) {
+        console.error('Wix service mapping save failed:', error)
+        showToast(error.message || 'Wix service mapping was not saved.', 'error')
+        return
+      }
+
+      showToast(archive ? `Archived Wix service ${normalizedService.wix_service_name}.` : `Saved Wix mapping for ${normalizedService.wix_service_name}.`, 'success')
+      await getWixServiceBookingMappings()
+    } finally {
+      setWixServiceMappingSaving((current) => {
+        const next = { ...current }
+        delete next[rowKey]
+        return next
+      })
     }
-
-    const existingMapping = getAnyWixMappingForService(normalizedService)
-    const saveQuery = existingMapping?.id
-      ? supabase.from('wix_service_booking_map').update(payload).eq('id', existingMapping.id)
-      : supabase.from('wix_service_booking_map').insert(payload)
-    const { error } = await saveQuery
-
-    setWixServiceMappingSaving(false)
-    if (error) {
-      console.error('Wix service mapping save failed:', error)
-      showToast(error.message || 'Wix service mapping was not saved.', 'error')
-      return
-    }
-
-    showToast(archive ? `Archived Wix service ${normalizedService.wix_service_name}.` : `Saved Wix mapping for ${normalizedService.wix_service_name}.`, 'success')
-    await getWixServiceBookingMappings()
-    await runWixBookingSync({ automatic: true })
   }
 
   function getWixServicesForMapping() {
@@ -11000,6 +11024,8 @@ function formatMoney(value) {
                 const saved = getSavedWixMappingForService(service)
                 const draft = getWixMappingDraft(service)
                 const needsMapping = !saved
+                const rowKey = getWixServiceDraftKey(service)
+                const rowSaving = Boolean(wixServiceMappingSaving[rowKey])
                 return (
                   <div key={service.wix_service_id || normalizeWixServiceKey(serviceName)} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) repeat(5, minmax(130px, 1fr)) minmax(130px, auto)', gap: '8px', alignItems: 'end', padding: '10px', border: `1px solid ${needsMapping ? 'rgba(255,204,102,0.55)' : '#2f2a20'}`, background: needsMapping ? '#1c170c' : '#0b0b0b', overflowX: 'auto' }}>
                     <div>
@@ -11044,11 +11070,11 @@ function formatMoney(value) {
                       </select>
                     </label>
                     <div style={{ display: 'grid', gap: '6px' }}>
-                      <button type="button" onClick={() => saveWixServiceMapping(service, { archive: draft.service_type === 'ignore' })} disabled={wixServiceMappingSaving}>
-                        {wixServiceMappingSaving ? 'Saving...' : 'Save'}
+                      <button type="button" onClick={() => saveWixServiceMapping(service, { archive: draft.service_type === 'ignore' })} disabled={rowSaving}>
+                        {rowSaving ? 'Saving...' : 'Save'}
                       </button>
-                      <button type="button" onClick={() => saveWixServiceMapping(service, { archive: true })} disabled={wixServiceMappingSaving} style={{ padding: '7px 9px', fontSize: '12px', borderColor: 'rgba(255,204,102,0.35)' }}>
-                        Archive / Ignore
+                      <button type="button" onClick={() => saveWixServiceMapping(service, { archive: true })} disabled={rowSaving} style={{ padding: '7px 9px', fontSize: '12px', borderColor: 'rgba(255,204,102,0.35)' }}>
+                        {rowSaving ? 'Saving...' : 'Archive / Ignore'}
                       </button>
                     </div>
                   </div>
