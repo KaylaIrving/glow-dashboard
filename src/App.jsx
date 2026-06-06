@@ -53,6 +53,20 @@ const WIX_LIVE_SERVICE_DEFAULTS = Object.fromEntries(
   WIX_REQUIRED_SERVICE_MAPPINGS.map((mapping) => [mapping.wix_service_name.trim().replace(/\s+/g, ' ').toLowerCase(), mapping])
 )
 
+function inferWixServiceMapping(serviceName) {
+  const key = String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
+  if (!key) return null
+  if (key.includes('patch')) return { service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: serviceName || 'Spray Tan patch test', default_status: 'pending' }
+  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light')) return { service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('prestige') || key.includes('excellence')) return { service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('spray')) {
+    const duration = key.includes('upper') || key.includes('face') || key.includes('legs') ? 15 : 30
+    return { service_type: 'spraytan', bed_id: '', minutes: duration, spraytan_service: serviceName, default_status: 'pending' }
+  }
+  return null
+}
+
 const SPRAY_TAN_SERVICES = [
   { name: 'Full Body', price: 30 },
   { name: 'Express Tan', price: 35 },
@@ -5197,7 +5211,7 @@ function formatMoney(value) {
   function getWixMappingDraft(service) {
     const normalized = normalizeWixServiceRecord(service)
     const saved = getAnyWixMappingForService(normalized)
-    const liveDefault = WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(normalized.wix_service_name)] || {}
+    const liveDefault = WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(normalized.wix_service_name)] || inferWixServiceMapping(normalized.wix_service_name) || {}
     const draft = wixServiceMappingDrafts[getWixServiceDraftKey(normalized)] || {}
     return {
       service_type: saved?.glow_service_type || liveDefault.service_type || 'sunbed',
@@ -5225,6 +5239,7 @@ function formatMoney(value) {
     const serviceId = getWixBookingServiceId(wixBookingPayload)
     const mapping = getAnyWixMappingForService({ wix_service_id: serviceId, wix_service_name: serviceName }, mappings)
       || WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(serviceName)]
+      || inferWixServiceMapping(serviceName)
 
     if (!mapping) {
       throw new Error(`Wix service "${serviceName || 'Unknown service'}" needs mapping in Manager > Integrations > Wix > Service Booking Map.`)
@@ -5461,7 +5476,7 @@ function formatMoney(value) {
 
   async function insertWixBooking(wixBookingPayload) {
     if (!wixBookingPayload?.wix_booking_id) throw new Error('Wix booking payload must include wix_booking_id.')
-    if (!wixBookingPayload.appointment_time && !wixBookingPayload.start_time && !wixBookingPayload.startDate) {
+    if (!wixBookingPayload.appointment_time && !wixBookingPayload.booking_start && !wixBookingPayload.start_time && !wixBookingPayload.startDate) {
       throw new Error('Wix booking payload must include an appointment/start time.')
     }
 
@@ -5582,6 +5597,21 @@ function formatMoney(value) {
     }
   }
 
+  function groupWixFailureReasons(errors = [], endpointErrors = []) {
+    const grouped = {}
+    endpointErrors.forEach((message) => {
+      const reason = String(message || 'Endpoint error')
+      grouped[reason] = (grouped[reason] || 0) + 1
+    })
+    errors.forEach((error) => {
+      const reason = error?.missingColumn
+        ? `Missing column: ${error.missingColumn}`
+        : error?.message || 'Unknown failure'
+      grouped[reason] = (grouped[reason] || 0) + 1
+    })
+    return grouped
+  }
+
   function persistWixSyncDiagnostics(diagnostics) {
     setWixSyncDiagnostics(diagnostics)
     if (typeof window !== 'undefined') {
@@ -5634,6 +5664,7 @@ function formatMoney(value) {
       failed: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       errors: [],
       endpointErrors: [],
+      failedReasons: {},
       services: [],
       sampleFailedCustomer: null,
       sampleFailedBooking: null
@@ -5658,6 +5689,7 @@ function formatMoney(value) {
       diagnostics.found.bookings = Number(endpointSyncLog.foundBookings ?? wixBookings.length)
       diagnostics.found.total = Number(endpointSyncLog.foundTotal ?? (diagnostics.found.customers + diagnostics.found.bookings))
       diagnostics.endpointErrors = Array.isArray(payload?.errors) ? payload.errors : []
+      diagnostics.failedReasons = payload?.debugSummary?.failedReasons || endpointSyncLog.failedReasons || {}
       endpointFailedRecords.forEach((failedRecord) => {
         diagnostics.failed[failedRecord.table] = (diagnostics.failed[failedRecord.table] || 0) + 1
         diagnostics.failed.total += 1
@@ -5709,6 +5741,7 @@ function formatMoney(value) {
 
       diagnostics.finishedAt = new Date().toISOString()
       diagnostics.status = diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'success'
+      diagnostics.failedReasons = groupWixFailureReasons(diagnostics.errors, diagnostics.endpointErrors)
       setWixImportedCount(diagnostics.imported.total)
       setWixFailedCount(diagnostics.failed.total)
       const syncSummary = `Wix sync complete: ${diagnostics.found.total} found, ${diagnostics.imported.total} imported/updated, ${diagnostics.failed.total} failed.`
@@ -6268,10 +6301,8 @@ function formatMoney(value) {
       .eq('id', booking.bed_id)
 
     if (error) {
-      console.log('Could not update tube runtime minutes:', error)
-      alert('Could not update tube runtime minutes. Please check the Beds table has total_runtime_minutes.')
-      showDataLoadWarning('Tube runtime failed to save. Please check the connection.', error)
-      return false
+      console.warn('Tube runtime update skipped. Booking completion will continue:', { bookingId: booking.id, bedId: booking.bed_id, error })
+      return true
     }
 
     await getBeds()
@@ -6545,8 +6576,7 @@ function formatMoney(value) {
     for (const booking of bookings) {
       if (!isSunbedBooking(booking)) continue
       if (booking.booking_end && new Date(booking.booking_end) <= currentTime && !['completed', 'force_stopped', 'no_show'].includes(booking.status)) {
-        const runtimeUpdated = await addRuntimeHoursForBooking(booking)
-        if (!runtimeUpdated) return
+        await addRuntimeHoursForBooking(booking)
         await supabase.from('Bookings').update({ status: 'completed', tmax_status: 'completed' }).eq('id', booking.id)
         getBookings()
       }
@@ -11016,6 +11046,14 @@ function formatMoney(value) {
             <div style={{ border: '1px solid rgba(255,120,117,0.45)', padding: '10px', marginBottom: '10px', color: '#ffb3ad' }}>
               <strong>Wix API endpoint errors</strong>
               {endpointErrors.map((error, index) => <p key={`${error}-${index}`} style={{ marginBottom: 0 }}>{error}</p>)}
+            </div>
+          )}
+          {diagnostics.failedReasons && Object.keys(diagnostics.failedReasons).length > 0 && (
+            <div style={{ border: '1px solid rgba(212,168,83,0.25)', padding: '10px', marginBottom: '10px', color: '#ddd' }}>
+              <strong style={{ color: '#d4a853' }}>Failed reasons summary</strong>
+              {Object.entries(diagnostics.failedReasons).map(([reason, count]) => (
+                <p key={reason} style={{ margin: '4px 0 0' }}>{count} - {reason}</p>
+              ))}
             </div>
           )}
           {syncErrors.length === 0 ? (

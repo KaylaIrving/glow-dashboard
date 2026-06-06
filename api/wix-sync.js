@@ -14,6 +14,20 @@ const WIX_REQUIRED_SERVICE_MAPPINGS = {
   'legs only spray tan': { booking_type: 'spraytan', spraytan_service: 'Legs Only Spray Tan', spraytan_duration_minutes: 15 }
 }
 
+function inferWixServiceMapping(serviceName) {
+  const key = normalizeServiceKey(serviceName)
+  if (!key) return null
+  if (key.includes('patch')) return { booking_type: 'patch_test', spraytan_service: serviceName || 'Spray Tan patch test', spraytan_duration_minutes: 10 }
+  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { booking_type: 'sunbed', bed_id: 1, minutes: 15 }
+  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light')) return { booking_type: 'sunbed', bed_id: 2, minutes: 15 }
+  if (key.includes('prestige') || key.includes('excellence')) return { booking_type: 'sunbed', bed_id: 3, minutes: 15 }
+  if (key.includes('spray')) {
+    const duration = key.includes('patch') ? 10 : key.includes('upper') || key.includes('face') || key.includes('legs') ? 15 : 30
+    return { booking_type: 'spraytan', spraytan_service: serviceName, spraytan_duration_minutes: duration }
+  }
+  return null
+}
+
 function firstValue(...values) {
   return values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || ''
 }
@@ -85,6 +99,21 @@ function makeFailedRecord(table, record, error, attemptedPayload = null) {
   }
 }
 
+function groupFailedReasons(records = [], endpointErrors = []) {
+  const grouped = {}
+  endpointErrors.forEach((message) => {
+    const reason = String(message || 'Endpoint error')
+    grouped[reason] = (grouped[reason] || 0) + 1
+  })
+  records.forEach((record) => {
+    const reason = record?.missingColumn
+      ? `Missing column: ${record.missingColumn}`
+      : record?.message || 'Unknown failure'
+    grouped[reason] = (grouped[reason] || 0) + 1
+  })
+  return grouped
+}
+
 function normalizeContact(contact) {
   const info = contact.info || {}
   const primary = contact.primaryInfo || info.primaryInfo || {}
@@ -136,7 +165,7 @@ function normalizeBooking(booking) {
     booking.service?.id
   )
   const lowerService = serviceName.toLowerCase()
-  const requiredMapping = WIX_REQUIRED_SERVICE_MAPPINGS[normalizeServiceKey(serviceName)] || null
+  const requiredMapping = WIX_REQUIRED_SERVICE_MAPPINGS[normalizeServiceKey(serviceName)] || inferWixServiceMapping(serviceName)
   const bookingType = requiredMapping?.booking_type || (lowerService.includes('spray') || lowerService.includes('patch') ? 'spraytan' : 'sunbed')
   const contact = booking.contactDetails || booking.customer || booking.contact || {}
   const startTime = normalizeDate(firstValue(booking.startDate, booking.startTime, booking.start, booking.slot?.startDate, booking.schedule?.start))
@@ -253,11 +282,23 @@ export default async function handler(req, res) {
     errors.push(`Bookings: ${error.message}`)
   }
 
+  const failedReasons = groupFailedReasons(failedRecords, errors)
+
   res.status(errors.length ? 207 : 200).json({
     customers,
     bookings,
     services,
     failedRecords,
+    debugSummary: {
+      found: { customers: contactsFound, bookings: bookingsFound, total: contactsFound + bookingsFound },
+      returned: { customers: customers.length, bookings: bookings.length, total: customers.length + bookings.length },
+      failed: {
+        customers: failedRecords.filter((record) => record.table === 'customers').length,
+        bookings: failedRecords.filter((record) => record.table === 'bookings').length,
+        total: failedRecords.length
+      },
+      failedReasons
+    },
     syncLog: {
       status: errors.length ? 'partial' : 'success',
       foundCustomers: contactsFound,
@@ -268,6 +309,7 @@ export default async function handler(req, res) {
       failedCustomers: failedRecords.filter((record) => record.table === 'customers').length,
       failedBookings: failedRecords.filter((record) => record.table === 'bookings').length,
       failedTotal: failedRecords.length,
+      failedReasons,
       servicesFound: services.length,
       errors,
       failedRecords,
