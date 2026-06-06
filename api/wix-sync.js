@@ -64,6 +64,27 @@ function describeShape(value, depth = 0) {
   )
 }
 
+function makeFailedRecord(table, record, error, attemptedPayload = null) {
+  const payload = attemptedPayload || record || {}
+  const contact = record?.contactDetails || record?.customer || record?.contact || {}
+  return {
+    table,
+    recordId: record?.id || record?.bookingId || record?.contactId || record?.email || 'unknown',
+    wixBookingId: record?.id || record?.bookingId || payload?.wix_booking_id || '',
+    wixContactId: record?.contactId || contact?.contactId || contact?.id || payload?.wix_contact_id || '',
+    customerName: payload?.customer_name || record?.name || contact?.name || [contact?.firstName, contact?.lastName].filter(Boolean).join(' '),
+    email: payload?.customer_email || record?.email || contact?.email || contact?.emailAddress || '',
+    wixServiceName: payload?.wix_service_name || getBookingServiceName(record),
+    bookingType: payload?.booking_type || '',
+    message: error?.message || String(error),
+    code: error?.code || '',
+    details: error?.details || '',
+    hint: error?.hint || '',
+    attemptedPayload: payload,
+    rawShape: describeShape(record)
+  }
+}
+
 function normalizeContact(contact) {
   const info = contact.info || {}
   const primary = contact.primaryInfo || info.primaryInfo || {}
@@ -189,14 +210,25 @@ export default async function handler(req, res) {
   }
 
   const errors = []
+  const failedRecords = []
   let customers = []
   let bookings = []
   let services = []
+  let contactsFound = 0
+  let bookingsFound = 0
 
   try {
     const contactsData = await wixFetch(WIX_CONTACTS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
     const contacts = contactsData.contacts || contactsData.items || []
-    customers = contacts.map(normalizeContact).filter((customer) => customer.wix_contact_id || customer.email || customer.mobile)
+    contactsFound = contacts.length
+    customers = contacts.map((contact) => {
+      try {
+        return normalizeContact(contact)
+      } catch (error) {
+        failedRecords.push(makeFailedRecord('customers', contact, error))
+        return null
+      }
+    }).filter((customer) => customer && (customer.wix_contact_id || customer.email || customer.mobile))
   } catch (error) {
     errors.push(`Customers: ${error.message}`)
   }
@@ -204,7 +236,15 @@ export default async function handler(req, res) {
   try {
     const bookingsData = await wixFetch(WIX_BOOKINGS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
     const wixBookings = bookingsData.bookings || bookingsData.items || []
-    bookings = wixBookings.map(normalizeBooking).filter((booking) => booking.wix_booking_id)
+    bookingsFound = wixBookings.length
+    bookings = wixBookings.map((booking) => {
+      try {
+        return normalizeBooking(booking)
+      } catch (error) {
+        failedRecords.push(makeFailedRecord('bookings', booking, error))
+        return null
+      }
+    }).filter((booking) => booking && booking.wix_booking_id)
     services = uniqueServices(bookings.map((booking) => ({
       wix_service_id: booking.wix_service_id,
       wix_service_name: booking.wix_service_name || booking.service_name
@@ -217,12 +257,20 @@ export default async function handler(req, res) {
     customers,
     bookings,
     services,
+    failedRecords,
     syncLog: {
       status: errors.length ? 'partial' : 'success',
+      foundCustomers: contactsFound,
+      foundBookings: bookingsFound,
+      foundTotal: contactsFound + bookingsFound,
       importedCustomers: customers.length,
       importedBookings: bookings.length,
+      failedCustomers: failedRecords.filter((record) => record.table === 'customers').length,
+      failedBookings: failedRecords.filter((record) => record.table === 'bookings').length,
+      failedTotal: failedRecords.length,
       servicesFound: services.length,
       errors,
+      failedRecords,
       syncedAt: new Date().toISOString()
     },
     errors

@@ -5558,22 +5558,27 @@ function formatMoney(value) {
     return columnMatch?.[1] || ''
   }
 
-  function makeWixRecordError(table, record, error) {
+  function makeWixRecordError(table, record, error, attemptedPayload = null) {
     const firstName = record?.first_name || record?.wix_customer_first_name || ''
     const lastName = record?.last_name || record?.wix_customer_last_name || ''
+    const payload = attemptedPayload || record || {}
     return {
       table,
       recordId: record?.wix_contact_id || record?.wix_booking_id || record?.id || record?.email || record?.customer_email || 'unknown',
+      wixBookingId: record?.wix_booking_id || record?.booking_id || record?.bookingId || payload?.wix_booking_id || '',
       wixContactId: record?.wix_contact_id || record?.contact_id || '',
       customerName: record?.customer_name || record?.wix_customer_name || record?.name || `${firstName} ${lastName}`.trim() || '',
       email: record?.email || record?.customer_email || record?.wix_customer_email || '',
       serviceId: getWixBookingServiceId(record),
       serviceName: getWixBookingServiceName(record),
+      wixServiceName: record?.wix_service_name || payload?.wix_service_name || getWixBookingServiceName(record),
+      bookingType: record?.booking_type || payload?.booking_type || '',
       message: error?.message || String(error),
       code: error?.code || '',
       details: error?.details || '',
       hint: error?.hint || '',
-      missingColumn: getMissingColumnFromError(error)
+      missingColumn: getMissingColumnFromError(error),
+      attemptedPayload: payload
     }
   }
 
@@ -5643,14 +5648,21 @@ function formatMoney(value) {
       const payload = await response.json()
       const wixCustomers = Array.isArray(payload?.customers) ? payload.customers : []
       const wixBookings = Array.isArray(payload?.bookings) ? payload.bookings : []
+      const endpointSyncLog = payload?.syncLog || {}
       const activeWixServices = Array.isArray(payload?.services) ? payload.services.map(normalizeWixServiceRecord).filter((service) => service.is_active) : []
+      const endpointFailedRecords = Array.isArray(payload?.failedRecords) ? payload.failedRecords : []
       const loadedServiceMappings = await ensureDefaultWixServiceMappings(activeWixServices)
       await reconcileRenamedWixServices(activeWixServices, loadedServiceMappings)
       const serviceMappings = await getWixServiceBookingMappings({ silent: true })
-      diagnostics.found.customers = wixCustomers.length
-      diagnostics.found.bookings = wixBookings.length
-      diagnostics.found.total = wixCustomers.length + wixBookings.length
+      diagnostics.found.customers = Number(endpointSyncLog.foundCustomers ?? wixCustomers.length)
+      diagnostics.found.bookings = Number(endpointSyncLog.foundBookings ?? wixBookings.length)
+      diagnostics.found.total = Number(endpointSyncLog.foundTotal ?? (diagnostics.found.customers + diagnostics.found.bookings))
       diagnostics.endpointErrors = Array.isArray(payload?.errors) ? payload.errors : []
+      endpointFailedRecords.forEach((failedRecord) => {
+        diagnostics.failed[failedRecord.table] = (diagnostics.failed[failedRecord.table] || 0) + 1
+        diagnostics.failed.total += 1
+        diagnostics.errors.push(failedRecord)
+      })
       diagnostics.services = activeWixServices.length > 0
         ? activeWixServices
         : wixBookings.map((booking) => normalizeWixServiceRecord({ wix_service_id: getWixBookingServiceId(booking), wix_service_name: getWixBookingServiceName(booking) }))
@@ -5674,8 +5686,10 @@ function formatMoney(value) {
       }
 
       for (const wixBooking of wixBookings) {
+        let attemptedBookingPayload = wixBooking
         try {
           const mappedWixBooking = applyWixServiceMapping(wixBooking, serviceMappings)
+          attemptedBookingPayload = mappedWixBooking || wixBooking
           if (!mappedWixBooking) continue
           await upsertWixBooking(mappedWixBooking)
           diagnostics.imported.bookings += 1
@@ -5683,13 +5697,13 @@ function formatMoney(value) {
         } catch (bookingError) {
           diagnostics.failed.bookings += 1
           diagnostics.failed.total += 1
-          const errorDetail = makeWixRecordError('bookings', wixBooking, bookingError)
+          const errorDetail = makeWixRecordError('bookings', wixBooking, bookingError, attemptedBookingPayload)
           diagnostics.errors.push(errorDetail)
           if (!diagnostics.sampleFailedBooking) {
             diagnostics.sampleFailedBooking = wixBooking?.wix_raw_shape || wixBooking
             console.error('Raw Wix failed booking record shape:', diagnostics.sampleFailedBooking)
           }
-          console.error('Wix booking sync failed for one booking:', { wixBooking, bookingError })
+          console.error('Wix booking sync failed for one booking:', { wixBooking, attemptedPayload: attemptedBookingPayload, bookingError })
         }
       }
 
@@ -5698,15 +5712,19 @@ function formatMoney(value) {
       setWixImportedCount(diagnostics.imported.total)
       setWixFailedCount(diagnostics.failed.total)
       const syncSummary = `Wix sync complete: ${diagnostics.found.total} found, ${diagnostics.imported.total} imported/updated, ${diagnostics.failed.total} failed.`
-      setWixSyncStatus(syncSummary)
-      updateWixSyncHealth({ state: diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: diagnostics.failed.total > 0 ? `${diagnostics.failed.total} record(s) failed` : diagnostics.endpointErrors[0] || '' })
+      const firstRealError = diagnostics.errors[0]
+        ? `${formatStatus(diagnostics.errors[0].table)} ${diagnostics.errors[0].recordId}: ${diagnostics.errors[0].message}`
+        : diagnostics.endpointErrors[0] || ''
+      const syncStatusMessage = firstRealError ? `${syncSummary} First error: ${firstRealError}` : syncSummary
+      setWixSyncStatus(syncStatusMessage)
+      updateWixSyncHealth({ state: diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: firstRealError })
       persistWixSyncDiagnostics(diagnostics)
       if (diagnostics.imported.total > 0) {
         await getBookings()
         await getCustomers()
       }
       await backfillExistingWixBookings(serviceMappings)
-      if (!automatic) showToast(syncSummary, diagnostics.failed.total > 0 ? 'warning' : 'success')
+      if (!automatic) showToast(syncStatusMessage, diagnostics.failed.total > 0 ? 'warning' : 'success')
     } catch (error) {
       diagnostics.finishedAt = new Date().toISOString()
       diagnostics.status = 'failed'
@@ -11008,10 +11026,19 @@ function formatMoney(value) {
                 <div key={`${error.table}-${error.recordId}-${index}`} style={{ borderBottom: '1px solid #292929', paddingBottom: '8px' }}>
                   <strong style={{ color: '#ffcc66' }}>{formatStatus(error.table)} / {error.recordId}</strong>
                   <p style={{ margin: '4px 0', color: '#f5f0e8' }}>{error.message}</p>
+                  {error.wixBookingId && <p style={{ margin: '4px 0', color: '#aaa' }}>Wix booking ID: {error.wixBookingId}</p>}
+                  {error.wixServiceName && <p style={{ margin: '4px 0', color: '#aaa' }}>Service: {error.wixServiceName}</p>}
+                  {error.bookingType && <p style={{ margin: '4px 0', color: '#aaa' }}>Booking type: {error.bookingType}</p>}
                   {error.missingColumn && <p style={{ margin: '4px 0', color: '#ffb3ad' }}>Missing Supabase column: <strong>{error.missingColumn}</strong></p>}
                   {error.code && <p style={{ margin: '4px 0', color: '#aaa' }}>Code: {error.code}</p>}
                   {error.details && <p style={{ margin: '4px 0', color: '#aaa' }}>Details: {error.details}</p>}
                   {error.hint && <p style={{ margin: '4px 0', color: '#aaa' }}>Hint: {error.hint}</p>}
+                  {error.attemptedPayload && (
+                    <details style={{ marginTop: '6px' }}>
+                      <summary style={{ cursor: 'pointer', color: '#d4a853' }}>Payload attempted</summary>
+                      <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto', background: '#050505', padding: '10px' }}>{JSON.stringify(error.attemptedPayload, null, 2)}</pre>
+                    </details>
+                  )}
                 </div>
               ))}
             </div>
@@ -11070,6 +11097,9 @@ function formatMoney(value) {
                 <thead>
                   <tr style={{ background: '#0b0b0b', color: '#d4a853' }}>
                     <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Table</th>
+                    <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Wix Booking ID</th>
+                    <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Wix Service</th>
+                    <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Booking Type</th>
                     <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Wix Contact ID</th>
                     <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Customer Name</th>
                     <th style={{ textAlign: 'left', padding: '10px', borderBottom: '1px solid #333' }}>Email</th>
@@ -11080,6 +11110,9 @@ function formatMoney(value) {
                   {visibleErrors.map((error, index) => (
                     <tr key={`${error.table}-${error.recordId}-${index}`}>
                       <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top' }}>{formatStatus(error.table)}</td>
+                      <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top', overflowWrap: 'anywhere' }}>{error.wixBookingId || '-'}</td>
+                      <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top' }}>{error.wixServiceName || error.serviceName || '-'}</td>
+                      <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top' }}>{error.bookingType ? formatStatus(error.bookingType) : '-'}</td>
                       <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top', overflowWrap: 'anywhere' }}>{error.wixContactId || error.recordId || '-'}</td>
                       <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top' }}>{error.customerName || '-'}</td>
                       <td style={{ padding: '10px', borderBottom: '1px solid #222', verticalAlign: 'top', overflowWrap: 'anywhere' }}>{error.email || '-'}</td>
@@ -11088,6 +11121,12 @@ function formatMoney(value) {
                         {error.missingColumn && <><br /><span style={{ color: '#ffb3ad' }}>Missing column: {error.missingColumn}</span></>}
                         {error.details && <><br /><span style={{ color: '#aaa' }}>{error.details}</span></>}
                         {error.hint && <><br /><span style={{ color: '#aaa' }}>Hint: {error.hint}</span></>}
+                        {error.attemptedPayload && (
+                          <details style={{ marginTop: '6px' }}>
+                            <summary style={{ cursor: 'pointer', color: '#d4a853' }}>Payload attempted</summary>
+                            <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto', background: '#050505', padding: '8px', maxHeight: '220px' }}>{JSON.stringify(error.attemptedPayload, null, 2)}</pre>
+                          </details>
+                        )}
                       </td>
                     </tr>
                   ))}
