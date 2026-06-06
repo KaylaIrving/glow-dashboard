@@ -4508,7 +4508,7 @@ function formatMoney(value) {
   }
 
   function getBookingDisplayDateTime(booking) {
-    const bookingTimeSource = booking?.appointment_time || booking?.booking_start || booking?.start_time
+    const bookingTimeSource = booking?.booking_start || booking?.appointment_time || booking?.start_time
     if (!bookingTimeSource) return null
     const bookingTime = new Date(bookingTimeSource)
     return Number.isNaN(bookingTime.getTime()) ? null : bookingTime
@@ -4567,6 +4567,7 @@ function formatMoney(value) {
   function getSprayTanBookingsForSelectedDate() {
     return bookings.filter((booking) => {
       if (!isSprayTanBooking(booking)) return false
+      if (isWixBooking(booking) && (!booking.booking_start || !booking.booking_end)) return false
       const bookingTime = getBookingDisplayDateTime(booking)
       return bookingTime && formatLocalDate(bookingTime) === selectedDate
     })
@@ -12062,7 +12063,7 @@ function formatMoney(value) {
       .slice()
       .sort((a, b) => (getBookingDisplayDateTime(a)?.getTime() || 0) - (getBookingDisplayDateTime(b)?.getTime() || 0))
 
-    const timelineSlots = generateTimeSlots('09:00', '20:00').filter((_, index) => index % 3 === 0)
+    const timelineSlots = generateTimeSlots('09:00', '20:00')
 
     return (
       <div className="spraytan-view">
@@ -12162,7 +12163,7 @@ function formatMoney(value) {
     const sprayTanBookings = getSprayTanBookingsForSelectedDate()
       .slice()
       .sort((a, b) => (getBookingDisplayDateTime(a)?.getTime() || 0) - (getBookingDisplayDateTime(b)?.getTime() || 0))
-    const timelineSlots = generateTimeSlots('09:00', '20:00').filter((_, index) => index % 3 === 0)
+    const timelineSlots = generateTimeSlots('09:00', '20:00')
 
     return (
       <div className="spraytan-view">
