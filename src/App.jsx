@@ -362,6 +362,7 @@ function App() {
   const [staffEditingId, setStaffEditingId] = useState('')
   const [staffAdjustmentId, setStaffAdjustmentId] = useState('')
   const [staffAdjustmentAmount, setStaffAdjustmentAmount] = useState('')
+  const [staffAdjustmentExpiryDate, setStaffAdjustmentExpiryDate] = useState('')
   const [staffAdjustmentReason, setStaffAdjustmentReason] = useState('')
   const [staffSchedule, setStaffSchedule] = useState([])
   const [staffScheduleLoadError, setStaffScheduleLoadError] = useState('')
@@ -470,7 +471,8 @@ function App() {
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
   const [managerReceipts, setManagerReceipts] = useState([])
-  const [receiptSearchDate, setReceiptSearchDate] = useState(formatLocalDate(new Date()))
+  const [receiptSearchStartDate, setReceiptSearchStartDate] = useState(formatLocalDate(new Date()))
+  const [receiptSearchEndDate, setReceiptSearchEndDate] = useState(formatLocalDate(new Date()))
   const [receiptSearchCustomer, setReceiptSearchCustomer] = useState('')
   const [receiptSearchType, setReceiptSearchType] = useState('')
   const [receiptSearchPaymentMethod, setReceiptSearchPaymentMethod] = useState('')
@@ -1015,13 +1017,15 @@ function formatMoney(value) {
 
     for (const member of dedupedStaff) {
       if (member.is_active && member.last_weekly_reset_date !== weekStart) {
-        const updatedMember = { ...member, weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES, last_weekly_reset_date: weekStart }
+        const preservedTopUpMinutes = await getActiveStaffTopUpMinutes(member)
+        const resetBalance = WEEKLY_STAFF_FREE_MINUTES + preservedTopUpMinutes
+        const updatedMember = { ...member, weekly_free_minutes_balance: resetBalance, last_weekly_reset_date: weekStart }
         resetStaff.push(updatedMember)
         await supabase.from('Staff').update({
-          weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES,
+          weekly_free_minutes_balance: resetBalance,
           last_weekly_reset_date: weekStart
         }).eq('id', member.id)
-        await createStaffLog(member, 'Weekly free minutes reset', `Weekly free minutes reset to ${WEEKLY_STAFF_FREE_MINUTES}.`)
+        await createStaffLog(member, 'Weekly free minutes reset', `Weekly free minutes reset to ${WEEKLY_STAFF_FREE_MINUTES}. Preserved active top-ups: ${preservedTopUpMinutes}.`)
       } else {
         resetStaff.push(member)
       }
@@ -1080,6 +1084,61 @@ function formatMoney(value) {
   async function createStaffLog(member, action, details) {
     if (!member || String(member.id).startsWith('default-')) return
     await supabase.from('StaffLogs').insert({ staff_id: member.id, staff_name: member.name, action, details })
+  }
+
+  async function getActiveStaffTopUpAllocations(member) {
+    if (!member?.id || String(member.id).startsWith('default-')) return []
+    const today = formatLocalDate(new Date())
+    const { data, error } = await supabase
+      .from('StaffMinuteTopUps')
+      .select('*')
+      .eq('staff_id', member.id)
+      .eq('expired', false)
+      .order('expiry_date', { ascending: true })
+
+    if (error) {
+      console.log('StaffMinuteTopUps could not be loaded:', error)
+      return []
+    }
+
+    const active = []
+    for (const topUp of data || []) {
+      const remaining = Number(topUp.minutes_remaining ?? topUp.minutes_amount ?? 0)
+      const isExpired = topUp.expiry_date && topUp.expiry_date < today
+      if (isExpired || remaining <= 0) {
+        await supabase.from('StaffMinuteTopUps').update({ expired: true, expired_at: new Date().toISOString(), minutes_remaining: 0 }).eq('id', topUp.id)
+        await createStaffLog(member, 'Staff top-up minutes expired', `${remaining} topped-up staff minutes expired${topUp.expiry_date ? ` on ${topUp.expiry_date}` : ''}.`)
+      } else {
+        active.push({ ...topUp, minutes_remaining: remaining })
+      }
+    }
+    return active
+  }
+
+  async function getActiveStaffTopUpMinutes(member) {
+    const allocations = await getActiveStaffTopUpAllocations(member)
+    return allocations.reduce((total, topUp) => total + Number(topUp.minutes_remaining || 0), 0)
+  }
+
+  async function consumeStaffTopUpMinutes(member, minutesToUse, oldBalance) {
+    const allocations = await getActiveStaffTopUpAllocations(member)
+    const activeTopUpTotal = allocations.reduce((total, topUp) => total + Number(topUp.minutes_remaining || 0), 0)
+    const weeklyRemaining = Math.max(0, Number(oldBalance || 0) - activeTopUpTotal)
+    let minutesFromTopUps = Math.max(0, Number(minutesToUse || 0) - weeklyRemaining)
+    if (minutesFromTopUps <= 0) return
+
+    for (const topUp of allocations) {
+      if (minutesFromTopUps <= 0) break
+      const before = Number(topUp.minutes_remaining || 0)
+      const used = Math.min(before, minutesFromTopUps)
+      const after = before - used
+      minutesFromTopUps -= used
+      await supabase.from('StaffMinuteTopUps').update({
+        minutes_remaining: after,
+        expired: after <= 0,
+        expired_at: after <= 0 ? new Date().toISOString() : null
+      }).eq('id', topUp.id)
+    }
   }
 
   function clearStaffScheduleForm() {
@@ -1759,24 +1818,8 @@ function formatMoney(value) {
 
     if (scope === 'product') {
       getActiveProducts().forEach((product) => addOption(product.name, product.name))
-    } else if (scope === 'category') {
-      productCategories.forEach((category) => addOption(category.value || category.label, category.label || category.value))
-    } else if (scope === 'spraytan') {
-      SPRAY_TAN_SERVICES.forEach((service) => addOption(service.name, service.name))
-    } else if (scope === 'sunbed') {
-      beds.forEach((bed) => addOption(getBedName(bed.id), getBedName(bed.id)))
-      addOption('Standard Minutes', 'Standard Minutes')
-      addOption('Standard Minutes - Bed 1 and Bed 3', 'Standard Minutes - Bed 1 and Bed 3')
-      addOption('Collagen Minutes', 'Collagen Minutes')
-      addOption('Hybrid Minutes', 'Hybrid Minutes')
-      addOption('Hybrid Minutes - Any Bed', 'Hybrid Minutes - Any Bed')
-      addOption('Custom Standard Minutes', 'Custom Standard Minutes')
-      addOption('Custom Hybrid Minutes', 'Custom Hybrid Minutes')
-      COMMON_BOOKING_MINUTES.forEach((minutes) => addOption(`${minutes} minute sunbed`, `${minutes} minute sunbed`))
-    } else if (scope === 'package') {
-      Object.values(PURCHASE_OPTIONS)
-        .filter((option) => option.minutes !== null)
-        .forEach((option) => addOption(option.name, option.label || option.name))
+    } else if (scope === 'reward') {
+      loyaltyRules.forEach((rule) => addOption(rule.reward_name, rule.reward_name))
     } else if (scope === 'promo') {
       promos.forEach((promo) => addOption(promo.promo_name, promo.promo_name))
     }
@@ -6676,6 +6719,8 @@ function formatMoney(value) {
       return false
     }
 
+    await consumeStaffTopUpMinutes(member, sessionMinutes, oldBalance)
+
     const { error: staffError } = await supabase.from('Staff').update({ weekly_free_minutes_balance: newBalance }).eq('id', staffId)
     if (staffError) {
       alert('Staff free minutes were not deducted. Please check the connection before starting the session.')
@@ -8032,8 +8077,8 @@ function formatMoney(value) {
 
     setReceiptSearchLoading(true)
     setReceiptSearchError('')
-    const dayStart = receiptSearchDate ? new Date(`${receiptSearchDate}T00:00:00`) : null
-    const dayEnd = receiptSearchDate ? new Date(`${receiptSearchDate}T23:59:59.999`) : null
+    const dayStart = receiptSearchStartDate ? new Date(`${receiptSearchStartDate}T00:00:00`) : null
+    const dayEnd = receiptSearchEndDate ? new Date(`${receiptSearchEndDate}T23:59:59.999`) : null
     let query = supabase.from('Receipts').select('*').order('created_at', { ascending: false }).limit(200)
     if (dayStart && dayEnd) query = query.gte('created_at', dayStart.toISOString()).lte('created_at', dayEnd.toISOString())
     if (receiptSearchType) query = query.eq('receipt_type', receiptSearchType)
@@ -8812,6 +8857,25 @@ function formatMoney(value) {
     const oldBalance = Number(member.weekly_free_minutes_balance || 0)
     const newBalance = Math.max(0, oldBalance + amount)
 
+    if (amount > 0 && !String(member.id).startsWith('default-')) {
+      const { error: topUpError } = await supabase.from('StaffMinuteTopUps').insert({
+        staff_id: member.id,
+        staff_name: member.name,
+        minutes_amount: amount,
+        minutes_remaining: amount,
+        expiry_date: staffAdjustmentExpiryDate || null,
+        created_by_staff: getCurrentStaffUser()?.name || 'Manager',
+        notes: staffAdjustmentReason.trim(),
+        expired: false
+      })
+      if (topUpError) {
+        alert('Staff top-up was not saved. Please check the StaffMinuteTopUps table.')
+        showDataLoadWarning('Staff top-up save failed.', topUpError)
+        console.log(topUpError)
+        return
+      }
+    }
+
     const { error } = await supabase.from('Staff').update({ weekly_free_minutes_balance: newBalance }).eq('id', member.id)
     if (error) {
       alert('Staff minutes were not adjusted. Please check the connection and try again.')
@@ -8823,6 +8887,7 @@ function formatMoney(value) {
     await createStaffLog(member, 'Staff minutes adjusted', `Balance ${oldBalance} → ${newBalance}. Adjustment: ${amount}. Reason: ${staffAdjustmentReason.trim()}`)
     setStaffAdjustmentId('')
     setStaffAdjustmentAmount('')
+    setStaffAdjustmentExpiryDate('')
     setStaffAdjustmentReason('')
     getStaff()
   }
@@ -10515,10 +10580,7 @@ function formatMoney(value) {
             style={{ padding: '10px' }}
           >
             <option value="product">Product</option>
-            <option value="category">Product category</option>
-            <option value="spraytan">Spray tan service</option>
-            <option value="sunbed">Sunbed service</option>
-            <option value="package">Package</option>
+            <option value="reward">Reward</option>
             <option value="promo">Promo</option>
           </select>
           <select
@@ -10572,7 +10634,7 @@ function formatMoney(value) {
     if (!showManagerView) return null
 
     return renderCollapsibleSection(
-      'Loyalty / Rewards',
+      'Rewards / Promos',
       collapseLoyaltyRewards,
       setCollapseLoyaltyRewards,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
@@ -11445,7 +11507,7 @@ function formatMoney(value) {
       { key: 'receipts', label: 'Receipt History', isOpen: !collapseReceipts },
       { key: 'daily', label: 'Daily Takings', isOpen: !collapseDailyTakings },
       { key: 'reports', label: 'Reports', isOpen: !collapseReports },
-      { key: 'loyalty', label: 'Loyalty / Rewards', isOpen: !collapseLoyaltyRewards },
+      { key: 'loyalty', label: 'Rewards / Promos', isOpen: !collapseLoyaltyRewards },
       { key: 'duplicates', label: 'Duplicate Customers Report', isOpen: !collapseDuplicateCustomers }
     ]
 
@@ -11480,8 +11542,29 @@ function formatMoney(value) {
       setCollapseReceipts,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <input type="date" value={receiptSearchDate} onChange={(e) => setReceiptSearchDate(e.target.value)} style={{ padding: '10px' }} />
-          <input placeholder="Customer name" value={receiptSearchCustomer} onChange={(e) => setReceiptSearchCustomer(e.target.value)} style={{ padding: '10px' }} />
+          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
+            Date From
+            <input type="date" value={receiptSearchStartDate} onChange={(e) => setReceiptSearchStartDate(e.target.value)} style={{ padding: '10px' }} />
+          </label>
+          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
+            Date To
+            <input type="date" value={receiptSearchEndDate} onChange={(e) => setReceiptSearchEndDate(e.target.value)} style={{ padding: '10px' }} />
+          </label>
+          <input list="receipt-customer-options" placeholder="Customer name" value={receiptSearchCustomer} onChange={(e) => setReceiptSearchCustomer(e.target.value)} style={{ padding: '10px' }} />
+          <datalist id="receipt-customer-options">
+            {customers
+              .filter((customer) => {
+                const query = receiptSearchCustomer.trim().toLowerCase()
+                if (!query) return true
+                return String(customer.name || '').toLowerCase().includes(query)
+                  || String(customer.first_name || '').toLowerCase().includes(query)
+                  || String(customer.last_name || '').toLowerCase().includes(query)
+                  || String(customer.phone || '').toLowerCase().includes(query)
+                  || String(customer.email || '').toLowerCase().includes(query)
+              })
+              .slice(0, 30)
+              .map((customer) => <option key={customer.id} value={customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()} />)}
+          </datalist>
           <select value={receiptSearchType} onChange={(e) => setReceiptSearchType(e.target.value)} style={{ padding: '10px' }}>
             <option value="">All receipt types</option>
             <option value="minutes_topup">Minutes Top-Up</option>
@@ -11582,7 +11665,7 @@ function formatMoney(value) {
           }}
         >
           <span>{title}</span>
-          <button onClick={() => setIsCollapsed(true)}>Hide</button>
+
         </div>
 
         <div style={{ padding: '16px' }}>
@@ -11876,7 +11959,12 @@ function formatMoney(value) {
             {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
           </select>
           <input type="number" placeholder="+/- minutes" value={staffAdjustmentAmount} onChange={(e) => setStaffAdjustmentAmount(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
+          <label style={{ display: 'grid', gap: '5px', color: '#ddd', marginBottom: '8px' }}>
+            Optional expiry date for top-up minutes
+            <input type="date" value={staffAdjustmentExpiryDate} onChange={(e) => setStaffAdjustmentExpiryDate(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }} />
+          </label>
           <input placeholder="Reason" value={staffAdjustmentReason} onChange={(e) => setStaffAdjustmentReason(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
+          <p style={{ color: '#aaa', marginTop: 0 }}>Weekly staff free minutes reset to 18 every Monday. Active manager top-ups are preserved until their expiry date.</p>
           <button onClick={adjustStaffMinutes}>Apply Staff Adjustment</button>
         </div>
 
@@ -12278,8 +12366,7 @@ function formatMoney(value) {
       <div className="spraytan-view">
         <div className="calendar-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <div>
-            <h2 style={{ marginBottom: '6px' }}>Spray Tans</h2>
-            <p style={{ color: '#aaa', margin: 0 }}>Phase 1 calendar foundation. Wix sync, automation and artist availability will be connected later.</p>
+
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
@@ -12378,8 +12465,7 @@ function formatMoney(value) {
       <div className="spraytan-view">
         <div className="calendar-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <div>
-            <h2 style={{ marginBottom: '6px' }}>Spray Tans</h2>
-            <p style={{ color: '#aaa', margin: 0 }}>Manual spray tan appointments are separate from the sunbed calendar.</p>
+
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
@@ -12836,10 +12922,10 @@ function formatMoney(value) {
         <div className="top-action-panel" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div className="top-action-buttons">
             <button onClick={() => setShowCustomerManagement(!showCustomerManagement)}>{showCustomerManagement ? 'Hide Customers' : 'Customers'}</button>
-            <button onClick={collapseCashUp ? openCashUpPanel : () => setCollapseCashUp(true)}>{collapseCashUp ? 'Cash Up' : 'Hide Cash Up'}</button>
+            <button onClick={openCashUpPanel}>Cash Up</button>
             {currentStaffUser && (
-              <button onClick={() => setCollapseStaffCalendar(!collapseStaffCalendar)}>
-                {collapseStaffCalendar ? 'Staff Calendar' : 'Hide Staff Calendar'}{pendingStaffScheduleCount > 0 ? ` • ${pendingStaffScheduleCount}` : ''}
+              <button onClick={() => { setV2ActiveTab('staffcalendar'); setCollapseStaffCalendar(false) }}>
+                Staff Calendar{pendingStaffScheduleCount > 0 ? ` - ${pendingStaffScheduleCount}` : ''}
               </button>
             )}
             {showManagerView ? (
@@ -12913,8 +12999,6 @@ function formatMoney(value) {
 
       {v2ActiveTab === 'sunbeds' && (
         <>
-      <h2 style={{ textAlign: 'center' }}>Sunbeds</h2>
-
       <div className="sunbeds-grid premium-sunbeds-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
         {beds.map((bed) => {
           const liveSession = getLiveBedSession(bed.id)
