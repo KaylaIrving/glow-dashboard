@@ -342,6 +342,7 @@ function App() {
   const [cashUpStartFloat, setCashUpStartFloat] = useState('')
   const [cashUpExistingRecord, setCashUpExistingRecord] = useState(null)
   const [cashUpLoadError, setCashUpLoadError] = useState('')
+  const [startCashDenominations, setStartCashDenominations] = useState(EMPTY_CASH_DENOMINATIONS)
   const [cashDenominations, setCashDenominations] = useState(EMPTY_CASH_DENOMINATIONS)
   const [floatMovements, setFloatMovements] = useState([])
   const [floatMovementLoadError, setFloatMovementLoadError] = useState('')
@@ -634,6 +635,12 @@ function App() {
     }
     return base
   }, [dailyTakings, dailyProductSales])
+
+  const startCashDenominationTotal = useMemo(() => {
+    return CASH_DENOMINATIONS.reduce((total, denomination) => {
+      return total + (Number(startCashDenominations[denomination.key] || 0) * denomination.value)
+    }, 0)
+  }, [startCashDenominations])
 
   const cashDenominationTotal = useMemo(() => {
     return CASH_DENOMINATIONS.reduce((total, denomination) => {
@@ -1524,29 +1531,51 @@ function formatMoney(value) {
     setDailyProductSales(productSalesData || [])
   }
 
-  async function getCashUpForSelectedDate(dateOverride = selectedDate) {
-    const { data, error } = await supabase
-      .from('CashUps')
-      .select('*')
-      .eq('cashup_date', dateOverride)
-      .order('created_at', { ascending: false })
-      .limit(1)
+  function getCashUpRecordDate(record) {
+    return record?.cashup_date || record?.date || record?.cash_up_date || ''
+  }
 
-    if (error) {
-      setCashUpLoadError(error.message || 'Could not load CashUps table.')
-      showDataLoadWarning('Cash-up record could not be loaded. Please check the connection.', error)
-      console.error('Cash-up load failed:', { table: 'CashUps', date: dateOverride, error })
-      setCashUpExistingRecord(null)
-      return
+  function getCashUpRecordStartFloat(record) {
+    return record?.starting_cash_float ?? record?.starting_float ?? record?.start_day_float ?? record?.cash_float ?? ''
+  }
+
+  function getCashUpRecordActualCash(record) {
+    return record?.actual_cash ?? record?.actual_cash_counted ?? record?.actual_cash_in_till ?? ''
+  }
+
+  async function getCashUpForSelectedDate(dateOverride = selectedDate) {
+    const dateColumns = ['cashup_date', 'date', 'cash_up_date']
+    let lastError = null
+
+    for (const dateColumn of dateColumns) {
+      const { data, error } = await supabase
+        .from('CashUps')
+        .select('*')
+        .eq(dateColumn, dateOverride)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (!error) {
+        const record = data?.[0] || null
+        setCashUpLoadError('')
+        setCashUpExistingRecord(record)
+        setCashUpStartFloat(getCashUpRecordStartFloat(record))
+        setCashUpActualCash(getCashUpRecordActualCash(record))
+        setCashUpVarianceNotes(record?.variance_notes || '')
+        setCashUpManagerName(record?.cash_up_completed_by_staff || '')
+        return
+      }
+
+      lastError = error
+      const missingColumn = getMissingSupabaseColumn(error)
+      if (missingColumn === dateColumn) continue
+      break
     }
 
-    const record = data?.[0] || null
-    setCashUpLoadError('')
-    setCashUpExistingRecord(record)
-    setCashUpStartFloat(record?.starting_cash_float ?? '')
-    setCashUpActualCash(record?.actual_cash ?? '')
-    setCashUpVarianceNotes(record?.variance_notes || '')
-    setCashUpManagerName(record?.cash_up_completed_by_staff || '')
+    setCashUpLoadError(lastError?.message || 'Could not load CashUps table.')
+    showDataLoadWarning('Cash-up record could not be loaded. Please check the connection.', lastError)
+    console.error('Cash-up load failed:', { table: 'CashUps', date: dateOverride, error: lastError })
+    setCashUpExistingRecord(null)
   }
 
   async function getFloatMovements(dateOverride = selectedDate) {
@@ -3593,6 +3622,17 @@ function formatMoney(value) {
     return cashUpStartFloat === '' ? 0 : Number(cashUpStartFloat || 0)
   }
 
+  function updateStartCashDenomination(key, value) {
+    setStartCashDenominations((current) => {
+      const next = { ...current, [key]: value }
+      const calculated = CASH_DENOMINATIONS.reduce((total, denomination) => {
+        return total + (Number(next[denomination.key] || 0) * denomination.value)
+      }, 0)
+      setCashUpStartFloat(calculated > 0 ? calculated.toFixed(2) : '')
+      return next
+    })
+  }
+
   function updateCashDenomination(key, value) {
     setCashDenominations((current) => {
       const next = { ...current, [key]: value }
@@ -3649,6 +3689,14 @@ function formatMoney(value) {
     return message.match(/'([^']+)' column/)?.[1] || message.match(/column "([^"]+)"/)?.[1] || ''
   }
 
+  function swapCashUpPayloadColumn(payload, fromColumn, candidateColumns, value) {
+    const currentIndex = candidateColumns.indexOf(fromColumn)
+    const nextColumn = candidateColumns.slice(currentIndex + 1).find((column) => !Object.prototype.hasOwnProperty.call(payload, column))
+    if (!nextColumn) return null
+    const { [fromColumn]: _removed, ...nextPayload } = payload
+    return { ...nextPayload, [nextColumn]: value }
+  }
+
   async function writeCashUpRecord(payload) {
     const optionalColumns = new Set([
       'variance_notes',
@@ -3660,11 +3708,26 @@ function formatMoney(value) {
       'cash_up_locked_by_staff',
       'cash_up_locked_at',
       'cash_up_reopened_by_staff',
-      'cash_up_reopened_at'
+      'cash_up_reopened_at',
+      'expected_cash',
+      'total_revenue',
+      'card_total',
+      'cash_total',
+      'bank_transfer_total',
+      'other_total',
+      'product_sales_total',
+      'minutes_sales_total',
+      'variance'
     ])
+    const dateColumns = ['cashup_date', 'date', 'cash_up_date']
+    const startFloatColumns = ['starting_cash_float', 'starting_float', 'start_day_float', 'cash_float']
+    const actualCashColumns = ['actual_cash', 'actual_cash_counted', 'actual_cash_in_till']
+    const dateValue = payload.cashup_date || payload.date || payload.cash_up_date || selectedDate
+    const startFloatValue = payload.starting_cash_float ?? payload.starting_float ?? payload.start_day_float ?? payload.cash_float ?? 0
+    const actualCashValue = payload.actual_cash ?? payload.actual_cash_counted ?? payload.actual_cash_in_till ?? 0
     let safePayload = { ...payload }
 
-    for (let attempt = 0; attempt < 8; attempt += 1) {
+    for (let attempt = 0; attempt < 16; attempt += 1) {
       const request = cashUpExistingRecord?.id
         ? supabase.from('CashUps').update(safePayload).eq('id', cashUpExistingRecord.id)
         : supabase.from('CashUps').insert(safePayload)
@@ -3672,6 +3735,33 @@ function formatMoney(value) {
       if (!error) return { error: null, payload: safePayload }
 
       const missingColumn = getMissingSupabaseColumn(error)
+      if (missingColumn && dateColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
+        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, dateColumns, dateValue)
+        if (nextPayload) {
+          console.warn('CashUps date column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
+          safePayload = nextPayload
+          continue
+        }
+      }
+
+      if (missingColumn && startFloatColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
+        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, startFloatColumns, startFloatValue)
+        if (nextPayload) {
+          console.warn('CashUps start float column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
+          safePayload = nextPayload
+          continue
+        }
+      }
+
+      if (missingColumn && actualCashColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
+        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, actualCashColumns, actualCashValue)
+        if (nextPayload) {
+          console.warn('CashUps actual cash column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
+          safePayload = nextPayload
+          continue
+        }
+      }
+
       if (missingColumn && optionalColumns.has(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
         console.warn('CashUps optional column missing, retrying without it:', missingColumn)
         const { [missingColumn]: _removed, ...nextPayload } = safePayload
@@ -3679,10 +3769,11 @@ function formatMoney(value) {
         continue
       }
 
+      console.error('CashUps save failed with non-retryable error:', { missingColumn, payload: safePayload, error })
       return { error, payload: safePayload }
     }
 
-    return { error: new Error('CashUps save failed after retrying optional columns.'), payload: safePayload }
+    return { error: new Error('CashUps save failed after retrying column fallbacks.'), payload: safePayload }
   }
 
   function clearFloatMovementForm() {
@@ -10868,7 +10959,6 @@ function formatMoney(value) {
       collapseCashUp,
       setCollapseCashUp,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <h3 style={{ marginTop: 0 }}>Cash-Up — {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}</h3>
         {!signedIn && (
           <p style={{ color: '#ffcc66', fontWeight: 'bold', marginTop: 0 }}>
             Please sign in before entering float or completing cash up.
@@ -10879,35 +10969,34 @@ function formatMoney(value) {
         {locked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Cash-up is locked for this date. Manager access is required to make changes.</p>}
         {cashUpBlockMessage && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>{cashUpBlockMessage}</p>}
 
-        <div className="cash-up-v2-denominations">
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
-            <h3 style={{ margin: 0 }}>Cash Denomination Counter</h3>
-            <strong style={{ color: '#d4a853' }}>Counted total: {formatMoney(cashDenominationTotal)}</strong>
-          </div>
-          <p style={{ color: '#aaa', marginTop: 0 }}>Use this for the End of Day Cash Count. The counted total fills the cash count field automatically.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px' }}>
-            {CASH_DENOMINATIONS.map((denomination) => (
-              <label key={denomination.key} style={{ display: 'grid', gap: '4px', color: '#ddd', fontSize: '13px' }}>
-                {denomination.label}
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={cashDenominations[denomination.key]}
-                  disabled={!canEditCashUp}
-                  onChange={(e) => updateCashDenomination(denomination.key, e.target.value)}
-                  style={{ padding: '9px' }}
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-
         <div className="cash-up-v2-columns">
         <section className="cash-up-v2-section cash-up-v2-start">
         <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
           <h3 style={{ marginTop: 0 }}>Start of Day Cash</h3>
           <p style={{ color: '#aaa', marginTop: 0 }}>Start of Day Float before trading begins.</p>
+          <div className="cash-up-v2-denominations cash-up-v2-start-counter">
+            <div className="cash-up-denomination-header">
+              <h4>Start of Day Cash Counter</h4>
+              <strong>Float total: {formatMoney(startCashDenominationTotal)}</strong>
+            </div>
+            <p style={{ color: '#aaa', marginTop: 0 }}>Use this when counting the opening till float. It fills Start of Day Float automatically.</p>
+            <div className="cash-denomination-grid">
+              {CASH_DENOMINATIONS.map((denomination) => (
+                <label key={denomination.key}>
+                  {denomination.label}
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={startCashDenominations[denomination.key]}
+                    disabled={!canEditCashUp}
+                    onChange={(e) => updateStartCashDenomination(denomination.key, e.target.value)}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+
           <strong style={{ display: 'block', marginBottom: '6px', color: '#d4a853' }}>Start of Day Float</strong>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 260px) auto', gap: '10px', alignItems: 'center' }}>
             <input
@@ -11009,6 +11098,29 @@ function formatMoney(value) {
           <div style={itemStyle}><span>Balances</span><h2>{formatMoney(summary.sprayTanBalanceRevenue)}</h2></div>
           <div style={itemStyle}><span>Total revenue</span><h2>{formatMoney(summary.totalRevenue)}</h2></div>
           <div style={itemStyle}><span>Expected cash in till</span><h2>{formatMoney(expectedCash)}</h2></div>
+        </div>
+
+        <div className="cash-up-v2-denominations cash-up-v2-end-counter">
+          <div className="cash-up-denomination-header">
+            <h4>End of Day Cash Counter</h4>
+            <strong>Counted total: {formatMoney(cashDenominationTotal)}</strong>
+          </div>
+          <p style={{ color: '#aaa', marginTop: 0 }}>Use this for the closing till count. It fills End of Day Cash Count automatically.</p>
+          <div className="cash-denomination-grid">
+            {CASH_DENOMINATIONS.map((denomination) => (
+              <label key={denomination.key}>
+                {denomination.label}
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cashDenominations[denomination.key]}
+                  disabled={!canEditCashUp}
+                  onChange={(e) => updateCashDenomination(denomination.key, e.target.value)}
+                />
+              </label>
+            ))}
+          </div>
         </div>
 
         <strong style={{ display: 'block', marginBottom: '6px', color: '#d4a853' }}>End of Day Cash Count</strong>
@@ -11648,25 +11760,27 @@ function formatMoney(value) {
 
   function renderCollapsibleSection(title, isCollapsed, setIsCollapsed, children) {
     if (isCollapsed) return null
+    const showSectionHeader = !['Cash-Up', 'Reports', 'Staff Calendar'].includes(title)
 
     return (
       <div style={{ marginBottom: '18px', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '18px', overflow: 'hidden', background: '#111' }}>
-        <div
-          style={{
-            width: '100%',
-            borderRadius: 0,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '14px 18px',
-            fontSize: '16px',
-            background: '#0b0b0b',
-            borderBottom: '1px solid rgba(212,168,83,0.2)'
-          }}
-        >
-          <span>{title}</span>
-
-        </div>
+        {showSectionHeader && (
+          <div
+            style={{
+              width: '100%',
+              borderRadius: 0,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '14px 18px',
+              fontSize: '16px',
+              background: '#0b0b0b',
+              borderBottom: '1px solid rgba(212,168,83,0.2)'
+            }}
+          >
+            <span>{title}</span>
+          </div>
+        )}
 
         <div style={{ padding: '16px' }}>
           {children}
@@ -11853,7 +11967,6 @@ function formatMoney(value) {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
-          <h3 style={{ color: '#1c1710', margin: 0 }}>Weekly View</h3>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button type="button" onClick={() => moveSelectedWeek(-1)}>Previous Week</button>
             <strong style={{ color: '#6b4b17' }}>{new Date(`${weekDates[0]}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} - {new Date(`${weekDates[6]}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
