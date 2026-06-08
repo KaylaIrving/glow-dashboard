@@ -2471,6 +2471,37 @@ function formatMoney(value) {
     return slots
   }
 
+  function getMinutesFromTimeString(time) {
+    const [hours, minutes] = String(time || '00:00').split(':').map(Number)
+    return Number(hours || 0) * 60 + Number(minutes || 0)
+  }
+
+  function getTimeStringFromMinutes(totalMinutes) {
+    const boundedMinutes = Math.max(0, Math.min(23 * 60 + 59, Number(totalMinutes || 0)))
+    const hours = Math.floor(boundedMinutes / 60)
+    const minutes = boundedMinutes % 60
+    return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0')
+  }
+
+  function getSunbedCalendarTimeRange() {
+    let startMinutes = getMinutesFromTimeString('08:00')
+    let endMinutes = getMinutesFromTimeString('21:00')
+
+    getBookingsForSelectedDate().forEach((booking) => {
+      const interval = getBookingCalendarDisplayInterval(booking)
+      if (!interval) return
+      const bookingStartMinutes = interval.start.getHours() * 60 + interval.start.getMinutes()
+      const bookingEndMinutes = interval.end.getHours() * 60 + interval.end.getMinutes()
+      startMinutes = Math.min(startMinutes, Math.floor(bookingStartMinutes / SLOT_MINUTES) * SLOT_MINUTES)
+      endMinutes = Math.max(endMinutes, Math.ceil(bookingEndMinutes / SLOT_MINUTES) * SLOT_MINUTES)
+    })
+
+    return {
+      start: getTimeStringFromMinutes(startMinutes),
+      end: getTimeStringFromMinutes(endMinutes)
+    }
+  }
+
   function getSelectedCustomer() {
     return customers.find((customer) => customer.id === Number(selectedCustomerId))
   }
@@ -12844,7 +12875,7 @@ function formatMoney(value) {
             </tr>
           </thead>
           <tbody>
-            {generateTimeSlots().map((time) => {
+            {generateTimeSlots(getSunbedCalendarTimeRange().start, getSunbedCalendarTimeRange().end).map((time) => {
               const currentRow = isCurrentTimeSlot(time)
               const isShopPrepTime = time >= '08:00' && time < '08:30'
 
