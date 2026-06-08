@@ -15,6 +15,7 @@ const MANAGER_REPORT_TYPES = [
   { value: 'sunbed_sales', label: 'Sunbed sales' },
   { value: 'spray_tan_sales', label: 'Spray tan sales' },
   { value: 'product_sales', label: 'Product sales' },
+  { value: 'current_stock', label: 'Current Stock Report' },
   { value: 'product_sales_by_staff', label: 'Product sales by staff' },
   { value: 'staff_commission', label: 'Staff commission' },
   { value: 'staff_performance', label: 'Staff performance' },
@@ -2141,6 +2142,21 @@ function formatMoney(value) {
       sprayTan: Array.from(sprayTanMap.values()).map((row) => ({ ...row, artists: Array.from(row.artists).join(', ') || 'Unassigned' })),
       staffActivity: Array.from(staffActivityMap.values()).sort((a, b) => (b.bookings + b.cash_ups) - (a.bookings + a.cash_ups)),
       stockMovement: products.map((product) => ({ name: product.name, category: product.category || 'Uncategorised', current_stock: getProductStockQuantity(product), status: getProductStockStatus(product) })),
+      currentStock: products
+        .slice()
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+        .map((product) => {
+          const stockStatus = getProductStockStatus(product)
+          return {
+            product_name: product.name || 'Unnamed product',
+            category: getProductCategoryLabel(product.category),
+            subcategories: getProductSubcategories(product).join(', ') || '-',
+            current_stock: getProductStockQuantity(product),
+            low_stock_threshold: Number(product.low_stock_threshold ?? LOW_STOCK_THRESHOLD),
+            low_stock_warning: stockStatus === 'In stock' ? '' : stockStatus,
+            active: isProductActive(product) ? 'Active' : 'Inactive'
+          }
+        }),
       expiredMinutes: expiredMinutesRows,
       duplicateCustomers: duplicateCustomerRows,
       customerRegistrations: customerRegistrationRows,
@@ -2207,6 +2223,19 @@ function formatMoney(value) {
           { key: 'category', label: 'Category' },
           { key: 'quantity', label: 'Qty' },
           { key: 'total', label: 'Total', format: money }
+        ]
+      },
+      current_stock: {
+        title: 'Current Stock Report',
+        rows: data.currentStock || [],
+        columns: [
+          { key: 'product_name', label: 'Product name' },
+          { key: 'category', label: 'Category' },
+          { key: 'subcategories', label: 'Subcategories' },
+          { key: 'current_stock', label: 'Current stock' },
+          { key: 'low_stock_threshold', label: 'Low stock at' },
+          { key: 'low_stock_warning', label: 'Low stock warning' },
+          { key: 'active', label: 'Status' }
         ]
       },
       product_sales_by_staff: {
@@ -4076,7 +4105,7 @@ function formatMoney(value) {
     return currentTime >= slotStart && currentTime < slotEnd
   }
 
-  function isCurrentTimelineSlot(time, slotMinutes = 15) {
+  function isCurrentTimelineSlot(time, slotMinutes = SLOT_MINUTES) {
     if (selectedDate !== formatLocalDate(currentTime)) return false
     const slotStart = getSlotDateTime(time)
     const slotEnd = new Date(slotStart.getTime() + slotMinutes * 60000)
@@ -10456,6 +10485,9 @@ function formatMoney(value) {
         ) : (
           selectedReport && renderReportTable(selectedReport.title, selectedReport.rows, selectedReport.columns)
         )}
+        <div style={{ marginTop: '14px' }}>
+          {renderExportsPanel()}
+        </div>
       </div>
     )
   }
@@ -10579,6 +10611,9 @@ function formatMoney(value) {
               <button onClick={() => deleteLoyaltyRule(rule)}>Delete</button>
             </div>
           ))}
+        </div>
+        <div style={{ marginTop: '14px' }}>
+          {renderPromosPanel()}
         </div>
       </div>
     )
@@ -11405,14 +11440,11 @@ function formatMoney(value) {
       { key: 'staff', label: 'Staff Management', isOpen: !collapseStaffManagement },
       { key: 'maintenance', label: 'Maintenance', isOpen: !collapseMaintenance },
       { key: 'products', label: 'Products', isOpen: !collapseProducts },
-      { key: 'promos', label: 'Offers / Promos', isOpen: !collapsePromos },
       { key: 'corrections', label: 'Booking / Payment Corrections', isOpen: !collapseCorrections },
       { key: 'wix', label: 'Wix Booking Sync', isOpen: !collapseWixSync },
       { key: 'receipts', label: 'Receipt History', isOpen: !collapseReceipts },
-      { key: 'exports', label: 'Exports / Backups', isOpen: !collapseExports },
       { key: 'daily', label: 'Daily Takings', isOpen: !collapseDailyTakings },
       { key: 'reports', label: 'Reports', isOpen: !collapseReports },
-      { key: 'commission', label: 'Commission Settings', isOpen: !collapseCommissionSettings },
       { key: 'loyalty', label: 'Loyalty / Rewards', isOpen: !collapseLoyaltyRewards },
       { key: 'duplicates', label: 'Duplicate Customers Report', isOpen: !collapseDuplicateCustomers }
     ]
@@ -11846,6 +11878,10 @@ function formatMoney(value) {
           <input type="number" placeholder="+/- minutes" value={staffAdjustmentAmount} onChange={(e) => setStaffAdjustmentAmount(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
           <input placeholder="Reason" value={staffAdjustmentReason} onChange={(e) => setStaffAdjustmentReason(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
           <button onClick={adjustStaffMinutes}>Apply Staff Adjustment</button>
+        </div>
+
+        <div style={{ marginTop: '14px' }}>
+          {renderCommissionSettingsPanel()}
         </div>
       </>
     )
@@ -12374,7 +12410,7 @@ function formatMoney(value) {
             </div>
 
             {timelineSlots.map((time) => {
-              const currentRow = isCurrentTimelineSlot(time, 15)
+              const currentRow = isCurrentTimelineSlot(time, SLOT_MINUTES)
               return (
               <div key={time} data-spraytan-current-time-row={currentRow ? 'true' : undefined} style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '10px 0', minHeight: '82px' }}>
                 <strong>{time}{currentRow && <><br /><span style={{ fontSize: '12px', color: '#ffcc66' }}>NOW</span></>}</strong>
@@ -12763,7 +12799,6 @@ function formatMoney(value) {
 
       <div className="v2-real-topbar">
         <div>
-          <span>Glow V2</span>
           <h1>{v2TabTitle}</h1>
         </div>
         <div className="v2-real-upcoming">
@@ -12868,14 +12903,11 @@ function formatMoney(value) {
       {v2ActiveTab === 'manager' && showManagerView && renderStaffManagementPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderMaintenancePanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderProductsManagementPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderPromosPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderCorrectionsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderWixBookingSyncPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderReceiptHistoryPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderExportsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderDailyTakingsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderManagerReportsPanel()}
-      {v2ActiveTab === 'manager' && showManagerView && renderCommissionSettingsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderLoyaltyRewardsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderDuplicateCustomersReportPanel()}
 
