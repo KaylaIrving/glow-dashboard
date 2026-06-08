@@ -4997,8 +4997,8 @@ function formatMoney(value) {
       return { wix_service_id: '', wix_service_name: service.trim().replace(/\s+/g, ' '), is_active: true }
     }
     return {
-      wix_service_id: String(service?.wix_service_id || service?.service_id || '').trim(),
-      wix_service_name: String(service?.wix_service_name || service?.service_name || '').trim().replace(/\s+/g, ' '),
+      wix_service_id: getWixBookingServiceId(service),
+      wix_service_name: getWixBookingServiceName(service).trim().replace(/\s+/g, ' '),
       is_active: service?.is_active !== false
     }
   }
@@ -5008,12 +5008,31 @@ function formatMoney(value) {
     return normalized.wix_service_id || normalizeWixServiceKey(normalized.wix_service_name)
   }
 
-  function getWixBookingServiceName(wixBookingPayload) {
-    return wixBookingPayload.service_name || wixBookingPayload.wix_service_name || wixBookingPayload.spraytan_service || ''
+  function getWixBookingServiceName(wixBookingPayload = {}) {
+    return String(
+      wixBookingPayload.wix_service_name
+      || wixBookingPayload.service_name
+      || wixBookingPayload.serviceName
+      || wixBookingPayload.bookedEntity?.title
+      || wixBookingPayload.bookedEntity?.name
+      || wixBookingPayload.service?.name
+      || wixBookingPayload.service?.title
+      || wixBookingPayload.spraytan_service
+      || ''
+    )
   }
 
-  function getWixBookingServiceId(wixBookingPayload) {
-    return String(wixBookingPayload.wix_service_id || wixBookingPayload.service_id || '').trim()
+  function getWixBookingServiceId(wixBookingPayload = {}) {
+    return String(
+      wixBookingPayload.wix_service_id
+      || wixBookingPayload.service_id
+      || wixBookingPayload.serviceId
+      || wixBookingPayload.bookedEntity?.slot?.serviceId
+      || wixBookingPayload.bookedEntity?.serviceId
+      || wixBookingPayload.bookedEntity?.id
+      || wixBookingPayload.service?.id
+      || ''
+    ).trim()
   }
 
   function addMinutesToIsoDate(startTime, minutes) {
@@ -5208,19 +5227,53 @@ function formatMoney(value) {
     }
   }
 
+  function findServiceMapping(service, mappings = wixServiceMappings, { activeOnly = false, log = false } = {}) {
+    const normalized = normalizeWixServiceRecord(service)
+    const wixServiceId = normalized.wix_service_id
+    const wixServiceName = normalized.wix_service_name
+    const availableMappings = activeOnly
+      ? (mappings || []).filter((mapping) => mapping?.is_active !== false)
+      : (mappings || [])
+
+    let match = null
+    let matchType = ''
+
+    if (wixServiceId) {
+      match = availableMappings.find((mapping) => {
+        const mappingServiceId = String(mapping?.wix_service_id || '').trim()
+        return mappingServiceId && mappingServiceId === wixServiceId
+      }) || null
+      if (match) matchType = 'id'
+    }
+
+    if (!match) {
+      const serviceKey = normalizeWixServiceKey(wixServiceName)
+      if (serviceKey) {
+        match = availableMappings.find((mapping) => normalizeWixServiceKey(mapping?.wix_service_name) === serviceKey) || null
+        if (match) matchType = 'name'
+      }
+    }
+
+    if (log) {
+      console.log('WIX SERVICE MAPPING MATCH', {
+        wixServiceId,
+        wixServiceName,
+        matchType: match ? matchType : 'none',
+        mappingId: match?.id || null,
+        mappingServiceId: match?.wix_service_id || null,
+        mappingServiceName: match?.wix_service_name || null
+      })
+    }
+
+    return match
+  }
+
   function getSavedWixMappingForService(service, mappings = wixServiceMappings) {
-    const mapping = getAnyWixMappingForService(service, mappings)
-    return mapping?.is_active !== false ? mapping : null
+    return findServiceMapping(service, mappings, { activeOnly: true })
   }
 
   function getAnyWixMappingForService(service, mappings = wixServiceMappings) {
-    const normalized = normalizeWixServiceRecord(service)
-    if (normalized.wix_service_id) {
-      const idMatch = (mappings || []).find((mapping) => String(mapping.wix_service_id || '').trim() === normalized.wix_service_id)
-      if (idMatch) return idMatch
-    }
-    const serviceKey = normalizeWixServiceKey(normalized.wix_service_name)
-    return (mappings || []).find((mapping) => normalizeWixServiceKey(mapping.wix_service_name) === serviceKey) || null
+    return findServiceMapping(service, mappings)
   }
 
   function getWixMappingDraft(service) {
@@ -5252,9 +5305,19 @@ function formatMoney(value) {
   function applyWixServiceMapping(wixBookingPayload, mappings = wixServiceMappings) {
     const serviceName = getWixBookingServiceName(wixBookingPayload)
     const serviceId = getWixBookingServiceId(wixBookingPayload)
-    const mapping = getAnyWixMappingForService({ wix_service_id: serviceId, wix_service_name: serviceName }, mappings)
-      || WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(serviceName)]
-      || inferWixServiceMapping(serviceName)
+    let mapping = findServiceMapping(wixBookingPayload, mappings, { activeOnly: true, log: true })
+    if (!mapping) {
+      mapping = WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(serviceName)] || null
+      if (mapping) {
+        console.log('WIX SERVICE MAPPING MATCH', { wixServiceId: serviceId, wixServiceName: serviceName, matchType: 'live_default' })
+      }
+    }
+    if (!mapping) {
+      mapping = inferWixServiceMapping(serviceName)
+      if (mapping) {
+        console.log('WIX SERVICE MAPPING MATCH', { wixServiceId: serviceId, wixServiceName: serviceName, matchType: 'inferred' })
+      }
+    }
 
     if (!mapping) {
       throw new Error(`Wix service "${serviceName || 'Unknown service'}" needs mapping in Manager > Integrations > Wix > Service Booking Map.`)
@@ -5811,7 +5874,7 @@ function formatMoney(value) {
       throw new Error('Wix booking payload must include wix_booking_id.')
     }
 
-    if (wixBookingPayload.booking_type === 'spraytan') {
+    if (['spraytan', 'patch_test'].includes(String(wixBookingPayload.booking_type || '').toLowerCase())) {
       const existingBooking = await checkWixBookingExists(wixBookingPayload.wix_booking_id)
       if (!existingBooking) return insertWixBooking(wixBookingPayload)
       if (!isExistingWixBookingRecord(existingBooking)) {
