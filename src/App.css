@@ -1406,6 +1406,57 @@ button,
   padding: 7px 10px !important;
 }
 
+.cash-up-denomination-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.cash-up-denomination-header h4 {
+  margin: 0;
+  font-size: 15px;
+  color: inherit;
+}
+
+.cash-denomination-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+  gap: 8px;
+  max-width: 100%;
+}
+
+.cash-denomination-grid label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #ddd;
+  font-size: 12px;
+}
+
+.cash-denomination-grid input,
+.cash-up-v2-section input,
+.cash-up-v2-section select,
+.cash-up-v2-section textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.cash-up-v2-section button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+
+.cash-up-v2-section .cash-up-v2-denominations {
+  overflow: hidden;
+}
+
 .v2-product-stock-panel {
   padding: 14px;
   background: linear-gradient(180deg, rgba(24, 22, 20, 0.96), rgba(10, 10, 10, 0.98));

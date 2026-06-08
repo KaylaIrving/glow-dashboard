@@ -1,28 +1,28 @@
 const WIX_CONTACTS_QUERY_URL = 'https://www.wixapis.com/contacts/v4/contacts/query'
 const WIX_BOOKINGS_QUERY_URL = 'https://www.wixapis.com/bookings/v2/bookings/query'
 const WIX_REQUIRED_SERVICE_MAPPINGS = {
-  'hybrid tanning lay down sunbed': { booking_type: 'sunbed', bed_id: 2, minutes: 15 },
-  'prestige tanning lay down sunbed': { booking_type: 'sunbed', bed_id: 3, minutes: 15 },
-  "stand up 'tone & tan' sunbed": { booking_type: 'sunbed', bed_id: 1, minutes: 15 },
-  'stand up tone & tan sunbed': { booking_type: 'sunbed', bed_id: 1, minutes: 15 },
+  'hybrid tanning lay down sunbed': { booking_type: 'sunbed', bed_id: 2, minutes: 20 },
+  'prestige tanning lay down sunbed': { booking_type: 'sunbed', bed_id: 3, minutes: 20 },
+  "stand up 'tone & tan' sunbed": { booking_type: 'sunbed', bed_id: 1, minutes: 20 },
+  'stand up tone & tan sunbed': { booking_type: 'sunbed', bed_id: 1, minutes: 20 },
   'full body spray tan': { booking_type: 'spraytan', spraytan_service: 'Full Body Spray Tan', spraytan_duration_minutes: 30 },
   'express full body spray tan': { booking_type: 'spraytan', spraytan_service: 'EXPRESS Full Body Spray Tan', spraytan_duration_minutes: 30 },
   'spray tan patch test': { booking_type: 'patch_test', spraytan_service: 'Spray Tan patch test', spraytan_duration_minutes: 10 },
   'blue light full body spray tan': { booking_type: 'spraytan', spraytan_service: 'BLUE Light Full Body Spray Tan', spraytan_duration_minutes: 30 },
-  'upper body & face spray tan': { booking_type: 'spraytan', spraytan_service: 'Upper Body & Face Spray Tan', spraytan_duration_minutes: 15 },
-  'face & neck spray tan': { booking_type: 'spraytan', spraytan_service: 'Face & Neck Spray Tan', spraytan_duration_minutes: 15 },
-  'legs only spray tan': { booking_type: 'spraytan', spraytan_service: 'Legs Only Spray Tan', spraytan_duration_minutes: 15 }
+  'upper body & face spray tan': { booking_type: 'spraytan', spraytan_service: 'Upper Body & Face Spray Tan', spraytan_duration_minutes: 30 },
+  'face & neck spray tan': { booking_type: 'spraytan', spraytan_service: 'Face & Neck Spray Tan', spraytan_duration_minutes: 30 },
+  'legs only spray tan': { booking_type: 'spraytan', spraytan_service: 'Legs Only Spray Tan', spraytan_duration_minutes: 30 }
 }
 
 function inferWixServiceMapping(serviceName) {
   const key = normalizeServiceKey(serviceName)
   if (!key) return null
   if (key.includes('patch')) return { booking_type: 'patch_test', spraytan_service: serviceName || 'Spray Tan patch test', spraytan_duration_minutes: 10 }
-  if (key.includes('prestige') || key.includes('excellence')) return { booking_type: 'sunbed', bed_id: 3, minutes: 15 }
-  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { booking_type: 'sunbed', bed_id: 1, minutes: 15 }
-  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light') || key.includes('relaxing premium') || key.includes('vitamin d') || key.includes('red light') || key.includes('lay down sunbed') || key === 'lay down sunbed') return { booking_type: 'sunbed', bed_id: 2, minutes: 15 }
+  if (key.includes('prestige') || key.includes('excellence')) return { booking_type: 'sunbed', bed_id: 3, minutes: 20 }
+  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { booking_type: 'sunbed', bed_id: 1, minutes: 20 }
+  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light') || key.includes('relaxing premium') || key.includes('vitamin d') || key.includes('red light') || key.includes('lay down sunbed') || key === 'lay down sunbed') return { booking_type: 'sunbed', bed_id: 2, minutes: 20 }
   if (key.includes('spray')) {
-    const duration = key.includes('patch') ? 10 : key.includes('upper') || key.includes('face') || key.includes('legs') ? 15 : 30
+    const duration = key.includes('patch') ? 10 : 30
     return { booking_type: 'spraytan', spraytan_service: serviceName, spraytan_duration_minutes: duration }
   }
   return null

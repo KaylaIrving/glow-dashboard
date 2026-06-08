@@ -38,17 +38,17 @@ const MANAGER_REPORT_TYPES = [
 // Keep empty for now so Wix cannot silently guess the wrong bed/minutes.
 const WIX_SERVICE_BOOKING_MAP = {}
 const WIX_REQUIRED_SERVICE_MAPPINGS = [
-  { wix_service_name: 'Hybrid Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  { wix_service_name: 'Prestige Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  { wix_service_name: "Stand Up 'Tone & Tan' Sunbed", service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' },
-  { wix_service_name: 'Stand Up Tone & Tan Sunbed', service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Hybrid Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 2, minutes: 20, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Prestige Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 3, minutes: 20, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: "Stand Up 'Tone & Tan' Sunbed", service_type: 'sunbed', bed_id: 1, minutes: 20, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Stand Up Tone & Tan Sunbed', service_type: 'sunbed', bed_id: 1, minutes: 20, spraytan_service: '', default_status: 'booked' },
   { wix_service_name: 'Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Full Body Spray Tan', default_status: 'pending' },
   { wix_service_name: 'EXPRESS Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'EXPRESS Full Body Spray Tan', default_status: 'pending' },
   { wix_service_name: 'Spray Tan patch test', service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: 'Spray Tan patch test', default_status: 'pending' },
   { wix_service_name: 'BLUE Light Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'BLUE Light Full Body Spray Tan', default_status: 'pending' },
-  { wix_service_name: 'Upper Body & Face Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Upper Body & Face Spray Tan', default_status: 'pending' },
-  { wix_service_name: 'Face & Neck Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Face & Neck Spray Tan', default_status: 'pending' },
-  { wix_service_name: 'Legs Only Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Legs Only Spray Tan', default_status: 'pending' }
+  { wix_service_name: 'Upper Body & Face Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Upper Body & Face Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'Face & Neck Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Face & Neck Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'Legs Only Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Legs Only Spray Tan', default_status: 'pending' }
 ]
 const WIX_LIVE_SERVICE_DEFAULTS = Object.fromEntries(
   WIX_REQUIRED_SERVICE_MAPPINGS.map((mapping) => [mapping.wix_service_name.trim().replace(/\s+/g, ' ').toLowerCase(), mapping])
@@ -58,11 +58,11 @@ function inferWixServiceMapping(serviceName) {
   const key = String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
   if (!key) return null
   if (key.includes('patch')) return { service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: serviceName || 'Spray Tan patch test', default_status: 'pending' }
-  if (key.includes('prestige') || key.includes('excellence')) return { service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' }
-  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' }
-  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light') || key.includes('relaxing premium') || key.includes('vitamin d') || key.includes('red light') || key.includes('lay down sunbed') || key === 'lay down sunbed') return { service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('prestige') || key.includes('excellence')) return { service_type: 'sunbed', bed_id: 3, minutes: 20, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { service_type: 'sunbed', bed_id: 1, minutes: 20, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light') || key.includes('relaxing premium') || key.includes('vitamin d') || key.includes('red light') || key.includes('lay down sunbed') || key === 'lay down sunbed') return { service_type: 'sunbed', bed_id: 2, minutes: 20, spraytan_service: '', default_status: 'booked' }
   if (key.includes('spray')) {
-    const duration = key.includes('upper') || key.includes('face') || key.includes('legs') ? 15 : 30
+    const duration = 30
     return { service_type: 'spraytan', bed_id: '', minutes: duration, spraytan_service: serviceName, default_status: 'pending' }
   }
   return null
@@ -1851,6 +1851,14 @@ function formatMoney(value) {
       loyaltyRules.forEach((rule) => addOption(rule.reward_name, rule.reward_name))
     } else if (scope === 'promo') {
       promos.forEach((promo) => addOption(promo.promo_name, promo.promo_name))
+    } else if (scope === 'spraytan') {
+      SPRAY_TAN_SERVICES.forEach((service) => addOption(service.name, service.name))
+      Array.from(new Set(bookings.filter((booking) => isSprayTanBooking(booking)).map((booking) => booking.spraytan_service || booking.wix_service_name).filter(Boolean))).forEach((serviceName) => addOption(serviceName, serviceName))
+    } else if (scope === 'sunbed_minutes') {
+      addOption('Sunbed Minutes', 'Sunbed Minutes')
+      addOption('Standard Minutes', 'Standard Minutes')
+      addOption('Collagen Minutes', 'Collagen Minutes')
+      COMMON_BOOKING_MINUTES.forEach((minutes) => addOption(String(minutes) + ' minute sunbed', String(minutes) + ' minute sunbed'))
     }
 
     return Array.from(optionMap.values()).sort((a, b) => a.label.localeCompare(b.label))
@@ -2532,7 +2540,10 @@ function formatMoney(value) {
   function openManagerSection(sectionName, currentlyOpen) {
     closeAllManagerSections()
     if (currentlyOpen) return
-    if (sectionName === 'staff') setCollapseStaffManagement(false)
+    if (sectionName === 'staff') {
+      setCollapseStaffManagement(false)
+      setCollapseCommissionSettings(false)
+    }
     if (sectionName === 'maintenance') setCollapseMaintenance(false)
     if (sectionName === 'products') setCollapseProducts(false)
     if (sectionName === 'corrections') setCollapseCorrections(false)
@@ -2544,7 +2555,10 @@ function formatMoney(value) {
     if (sectionName === 'promos') setCollapsePromos(false)
     if (sectionName === 'commission') setCollapseCommissionSettings(false)
     if (sectionName === 'duplicates') setCollapseDuplicateCustomers(false)
-    if (sectionName === 'loyalty') setCollapseLoyaltyRewards(false)
+    if (sectionName === 'loyalty') {
+      setCollapseLoyaltyRewards(false)
+      setCollapsePromos(false)
+    }
   }
 
   function scrollToTop() {
@@ -4772,7 +4786,24 @@ function formatMoney(value) {
     return true
   }
 
+  function getDisplaySunbedMinutes(booking) {
+    if (!booking) return 0
+    const minutes = Number(booking.minutes || 0)
+    if (isWixBooking(booking) && isSunbedBooking(booking) && (!minutes || minutes === 15)) return 20
+    return minutes
+  }
+
+  function getSprayTanDisplayDurationMinutes(booking) {
+    const type = String(booking?.booking_type || '').toLowerCase()
+    const serviceName = String(booking?.spraytan_service || booking?.wix_service_name || '').toLowerCase()
+    if (type === 'patch_test' || serviceName.includes('patch')) return 10
+    if (isSprayTanBooking(booking)) return Math.max(30, Number(booking.spraytan_duration_minutes || booking.minutes || 30))
+    return Number(booking?.spraytan_duration_minutes || booking?.minutes || 0)
+  }
+
   function getTotalBlockMinutes(booking) {
+    if (isSprayTanBooking(booking)) return getSprayTanDisplayDurationMinutes(booking)
+    if (isWixBooking(booking) && isSunbedBooking(booking)) return getDisplaySunbedMinutes(booking) || 20
     return Number(booking.minutes || 0) + UNDRESS_SECONDS / 60 + COOLDOWN_SECONDS / 60
   }
 
@@ -4799,7 +4830,8 @@ function formatMoney(value) {
     const appointmentStart = new Date(startSource)
     if (Number.isNaN(appointmentStart.getTime())) return null
     const explicitEnd = booking?.booking_end ? new Date(booking.booking_end) : null
-    const plannedEnd = explicitEnd && !Number.isNaN(explicitEnd.getTime())
+    const useCalculatedEnd = (isWixBooking(booking) && isSunbedBooking(booking) && Number(booking.minutes || 0) === 15) || isSprayTanBooking(booking)
+    const plannedEnd = explicitEnd && !Number.isNaN(explicitEnd.getTime()) && !useCalculatedEnd
       ? explicitEnd
       : new Date(appointmentStart.getTime() + getTotalBlockMinutes(booking) * 60000)
     return { start: appointmentStart, end: plannedEnd }
@@ -4864,6 +4896,32 @@ function formatMoney(value) {
     if (bookingType === 'patch_test' || serviceName.includes('patch')) return 'patch_test'
     if (serviceName.includes('express')) return 'express_tan'
     return 'spray_tan'
+  }
+
+  function getSprayTanBookingEndDateTime(booking) {
+    const start = getBookingDisplayDateTime(booking)
+    if (!start) return null
+    return new Date(start.getTime() + getSprayTanDisplayDurationMinutes(booking) * 60000)
+  }
+
+  function getSprayTanDisplaySlotCount(booking) {
+    return Math.max(1, Math.ceil(getSprayTanDisplayDurationMinutes(booking) / SLOT_MINUTES))
+  }
+
+  function isSprayTanBookingStartingAtSlot(booking, time) {
+    return getBookingStartTimeString(booking) === time
+  }
+
+  function isSprayTanBookingCoveringSlot(booking, time) {
+    const slotTime = getSlotDateTime(time)
+    const start = getBookingDisplayDateTime(booking)
+    const end = getSprayTanBookingEndDateTime(booking)
+    if (!start || !end) return false
+    return slotTime >= start && slotTime < end
+  }
+
+  function isSprayTanSlotCoveredByEarlierBooking(bookingsForColumn, time) {
+    return bookingsForColumn.some((booking) => isSprayTanBookingCoveringSlot(booking, time) && !isSprayTanBookingStartingAtSlot(booking, time))
   }
 
   function getDefaultSprayTanDeposit(serviceName) {
@@ -5377,12 +5435,20 @@ function formatMoney(value) {
       const serviceRecord = matchingWixService || { wix_service_id: '', wix_service_name: required.wix_service_name }
       const existing = getAnyWixMappingForService(serviceRecord, currentMappings)
       if (existing) {
-        if (matchingWixService?.wix_service_id && !existing.wix_service_id) {
+        const updatePayload = { updated_at: new Date().toISOString() }
+        if (matchingWixService?.wix_service_id && !existing.wix_service_id) updatePayload.wix_service_id = matchingWixService.wix_service_id
+        if (matchingWixService?.wix_service_name && existing.wix_service_name !== matchingWixService.wix_service_name) updatePayload.wix_service_name = matchingWixService.wix_service_name
+        if ((existing.glow_service_type || existing.service_type) !== required.service_type) updatePayload.glow_service_type = required.service_type
+        if (required.service_type === 'sunbed' && Number(existing.bed_id || 0) !== Number(required.bed_id || 0)) updatePayload.bed_id = Number(required.bed_id)
+        if (Number(existing.minutes || 0) !== Number(required.minutes || 0)) updatePayload.minutes = Number(required.minutes || 0)
+        if (['spraytan', 'patch_test'].includes(required.service_type) && existing.spraytan_service !== required.spraytan_service) updatePayload.spraytan_service = required.spraytan_service
+        if ((existing.default_status || '') !== required.default_status) updatePayload.default_status = required.default_status
+        if (Object.keys(updatePayload).length > 1) {
           const { error } = await supabase
             .from('wix_service_booking_map')
-            .update({ wix_service_id: matchingWixService.wix_service_id, wix_service_name: matchingWixService.wix_service_name, updated_at: new Date().toISOString() })
+            .update(updatePayload)
             .eq('id', existing.id)
-          if (error) console.error('Wix default mapping service ID update failed:', { required, error })
+          if (error) console.error('Wix default mapping update failed:', { required, updatePayload, error })
         }
         continue
       }
@@ -5435,29 +5501,31 @@ function formatMoney(value) {
         }
 
         if (mappedBooking.booking_type === 'sunbed') {
-          const needsSunbedMapping = !booking.bed_id || !booking.minutes
-          const needsTimeline = !booking.booking_start || !booking.booking_end
+          const mappedMinutes = Number(mappedBooking.minutes || 20)
+          const needsSunbedMapping = !booking.bed_id || Number(booking.bed_id) !== Number(mappedBooking.bed_id) || Number(booking.minutes || 0) !== mappedMinutes
+          const needsTimeline = !booking.booking_start || !booking.booking_end || (timeline.bookingEnd && new Date(booking.booking_end).getTime() !== new Date(timeline.bookingEnd).getTime())
           if (!needsSunbedMapping && !needsTimeline) continue
           if (needsSunbedMapping) {
             updatePayload.bed_id = Number(mappedBooking.bed_id)
-            updatePayload.minutes = Number(mappedBooking.minutes)
+            updatePayload.minutes = mappedMinutes
           }
           updatePayload.approval_status = mappedBooking.approval_status || booking.approval_status || 'approved'
         } else {
-          const needsSprayTanMapping = !booking.spraytan_service || !booking.spraytan_duration_minutes
-          const needsTimeline = !booking.booking_start || !booking.booking_end
+          const mappedDuration = getSprayTanDisplayDurationMinutes(mappedBooking)
+          const needsSprayTanMapping = !booking.spraytan_service || Number(booking.spraytan_duration_minutes || 0) !== mappedDuration
+          const needsTimeline = !booking.booking_start || !booking.booking_end || (timeline.bookingEnd && new Date(booking.booking_end).getTime() !== new Date(timeline.bookingEnd).getTime())
           if (!needsSprayTanMapping && !needsTimeline) continue
           if (needsSprayTanMapping) {
             updatePayload.spraytan_service = mappedBooking.spraytan_service
             updatePayload.spraytan_column = mappedBooking.spraytan_column
-            updatePayload.spraytan_duration_minutes = mappedBooking.spraytan_duration_minutes
+            updatePayload.spraytan_duration_minutes = mappedDuration
           }
           updatePayload.approval_status = mappedBooking.approval_status || booking.approval_status || 'pending'
           updatePayload.patch_test_required = mappedBooking.patch_test_required
         }
 
-        if (!booking.booking_start && timeline.bookingStart) updatePayload.booking_start = timeline.bookingStart
-        if (!booking.booking_end && timeline.bookingEnd) updatePayload.booking_end = timeline.bookingEnd
+        if (timeline.bookingStart) updatePayload.booking_start = timeline.bookingStart
+        if (timeline.bookingEnd) updatePayload.booking_end = timeline.bookingEnd
 
         const { error: updateError } = await supabase.from('Bookings').update(updatePayload).eq('id', booking.id)
         if (updateError) throw updateError
@@ -10673,6 +10741,8 @@ function formatMoney(value) {
             <option value="product">Product</option>
             <option value="reward">Reward</option>
             <option value="promo">Promo</option>
+            <option value="spraytan">Spray Tan</option>
+            <option value="sunbed_minutes">Sunbed Minutes</option>
           </select>
           <select
             value={commissionRuleMatch}
@@ -12602,70 +12672,84 @@ function formatMoney(value) {
         </div>
 
         <div style={{ background: 'linear-gradient(180deg, rgba(205, 154, 143, 0.085), rgba(20, 16, 15, 0.96))', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
-          <div style={{ minWidth: '980px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', padding: '0 0 10px', color: '#d4a853', fontWeight: 'bold' }}>
-              <span>Time</span>
-              {SPRAY_TAN_COLUMNS.map((column) => <span key={column.value}>{column.label}</span>)}
-            </div>
-
-            {timelineSlots.map((time) => {
-              const currentRow = isCurrentTimelineSlot(time, SLOT_MINUTES)
-              return (
-              <div key={time} data-spraytan-current-time-row={currentRow ? 'true' : undefined} style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '10px 0', minHeight: '82px' }}>
-                <strong>{time}{currentRow && <><br /><span style={{ fontSize: '12px', color: '#ffcc66' }}>NOW</span></>}</strong>
-                {SPRAY_TAN_COLUMNS.map((column) => {
-                  const slotAppointments = sprayTanBookings.filter((booking) => getBookingStartTimeString(booking) === time && getSprayTanCalendarColumn(booking) === column.value)
-                  return (
-                    <div key={`${time}-${column.value}`} onClick={() => slotAppointments.length === 0 && openSprayTanSlot(time, column.value)} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', cursor: slotAppointments.length === 0 ? 'pointer' : 'default', minHeight: '64px' }}>
-                      {slotAppointments.length === 0 ? (
-                        <span style={{ color: '#666' }}>+ Add {column.label}</span>
-                      ) : slotAppointments.map((booking) => {
-                        const customer = getCustomerForBooking(booking)
-                        const serviceName = booking.spraytan_service || 'Spray tan service'
-                        const servicePrice = getSprayTanServicePrice(serviceName)
-                        const depositRequired = Number(booking.deposit_required || 0)
-                        const depositPaid = Number(booking.deposit_paid || 0)
-                        const balancePaid = Number(booking.spraytan_balance_paid || 0)
-                        const balanceRequired = Math.max(0, servicePrice - depositRequired)
-                        const statusLabel = getSprayTanStatusLabel(booking)
-                        const lastPatchTestDate = customer?.last_patch_test_date || booking.patch_test_date
-
+          <table className="spraytan-calendar-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px', tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '90px', color: '#d4a853', padding: '8px', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>
+                {SPRAY_TAN_COLUMNS.map((column) => <th key={column.value} style={{ color: '#d4a853', padding: '8px', textAlign: 'left', borderBottom: '1px solid #333' }}>{column.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {timelineSlots.map((time) => {
+                const currentRow = isCurrentTimelineSlot(time, SLOT_MINUTES)
+                return (
+                  <tr key={time} data-spraytan-current-time-row={currentRow ? 'true' : undefined}>
+                    <td style={{ borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '8px', verticalAlign: 'top', color: '#f3e6c3', fontWeight: 'bold', height: '52px' }}>
+                      {time}{currentRow && <><br /><span style={{ fontSize: '12px', color: '#ffcc66' }}>NOW</span></>}
+                    </td>
+                    {SPRAY_TAN_COLUMNS.map((column) => {
+                      const columnBookings = sprayTanBookings.filter((booking) => getSprayTanCalendarColumn(booking) === column.value)
+                      if (isSprayTanSlotCoveredByEarlierBooking(columnBookings, time)) return null
+                      const slotAppointments = columnBookings.filter((booking) => isSprayTanBookingStartingAtSlot(booking, time))
+                      if (slotAppointments.length === 0) {
                         return (
-                          <div
-                            key={booking.id}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              openSprayTanBookingForEdit(booking)
-                            }}
-                            style={getSprayTanBookingCardStyle(booking)}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                              <strong style={{ fontSize: '16px', lineHeight: 1.25 }}>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
-                              <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
-                            </div>
-                            <p style={{ margin: '8px 0 5px', color: '#f2e2bd', fontWeight: 700 }}>
-                              {serviceName} - {formatMoney(servicePrice)} - {Number(booking.spraytan_duration_minutes || 0)} mins
-                            </p>
-                            <p style={{ margin: '4px 0', color: '#fff', lineHeight: 1.45 }}>
-                              Deposit: {formatMoney(depositPaid)} / {formatMoney(depositRequired)}<br />
-                              Balance: {formatMoney(balancePaid)} / {formatMoney(balanceRequired)}
-                            </p>
-                            <p style={{ margin: '4px 0', color: '#aaa' }}>Artist: {booking.spraytan_artist || 'To assign'}</p>
-                            {serviceName !== 'Patch Test' && !booking.patch_test_completed && (
-                              <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>
-                                Patch test warning{lastPatchTestDate ? ` - Last ${new Date(lastPatchTestDate).toLocaleDateString('en-GB')}` : ''}
-                              </p>
-                            )}
-                          </div>
+                          <td key={column.value} onClick={() => openSprayTanSlot(time, column.value)} style={{ borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '8px', verticalAlign: 'top', cursor: 'pointer', background: '#0b0b0b' }}>
+                            <span style={{ color: '#666' }}>+ Add {column.label}</span>
+                          </td>
                         )
-                      })}
-                    </div>
-                  )
-                })}
-              </div>
-              )
-            })}
-          </div>
+                      }
+                      const rowSpan = Math.max(...slotAppointments.map((booking) => getSprayTanDisplaySlotCount(booking)))
+                      return (
+                        <td key={column.value} rowSpan={rowSpan} style={{ borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '8px', verticalAlign: 'top', background: '#0b0b0b' }}>
+                          {slotAppointments.map((booking) => {
+                            const customer = getCustomerForBooking(booking)
+                            const serviceName = booking.spraytan_service || booking.wix_service_name || 'Spray tan service'
+                            const servicePrice = getSprayTanServicePrice(serviceName)
+                            const depositRequired = Number(booking.deposit_required || 0)
+                            const depositPaid = Number(booking.deposit_paid || 0)
+                            const balancePaid = Number(booking.spraytan_balance_paid || 0)
+                            const balanceRequired = Math.max(0, servicePrice - depositRequired)
+                            const statusLabel = getSprayTanStatusLabel(booking)
+                            const lastPatchTestDate = customer?.last_patch_test_date || booking.patch_test_date
+                            const durationMinutes = getSprayTanDisplayDurationMinutes(booking)
+
+                            return (
+                              <div
+                                key={booking.id}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  openSprayTanBookingForEdit(booking)
+                                }}
+                                style={{ ...getSprayTanBookingCardStyle(booking), minHeight: Math.max(64, getSprayTanDisplaySlotCount(booking) * 52 - 18) }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                                  <strong style={{ fontSize: '16px', lineHeight: 1.25 }}>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
+                                  <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
+                                </div>
+                                <p style={{ margin: '8px 0 5px', color: '#f2e2bd', fontWeight: 700 }}>
+                                  {serviceName} - {formatMoney(servicePrice)} - {durationMinutes} mins
+                                </p>
+                                <p style={{ margin: '4px 0', color: '#fff', lineHeight: 1.45 }}>
+                                  Deposit: {formatMoney(depositPaid)} / {formatMoney(depositRequired)}<br />
+                                  Balance: {formatMoney(balancePaid)} / {formatMoney(balanceRequired)}
+                                </p>
+                                <p style={{ margin: '4px 0', color: '#aaa' }}>Artist: {booking.spraytan_artist || 'To assign'}</p>
+                                {serviceName !== 'Patch Test' && !booking.patch_test_completed && (
+                                  <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>
+                                    Patch test warning{lastPatchTestDate ? ' - Last ' + new Date(lastPatchTestDate).toLocaleDateString('en-GB') : ''}
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     )
