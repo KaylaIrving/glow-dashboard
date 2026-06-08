@@ -115,6 +115,8 @@ const STAFF_SCHEDULE_TYPES = [
   { value: 'spray_tan_available', label: 'Spray Tan Available' }
 ]
 
+const WIX_AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000
+
 const CASH_DENOMINATIONS = [
   { key: 'note50', label: '£50 notes', value: 50 },
   { key: 'note20', label: '£20 notes', value: 20 },
@@ -450,6 +452,8 @@ function App() {
   const [wixImportedCount, setWixImportedCount] = useState(0)
   const [wixFailedCount, setWixFailedCount] = useState(0)
   const [wixSyncRunning, setWixSyncRunning] = useState(false)
+  const wixSyncRunningRef = useRef(false)
+  const [wixNextAutoSyncAt, setWixNextAutoSyncAt] = useState(() => wixSyncHealth?.nextSyncAt || '')
   const [wixSyncDiagnostics, setWixSyncDiagnostics] = useState(() => {
     if (typeof window === 'undefined') return null
     try {
@@ -527,9 +531,12 @@ function App() {
 
   useEffect(() => {
     if (!wixSyncEndpoint) return undefined
+    const updateNextSyncTime = () => setWixNextAutoSyncAt(new Date(Date.now() + WIX_AUTO_SYNC_INTERVAL_MS).toISOString())
+    updateNextSyncTime()
     const syncTimer = window.setInterval(() => {
-      runWixBookingSync({ automatic: true })
-    }, 15 * 60 * 1000)
+      updateNextSyncTime()
+      if (!wixSyncRunningRef.current) runWixBookingSync({ automatic: true })
+    }, WIX_AUTO_SYNC_INTERVAL_MS)
     return () => window.clearInterval(syncTimer)
   }, [wixSyncEndpoint])
 
@@ -671,6 +678,18 @@ function App() {
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
+  }
+
+  function getLocalDateStringFromValue(value) {
+    if (!value) return ''
+    const parsed = value instanceof Date ? value : new Date(value)
+    if (Number.isNaN(parsed.getTime())) return ''
+    return formatLocalDate(parsed)
+  }
+
+  function isBookingOnSelectedDate(booking) {
+    const startSource = booking?.booking_start || booking?.appointment_time || booking?.start_time
+    return getLocalDateStringFromValue(startSource) === selectedDate
   }
 
   function getWeekDates(dateString = selectedDate) {
@@ -3953,6 +3972,54 @@ function formatMoney(value) {
     })
   }
 
+  function getExportDateRange() {
+    const fromDate = exportFromDate || selectedDate
+    const toDate = exportToDate || fromDate
+    return {
+      fromDate,
+      toDate,
+      dayStart: new Date(`${fromDate}T00:00:00`),
+      dayEnd: new Date(`${toDate}T23:59:59.999`)
+    }
+  }
+
+  function exportWixSyncedBookingsCsv() {
+    const { fromDate, toDate, dayStart, dayEnd } = getExportDateRange()
+    exportTableRows({
+      tableName: 'Bookings',
+      filename: `glow_wix_bookings_${fromDate}_to_${toDate}.csv`,
+      queryBuilder: (query) => query
+        .select('*')
+        .or('booking_source.eq.wix,source.eq.wix,wix_booking_id.not.is.null')
+        .gte('appointment_time', dayStart.toISOString())
+        .lte('appointment_time', dayEnd.toISOString())
+        .order('appointment_time', { ascending: true })
+    })
+  }
+
+  function exportFailedWixImportsCsv() {
+    if (!requireStaffSignIn()) return
+    if (!requireManagerAccess('Manager PIN required for export:')) return
+    const rows = Array.isArray(wixSyncDiagnostics?.errors) ? wixSyncDiagnostics.errors : []
+    downloadCsv(`glow_failed_wix_imports_${formatLocalDate(new Date())}.csv`, rows)
+  }
+
+  function exportDuplicateCustomersCsv() {
+    if (!requireStaffSignIn()) return
+    if (!requireManagerAccess('Manager PIN required for export:')) return
+    const rows = getDuplicateCustomerMatches().map((match) => ({
+      customer_a: match.customerA.name || 'Unnamed',
+      customer_b: match.customerB.name || 'Unnamed',
+      customer_a_phone: match.customerA.phone || '',
+      customer_b_phone: match.customerB.phone || '',
+      customer_a_email: match.customerA.email || '',
+      customer_b_email: match.customerB.email || '',
+      reason: match.reason,
+      action: 'Merge Customers - future feature'
+    }))
+    downloadCsv(`glow_duplicate_customers_${formatLocalDate(new Date())}.csv`, rows)
+  }
+
   async function sellProductsOnly() {
     if (!requireStaffSignIn()) return
 
@@ -4604,8 +4671,9 @@ function formatMoney(value) {
   function getBookingsForSelectedDate() {
     return bookings.filter((booking) => {
       if (!isSunbedBooking(booking)) return false
+      if (String(booking?.booking_type || 'sunbed').toLowerCase() === 'sunbed' && !booking?.bed_id) return false
       const interval = getBookingCalendarDisplayInterval(booking)
-      return interval && formatLocalDate(interval.start) === selectedDate
+      return interval && getLocalDateStringFromValue(interval.start) === selectedDate
     })
   }
 
@@ -4613,8 +4681,7 @@ function formatMoney(value) {
     return bookings.filter((booking) => {
       if (!isSprayTanBooking(booking)) return false
       if (isWixBooking(booking) && (!booking.booking_start || !booking.booking_end)) return false
-      const bookingTime = getBookingDisplayDateTime(booking)
-      return bookingTime && formatLocalDate(bookingTime) === selectedDate
+      return isBookingOnSelectedDate(booking)
     })
   }
 
@@ -5663,9 +5730,14 @@ function formatMoney(value) {
   function updateWixSyncHealth(nextHealth) {
     const merged = { ...wixSyncHealth, ...nextHealth }
     setWixSyncHealth(merged)
+    if (merged.nextSyncAt) setWixNextAutoSyncAt(merged.nextSyncAt)
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('glow_wix_sync_health', JSON.stringify(merged))
     }
+  }
+
+  function getNextWixAutoSyncIso() {
+    return new Date(Date.now() + WIX_AUTO_SYNC_INTERVAL_MS).toISOString()
   }
 
   function showToast(message, type = 'success') {
@@ -5750,6 +5822,11 @@ function formatMoney(value) {
   }
 
   async function runWixBookingSync({ automatic = false } = {}) {
+    if (wixSyncRunningRef.current) {
+      if (!automatic) showToast('Wix sync is already running.', 'warning')
+      return
+    }
+
     if (!automatic) {
       if (!requireStaffSignIn()) return
     }
@@ -5764,6 +5841,7 @@ function formatMoney(value) {
 
     setWixSyncRunning(true)
     setWixSyncStatus(automatic ? 'Automatic Wix sync running...' : 'Syncing Wix bookings...')
+    wixSyncRunningRef.current = true
     const diagnostics = {
       startedAt: new Date().toISOString(),
       finishedAt: '',
@@ -5773,6 +5851,8 @@ function formatMoney(value) {
       updated: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       skipped: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       warnings: { customers: 0, bookings: 0, runtime: 0, total: 0, messages: [] },
+      cancelled: { bookings: 0 },
+      rescheduled: { bookings: 0 },
       failed: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       errors: [],
       endpointErrors: [],
@@ -5786,7 +5866,7 @@ function formatMoney(value) {
     try {
       // Vercel fetches Wix data server-side with WIX_API_KEY/WIX_SITE_ID, then returns
       // normalized { customers: [...], bookings: [...] } for this dashboard to store.
-      const response = await fetch(wixSyncEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const response = await fetch(wixSyncEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: automatic ? 'auto' : 'manual', sync_from_date: formatLocalDate(new Date()) }) })
       if (!response.ok) throw new Error(`Wix sync endpoint returned ${response.status}`)
       const payload = await response.json()
       const wixCustomers = Array.isArray(payload?.customers) ? payload.customers : []
@@ -5840,14 +5920,18 @@ function formatMoney(value) {
             continue
           }
           const existingWixBooking = await checkWixBookingExists(mappedWixBooking.wix_booking_id)
+          const wasRescheduled = existingWixBooking && mappedWixBooking.booking_start && existingWixBooking.booking_start && new Date(mappedWixBooking.booking_start).getTime() !== new Date(existingWixBooking.booking_start).getTime()
+          const wasCancelled = ['cancelled', 'canceled'].includes(String(mappedWixBooking.status || '').toLowerCase()) || ['cancelled', 'canceled'].includes(String(mappedWixBooking.approval_status || '').toLowerCase())
           await upsertWixBooking(mappedWixBooking)
           if (existingWixBooking) {
             diagnostics.updated.bookings += 1
             diagnostics.updated.total += 1
+            if (wasRescheduled) diagnostics.rescheduled.bookings += 1
           } else {
             diagnostics.imported.bookings += 1
             diagnostics.imported.total += 1
           }
+          if (wasCancelled) diagnostics.cancelled.bookings += 1
         } catch (bookingError) {
           diagnostics.failed.bookings += 1
           diagnostics.failed.total += 1
@@ -5873,7 +5957,7 @@ function formatMoney(value) {
         : diagnostics.endpointErrors[0] || ''
       const syncStatusMessage = firstRealError ? `${syncSummary} First error: ${firstRealError}` : syncSummary
       setWixSyncStatus(syncStatusMessage)
-      updateWixSyncHealth({ state: diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: firstRealError })
+      updateWixSyncHealth({ state: diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), nextSyncAt: getNextWixAutoSyncIso(), error: firstRealError })
       persistWixSyncDiagnostics(diagnostics)
       if (successfulTotal > 0) {
         await getBookings()
@@ -5889,11 +5973,12 @@ function formatMoney(value) {
       persistWixSyncDiagnostics(diagnostics)
       setWixFailedCount((count) => count + 1)
       setWixSyncStatus(error.message || 'Wix sync failed.')
-      updateWixSyncHealth({ state: 'failed', lastSyncAt: new Date().toISOString(), error: 'Sync failed - check connection' })
+      updateWixSyncHealth({ state: 'failed', lastSyncAt: new Date().toISOString(), nextSyncAt: getNextWixAutoSyncIso(), error: 'Sync failed - check connection' })
       if (!automatic) showDataLoadWarning('Wix booking sync failed. Check Vercel API route and credentials.', error)
       if (!automatic) showToast('Wix sync failed. Check connection.', 'error')
       console.error('Wix booking sync failed:', error)
     } finally {
+      wixSyncRunningRef.current = false
       setWixSyncRunning(false)
     }
   }
@@ -11046,53 +11131,29 @@ function formatMoney(value) {
       collapseWixSync,
       setCollapseWixSync,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <p style={{ color: '#aaa', marginTop: 0 }}>
-          Foundation only. Real Wix webhook data should be verified in a Vercel API route before calling the Wix booking helpers.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Last sync status</span>
-            <h3 style={{ marginBottom: 0 }}>{wixSyncStatus}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Records found from Wix</span>
-            <h3 style={{ marginBottom: 0 }}>{diagnostics.found?.total ?? 0}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Imported / updated</span>
-            <h3 style={{ marginBottom: 0 }}>{diagnostics.imported?.total || 0} / {diagnostics.updated?.total || 0}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Skipped / warnings</span>
-            <h3 style={{ marginBottom: 0 }}>{diagnostics.skipped?.total || 0} / {diagnostics.warnings?.total || 0}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Records failed</span>
-            <h3 style={{ marginBottom: 0 }}>{wixFailedCount}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Current live services mapped</span>
-            <h3 style={{ marginBottom: 0 }}>{liveServicesMapped} / {activeWixServices.length}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Old/unmapped services</span>
-            <h3 style={{ marginBottom: 0 }}>{activeUnmappedServices.length + oldMappedServices.length}</h3>
-          </div>
-          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-            <span>Bookings failed from old names</span>
-            <h3 style={{ marginBottom: 0 }}>{oldServiceMappingFailures.length}</h3>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          {['customers', 'bookings', 'forms', 'notes'].map((table) => (
-            <div key={table} style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
-              <strong style={{ color: '#d4a853' }}>{formatStatus(table)}</strong>
-              <p style={{ margin: '6px 0 0', color: '#ccc' }}>
-                Found {diagnostics.found?.[table] || 0} / Imported {diagnostics.imported?.[table] || 0} / Updated {diagnostics.updated?.[table] || 0} / Skipped {diagnostics.skipped?.[table] || 0} / Failed {diagnostics.failed?.[table] || 0}
-              </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+          {[
+            { label: 'New bookings imported', value: diagnostics.imported?.bookings || 0 },
+            { label: 'Bookings updated', value: diagnostics.updated?.bookings || 0 },
+            { label: 'Bookings cancelled', value: diagnostics.cancelled?.bookings || 0 },
+            { label: 'Bookings rescheduled', value: diagnostics.rescheduled?.bookings || 0 },
+            { label: 'Failed imports', value: wixFailedCount },
+            { label: 'Last successful sync', value: wixSyncHealth.lastSyncAt ? new Date(wixSyncHealth.lastSyncAt).toLocaleString('en-GB') : 'Never' },
+            { label: 'Next auto sync', value: wixNextAutoSyncAt ? new Date(wixNextAutoSyncAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '-' },
+            { label: 'Wix connection status', value: wixSyncRunning ? 'Syncing...' : wixSyncHealth.state === 'connected' ? 'Connected' : wixSyncHealth.state === 'failed' ? 'Failed' : 'Never synced' }
+          ].map((card) => (
+            <div key={card.label} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }}>
+              <span style={{ color: '#aaa' }}>{card.label}</span>
+              <h3 style={{ marginBottom: 0, fontSize: '18px' }}>{card.value}</h3>
             </div>
           ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
+          <button type="button" onClick={exportWixSyncedBookingsCsv}>Export Wix Synced Bookings CSV</button>
+          <button type="button" onClick={exportFailedWixImportsCsv}>Export Failed Wix Imports CSV</button>
+          <button type="button" onClick={exportDuplicateCustomersCsv}>Export Duplicate Customers CSV</button>
+          <button type="button" onClick={() => exportSelectedDateTable('Bookings')}>Export All Bookings Backup CSV</button>
         </div>
 
         <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.28)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
@@ -12183,7 +12244,7 @@ function formatMoney(value) {
       .slice()
       .sort((a, b) => (getBookingDisplayDateTime(a)?.getTime() || 0) - (getBookingDisplayDateTime(b)?.getTime() || 0))
 
-    const timelineSlots = generateTimeSlots('09:00', '20:00')
+    const timelineSlots = generateTimeSlots('09:00', '21:00')
 
     return (
       <div className="spraytan-view">
@@ -12283,7 +12344,7 @@ function formatMoney(value) {
     const sprayTanBookings = getSprayTanBookingsForSelectedDate()
       .slice()
       .sort((a, b) => (getBookingDisplayDateTime(a)?.getTime() || 0) - (getBookingDisplayDateTime(b)?.getTime() || 0))
-    const timelineSlots = generateTimeSlots('09:00', '20:00')
+    const timelineSlots = generateTimeSlots('09:00', '21:00')
 
     return (
       <div className="spraytan-view">

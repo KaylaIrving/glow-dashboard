@@ -36,6 +36,38 @@ function normalizeServiceKey(serviceName) {
   return String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
+function getLondonDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date)
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return lookup.year + '-' + lookup.month + '-' + lookup.day
+}
+
+function getRequestBody(req) {
+  if (!req?.body) return {}
+  if (typeof req.body === 'string') {
+    try { return JSON.parse(req.body) } catch { return {} }
+  }
+  return req.body
+}
+
+function getSyncFromDate(req) {
+  const body = getRequestBody(req)
+  const requested = String(body.sync_from_date || body.fromDate || '').trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : getLondonDateKey(new Date())
+}
+
+function isBookingOnOrAfterDate(booking, fromDate) {
+  const bookingDate = getLondonDateKey(booking?.appointment_time || booking?.booking_start || booking?.start_time)
+  return Boolean(bookingDate && bookingDate >= fromDate)
+}
+
 function uniqueServices(serviceRows) {
   const services = new Map()
   serviceRows.filter(Boolean).forEach((service) => {
@@ -240,11 +272,14 @@ export default async function handler(req, res) {
 
   const errors = []
   const failedRecords = []
+  const syncFromDate = getSyncFromDate(req)
   let customers = []
   let bookings = []
   let services = []
   let contactsFound = 0
   let bookingsFound = 0
+  let skippedOldBookings = 0
+  const warningMessages = []
 
   try {
     const contactsData = await wixFetch(WIX_CONTACTS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
@@ -263,10 +298,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const bookingsData = await wixFetch(WIX_BOOKINGS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
+    const syncFromIso = `${syncFromDate}T00:00:00.000Z`
+    const bookingQuery = {
+      query: {
+        filter: { startDate: { $gte: syncFromIso } },
+        paging: { limit: 100 }
+      }
+    }
+    let bookingsData
+    try {
+      bookingsData = await wixFetch(WIX_BOOKINGS_QUERY_URL, apiKey, siteId, bookingQuery)
+    } catch (filteredError) {
+      warningMessages.push(`Bookings date-filter fallback: ${filteredError.message}`)
+      bookingsData = await wixFetch(WIX_BOOKINGS_QUERY_URL, apiKey, siteId, { query: { paging: { limit: 100 } } })
+    }
     const wixBookings = bookingsData.bookings || bookingsData.items || []
     bookingsFound = wixBookings.length
-    bookings = wixBookings.map((booking) => {
+    const normalizedBookings = wixBookings.map((booking) => {
       try {
         return normalizeBooking(booking)
       } catch (error) {
@@ -274,6 +322,8 @@ export default async function handler(req, res) {
         return null
       }
     }).filter((booking) => booking && booking.wix_booking_id)
+    bookings = normalizedBookings.filter((booking) => isBookingOnOrAfterDate(booking, syncFromDate))
+    skippedOldBookings = normalizedBookings.length - bookings.length
     services = uniqueServices(bookings.map((booking) => ({
       wix_service_id: booking.wix_service_id,
       wix_service_name: booking.wix_service_name || booking.service_name
@@ -293,8 +343,8 @@ export default async function handler(req, res) {
       found: { customers: contactsFound, bookings: bookingsFound, total: contactsFound + bookingsFound },
       returned: { customers: customers.length, bookings: bookings.length, total: customers.length + bookings.length },
       updated: { customers: 0, bookings: 0, total: 0 },
-      skipped: { customers: 0, bookings: 0, total: 0 },
-      warnings: { customers: 0, bookings: 0, runtime: 0, total: 0, messages: [] },
+      skipped: { customers: 0, bookings: skippedOldBookings, total: skippedOldBookings },
+      warnings: { customers: 0, bookings: warningMessages.length, runtime: 0, total: warningMessages.length, messages: warningMessages },
       failed: {
         customers: failedRecords.filter((record) => record.table === 'customers').length,
         bookings: failedRecords.filter((record) => record.table === 'bookings').length,
@@ -312,8 +362,8 @@ export default async function handler(req, res) {
       updatedCustomers: 0,
       updatedBookings: 0,
       skippedCustomers: 0,
-      skippedBookings: 0,
-      warnings: { customers: 0, bookings: 0, runtime: 0, total: 0, messages: [] },
+      skippedBookings: skippedOldBookings,
+      warnings: { customers: 0, bookings: warningMessages.length, runtime: 0, total: warningMessages.length, messages: warningMessages },
       failedCustomers: failedRecords.filter((record) => record.table === 'customers').length,
       failedBookings: failedRecords.filter((record) => record.table === 'bookings').length,
       failedTotal: failedRecords.length,
@@ -321,7 +371,8 @@ export default async function handler(req, res) {
       servicesFound: services.length,
       errors,
       failedRecords,
-      syncedAt: new Date().toISOString()
+      syncedAt: new Date().toISOString(),
+      syncFromDate
     },
     errors
   })
