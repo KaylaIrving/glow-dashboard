@@ -2560,23 +2560,21 @@ function formatMoney(value) {
 
   function getPaymentStaffFields() {
     const { staffId, staffName } = getCurrentStaffAttribution()
-    const commissionStaff = commissionStaffId ? staff.find((member) => String(member.id) === String(commissionStaffId)) : null
     return {
       taken_by_staff_id: staffId,
       taken_by_staff_name: staffName,
-      commission_staff_id: commissionStaff?.id || staffId,
-      commission_staff_name: commissionStaff?.name || staffName
+      commission_staff_id: staffId,
+      commission_staff_name: staffName
     }
   }
 
   function getProductSaleStaffFields() {
     const { staffId, staffName } = getCurrentStaffAttribution()
-    const commissionStaff = commissionStaffId ? staff.find((member) => String(member.id) === String(commissionStaffId)) : null
     return {
       sold_by_staff_id: staffId,
       sold_by_staff_name: staffName,
-      commission_staff_id: commissionStaff?.id || staffId,
-      commission_staff_name: commissionStaff?.name || staffName
+      commission_staff_id: staffId,
+      commission_staff_name: staffName
     }
   }
 
@@ -4916,6 +4914,14 @@ function formatMoney(value) {
     return String(booking?.status || '').toLowerCase()
   }
 
+  function isStartedSessionStatus(status) {
+    return ['undressing', 'running', 'cooldown', 'active', 'time_sent', 'sent', 'customer_started', 'waiting_to_start', 'in_use'].includes(String(status || '').toLowerCase())
+  }
+
+  function hasSessionStarted(booking) {
+    return Boolean(booking?.tmax_sent_at || booking?.customer_started_at || isStartedSessionStatus(booking?.status))
+  }
+
   function isFinishedBookingStatus(booking) {
     const status = getBookingStatusKey(booking)
     if (status === 'force_stopped') {
@@ -4966,6 +4972,8 @@ function formatMoney(value) {
       if (now < cooldownEnd) return 'cooldown'
       return 'completed'
     }
+
+    if (!hasSessionStarted(booking)) return status || 'booked'
 
     const startSource = booking?.tmax_sent_at || booking?.booking_start
     if (!startSource) return status
@@ -6663,7 +6671,7 @@ function formatMoney(value) {
   async function startSession(booking) {
     if (!requireStaffSignIn()) return
 
-    if (!booking || booking.booking_start || ['undressing', 'running', 'cooldown'].includes(String(booking.status || '').toLowerCase())) {
+    if (!booking || hasSessionStarted(booking)) {
       alert('This session has already been started.')
       return
     }
@@ -6839,7 +6847,7 @@ function formatMoney(value) {
       return 'Force Stopped'
     }
 
-    if (!booking?.booking_start && !booking?.customer_started_at) {
+    if (!hasSessionStarted(booking)) {
       return formatStatus(booking?.status || 'booked')
     }
 
@@ -6871,7 +6879,7 @@ function formatMoney(value) {
   }
 
   function getRemainingTime(booking) {
-    if (!booking?.booking_start && !booking?.customer_started_at) return null
+    if (!hasSessionStarted(booking)) return null
 
     const phase = getPhase(booking)
     let targetTime
@@ -9502,14 +9510,6 @@ function formatMoney(value) {
           <option value="bank_transfer">Bank Transfer</option>
           <option value="other">Other</option>
         </select>
-        {showManagerView && (
-          <select value={commissionStaffId} onChange={(e) => setCommissionStaffId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
-            <option value="">Commission staff: signed-in staff</option>
-            {staff.filter((member) => member.is_active !== false).map((member) => (
-              <option key={member.id} value={member.id}>{member.name}</option>
-            ))}
-          </select>
-        )}
         <input placeholder="Payment notes optional" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
         {paymentMethod === 'cash' && summary.grandTotal > 0 && (
           <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginTop: '4px' }}>
@@ -12081,14 +12081,6 @@ function formatMoney(value) {
                 <option value="bank_transfer">Bank Transfer</option>
                 <option value="other">Other</option>
               </select>
-              {showManagerView && (
-                <select value={commissionStaffId} onChange={(e) => setCommissionStaffId(e.target.value)} style={{ width: '100%', padding: '10px', margin: '8px 0' }}>
-                  <option value="">Commission staff: signed-in staff</option>
-                  {staff.filter((member) => member.is_active !== false).map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
-                  ))}
-                </select>
-              )}
               {posPaymentMethod === 'cash' && (
                 <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '10px' }}>
                   <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>Cash received</label>
@@ -13071,12 +13063,12 @@ function formatMoney(value) {
                 {modalBooking.customer_started_at && <p><strong>Customer Started</strong></p>}
                 {modalBooking.customer_started_at && <p>Customer started: {new Date(modalBooking.customer_started_at).toLocaleTimeString('en-GB')}</p>}
                 {['Undressing', 'Running', 'Cooldown'].includes(modalPhase) && <h2>Remaining: {getRemainingTime(modalBooking)}</h2>}
-                {modalStartBlocked && !modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
+                {modalStartBlocked && !hasSessionStarted(modalBooking) && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
                   <p style={{ background: '#0b0b0b', border: '1px solid rgba(255,120,117,0.65)', borderRadius: '12px', padding: '10px', color: '#ffcc66', fontWeight: 'bold' }}>
                     This bed is currently in use or cooling down. Please wait until it is available before starting another session.
                   </p>
                 )}
-                {!modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
+                {!hasSessionStarted(modalBooking) && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
                   <button
                     onClick={() => startSession(modalBooking)}
                     disabled={modalStartBlocked}
@@ -13094,7 +13086,7 @@ function formatMoney(value) {
                     <button onClick={() => emailBookingReceipt(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Email Receipt</button>
                   )}
 
-                  {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !modalBooking.booking_start && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
+                  {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !hasSessionStarted(modalBooking) && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
                     <button onClick={() => setEditMode(true)} style={{ padding: '8px 10px', fontSize: '13px' }}>Edit</button>
                   )}
 
@@ -13102,7 +13094,7 @@ function formatMoney(value) {
                     <button onClick={() => forceStop(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Force Stop</button>
                   )}
 
-                  {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !modalBooking.booking_start && (
+                  {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !hasSessionStarted(modalBooking) && (
                     <button onClick={() => updateBookingStatus(modalBooking.id, 'no_show')} style={{ padding: '8px 10px', fontSize: '13px' }}>No Show</button>
                   )}
 
@@ -13110,7 +13102,7 @@ function formatMoney(value) {
                     <button onClick={() => managerResetBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Manager Reset</button>
                   )}
 
-                  {!modalBooking.booking_start && (
+                  {!hasSessionStarted(modalBooking) && (
                     <button onClick={() => deleteBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Delete</button>
                   )}
 
