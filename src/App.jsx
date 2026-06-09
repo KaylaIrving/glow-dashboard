@@ -12101,73 +12101,83 @@ function formatMoney(value) {
 
   function renderStaffManagementPanel() {
     if (!showManagerView) return null
+    const staffPanelStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', width: '100%', boxSizing: 'border-box' }
+    const staffHeadingStyle = { marginTop: 0, textAlign: 'center' }
+    const staffColumnGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: '14px', alignItems: 'start' }
 
     return renderCollapsibleSection(
       'Staff Management',
       collapseStaffManagement,
       setCollapseStaffManagement,
-      <div style={{ maxWidth: '980px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         {staffLoadError && <p style={{ color: '#ff7875' }}>{staffLoadError}</p>}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '15px' }}>
-          <input placeholder="Staff name" value={staffName} onChange={(e) => setStaffName(e.target.value)} style={{ padding: '10px' }} />
-          <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)} style={{ padding: '10px' }}>
-            <option value="staff">Staff</option>
-            <option value="manager">Manager</option>
-            <option value="admin">Admin</option>
-          </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', border: '1px solid #333', padding: '10px', background: '#111' }}>
-            <input type="checkbox" checked={staffCanSprayTan} onChange={(e) => setStaffCanSprayTan(e.target.checked)} />
-            Spray tan artist
-          </label>
-          <button onClick={saveStaffMember}>{staffEditingId ? 'Save Staff' : 'Add Staff'}</button>
-          {staffEditingId && <button onClick={() => { setStaffEditingId(''); setStaffName(''); setStaffRole('staff'); setStaffCanSprayTan(false) }}>Cancel Edit</button>}
-        </div>
-
-        <select
-          value=""
-          onChange={(e) => {
-            const member = staff.find((item) => String(item.id) === e.target.value)
-            if (member) editStaffMember(member)
-          }}
-          style={{ width: '100%', padding: '10px', marginBottom: '12px', boxSizing: 'border-box' }}
-        >
-          <option value="">Select staff to edit...</option>
-          {staff.map((member) => (
-            <option key={member.id} value={member.id}>
-              {member.name} — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} — {member.is_active === false ? 'Inactive' : 'Active'}
-            </option>
-          ))}
-        </select>
-
-        <div style={{ maxHeight: '170px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px', marginBottom: '15px' }}>
-          {staff.map((member) => (
-            <div key={member.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
-              <span><strong>{member.name}</strong> — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} — {member.is_active === false ? 'Inactive' : 'Active'}</span>
-              <button onClick={() => editStaffMember(member)}>Edit</button>
-              <button onClick={() => deactivateStaffMember(member)}>Deactivate</button>
+        <div style={staffColumnGridStyle}>
+          <div style={staffPanelStyle}>
+            <h3 style={staffHeadingStyle}>Add/Edit Staff</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '12px' }}>
+              <input placeholder="Staff name" value={staffName} onChange={(e) => setStaffName(e.target.value)} style={{ padding: '10px' }} />
+              <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)} style={{ padding: '10px' }}>
+                <option value="staff">Staff</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', border: '1px solid #333', padding: '10px', background: '#111' }}>
+                <input type="checkbox" checked={staffCanSprayTan} onChange={(e) => setStaffCanSprayTan(e.target.checked)} />
+                Spray tan artist
+              </label>
+              <button onClick={saveStaffMember}>{staffEditingId ? 'Save Staff' : 'Add Staff'}</button>
+              {staffEditingId && <button onClick={() => { setStaffEditingId(''); setStaffName(''); setStaffRole('staff'); setStaffCanSprayTan(false) }}>Cancel Edit</button>}
             </div>
-          ))}
-        </div>
 
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-          <h3 style={{ marginTop: 0, textAlign: 'center' }}>Adjust Staff Free Minutes</h3>
-          <select value={staffAdjustmentId} onChange={(e) => setStaffAdjustmentId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
-            <option value="">Select staff</option>
-            {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-          </select>
-          <input type="number" placeholder="+/- minutes" value={staffAdjustmentAmount} onChange={(e) => setStaffAdjustmentAmount(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd', marginBottom: '8px' }}>
-            Optional expiry date for top-up minutes
-            <input type="date" value={staffAdjustmentExpiryDate} onChange={(e) => setStaffAdjustmentExpiryDate(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }} />
-          </label>
-          <input placeholder="Reason" value={staffAdjustmentReason} onChange={(e) => setStaffAdjustmentReason(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
-          <p style={{ color: '#aaa', marginTop: 0 }}>Weekly staff free minutes reset to 18 every Monday. Active manager top-ups are preserved until their expiry date.</p>
-          <button onClick={adjustStaffMinutes}>Apply Staff Adjustment</button>
-        </div>
+            <select
+              value=""
+              onChange={(e) => {
+                const member = staff.find((item) => String(item.id) === e.target.value)
+                if (member) editStaffMember(member)
+              }}
+              style={{ width: '100%', padding: '10px', marginBottom: '12px', boxSizing: 'border-box' }}
+            >
+              <option value="">Select staff to edit...</option>
+              {staff.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} - {formatStatus(member.role)} - {member.weekly_free_minutes_balance || 0} mins - {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} - {member.is_active === false ? 'Inactive' : 'Active'}
+                </option>
+              ))}
+            </select>
 
-        <div style={{ marginTop: '14px' }}>
-          {renderCommissionSettingsPanel()}
+            <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px' }}>
+              {staff.map((member) => (
+                <div key={member.id} style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '10px', borderBottom: '1px solid #222' }}>
+                  <span><strong>{member.name}</strong> - {formatStatus(member.role)} - {member.weekly_free_minutes_balance || 0} mins - {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} - {member.is_active === false ? 'Inactive' : 'Active'}</span>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button onClick={() => editStaffMember(member)}>Edit</button>
+                    <button onClick={() => deactivateStaffMember(member)}>Deactivate</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={staffPanelStyle}>
+            <h3 style={staffHeadingStyle}>Adjust Staff Free Minutes</h3>
+            <select value={staffAdjustmentId} onChange={(e) => setStaffAdjustmentId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
+              <option value="">Select staff</option>
+              {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+            </select>
+            <input type="number" placeholder="+/- minutes" value={staffAdjustmentAmount} onChange={(e) => setStaffAdjustmentAmount(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
+            <label style={{ display: 'grid', gap: '5px', color: '#ddd', marginBottom: '8px' }}>
+              Optional expiry date for top-up minutes
+              <input type="date" value={staffAdjustmentExpiryDate} onChange={(e) => setStaffAdjustmentExpiryDate(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }} />
+            </label>
+            <input placeholder="Reason" value={staffAdjustmentReason} onChange={(e) => setStaffAdjustmentReason(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
+            <p style={{ color: '#aaa', marginTop: 0 }}>Weekly staff free minutes reset to 18 every Monday. Active manager top-ups are preserved until their expiry date.</p>
+            <button onClick={adjustStaffMinutes}>Apply Staff Adjustment</button>
+          </div>
+
+          <div>
+            {renderCommissionSettingsPanel()}
+          </div>
         </div>
       </div>
     )
@@ -12216,6 +12226,9 @@ function formatMoney(value) {
     const selectedProduct = products.find((product) => String(product.id) === String(selectedProductManagementId))
     const lowStockProducts = getLowStockProducts()
     const outOfStockProducts = getOutOfStockProducts()
+    const productPanelStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', width: '100%', boxSizing: 'border-box' }
+    const productHeadingStyle = { marginTop: 0, textAlign: 'center' }
+    const productColumnGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(285px, 1fr))', gap: '14px', alignItems: 'start' }
     const renderSubcategoryControls = ({ category, selected, setSelected }) => {
       if (!shouldShowProductSubcategories(category)) return null
       return (
@@ -12242,148 +12255,158 @@ function formatMoney(value) {
       <>
         {productLoadError && <p style={{ color: '#ff7875' }}>{productLoadError}</p>}
 
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '15px' }}>
-          <h3 style={{ marginTop: 0 }}>Product Categories</h3>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px' }}>
-            <input
-              placeholder="New category"
-              value={newProductCategoryName}
-              onChange={(e) => setNewProductCategoryName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') addProductCategory()
-              }}
-              style={{ flex: '1 1 220px', padding: '10px' }}
-            />
-            <button type="button" onClick={addProductCategory}>Add Category</button>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+            <button onClick={() => { if (requireStaffSignIn()) setShowStandalonePOS(true) }}>Products / POS</button>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {productCategories.map((category) => {
-              const categoryKey = getProductCategoryKey(category)
-              const assignedCount = products.filter((product) => getProductCategoryKey(product.category) === categoryKey || normalizeProductCategory(product.category) === category.value).length
-              return (
-                <span key={getProductCategoryKey(category)} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', border: '1px solid rgba(212,168,83,0.35)', background: '#111', color: '#f3e6c3', padding: '7px 9px', borderRadius: '8px' }}>
-                  {category.label}
-                  {assignedCount > 0 && <small style={{ color: '#aaa' }}>{assignedCount}</small>}
-                  <button
-                    type="button"
-                    onClick={() => deleteProductCategory(category)}
-                    title={assignedCount > 0 ? 'Reassign products before deleting' : 'Delete category'}
-                    style={{ width: '18px', height: '18px', minWidth: '18px', padding: 0, borderRadius: '50%', border: '1px solid rgba(212,168,83,0.3)', background: '#080808', color: assignedCount > 0 ? '#777' : '#d4a853', boxShadow: 'none', lineHeight: '14px' }}
-                  >
-                    x
-                  </button>
-                </span>
-              )
-            })}
-          </div>
-          <p style={{ color: '#aaa', margin: '10px 0 0', fontSize: '13px' }}>Categories in use cannot be deleted until those products are reassigned.</p>
-        </div>
 
-        <div style={{ background: '#10100f', border: '1px solid rgba(212,168,83,0.45)', borderRadius: '14px', padding: '14px', marginBottom: '15px' }}>
-          <h3 style={{ marginTop: 0, color: '#d4a853' }}>Add New Product</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-            <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
-            <select value={productCategory} onChange={(e) => { setProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setProductSubcategories([]) }} style={{ padding: '10px' }}>
-              {productCategories.map((category) => (
-                <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
-              ))}
-            </select>
-            {renderSubcategoryControls({ category: productCategory, selected: productSubcategories, setSelected: setProductSubcategories })}
-            <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
-            <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-              <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
-              Active
-            </label>
-            <button onClick={saveProduct}>Add Product</button>
-          </div>
-        </div>
-
-        <button onClick={() => { if (requireStaffSignIn()) setShowStandalonePOS(true) }} style={{ marginBottom: '15px' }}>Products / POS</button>
-
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '15px' }}>
-          <h3 style={{ marginTop: 0 }}>Stock Warnings</h3>
-          {lowStockProducts.length === 0 && outOfStockProducts.length === 0 ? (
-            <p style={{ color: '#aaa', marginBottom: 0 }}>No low or out of stock products.</p>
-          ) : (
-            <>
-              {outOfStockProducts.length > 0 && (
-                <div style={{ marginBottom: '10px' }}>
-                  <strong style={{ color: '#ff7875' }}>Out of stock</strong>
-                  {outOfStockProducts.map((product) => (
-                    <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} — Stock {getProductStockQuantity(product)}</div>
-                  ))}
-                </div>
-              )}
-              {lowStockProducts.length > 0 && (
-                <div>
-                  <strong style={{ color: '#ffcc66' }}>Low stock</strong>
-                  {lowStockProducts.map((product) => (
-                    <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} — Stock {getProductStockQuantity(product)}</div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <div style={{ background: '#14120f', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '14px', padding: '14px' }}>
-          <h3 style={{ marginTop: 0, color: '#f0d28a' }}>Manage Existing Product</h3>
-          <select
-            value={selectedProductManagementId}
-            onChange={(e) => selectProductForManagement(e.target.value)}
-            style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-          >
-            <option value="">Select product...</option>
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name} — {getProductCategoryLabel(product.category)} — £{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — {getProductStockStatus(product)} — {isProductActive(product) ? 'Active' : 'Inactive'}
-              </option>
-            ))}
-          </select>
-
-          {selectedProduct && (
-            <div style={{ marginTop: '12px', padding: '12px', background: '#111', borderRadius: '12px', border: '1px solid #333' }}>
-              <div>
-                <strong>{selectedProduct.name}</strong><br />
-                <span>{getProductCategoryLabel(selectedProduct.category)} — £{Number(selectedProduct.price || 0).toFixed(2)} — Stock {getProductStockQuantity(selectedProduct)}</span><br />
-                <span style={getProductStockStatusStyle(selectedProduct)}>{getProductStockStatus(selectedProduct)}</span><br />
-                <span>Status: {isProductActive(selectedProduct) ? 'Active' : 'Inactive'}</span>
+          <div style={productColumnGridStyle}>
+            <div style={productPanelStyle}>
+              <h3 style={productHeadingStyle}>Product Categories</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '12px' }}>
+                <input
+                  placeholder="New category"
+                  value={newProductCategoryName}
+                  onChange={(e) => setNewProductCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') addProductCategory()
+                  }}
+                  style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
+                />
+                <button type="button" onClick={addProductCategory}>Add Category</button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
-                <input placeholder="Product name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} style={{ padding: '10px' }} />
-                <select value={editProductCategory} onChange={(e) => { setEditProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setEditProductSubcategories([]) }} style={{ padding: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {productCategories.map((category) => {
+                  const categoryKey = getProductCategoryKey(category)
+                  const assignedCount = products.filter((product) => getProductCategoryKey(product.category) === categoryKey || normalizeProductCategory(product.category) === category.value).length
+                  return (
+                    <span key={getProductCategoryKey(category)} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', border: '1px solid rgba(212,168,83,0.35)', background: '#111', color: '#f3e6c3', padding: '7px 9px', borderRadius: '8px' }}>
+                      {category.label}
+                      {assignedCount > 0 && <small style={{ color: '#aaa' }}>{assignedCount}</small>}
+                      <button
+                        type="button"
+                        onClick={() => deleteProductCategory(category)}
+                        title={assignedCount > 0 ? 'Reassign products before deleting' : 'Delete category'}
+                        style={{ width: '18px', height: '18px', minWidth: '18px', padding: 0, borderRadius: '50%', border: '1px solid rgba(212,168,83,0.3)', background: '#080808', color: assignedCount > 0 ? '#777' : '#d4a853', boxShadow: 'none', lineHeight: '14px' }}
+                      >
+                        x
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+              <p style={{ color: '#aaa', margin: '10px 0 0', fontSize: '13px' }}>Categories in use cannot be deleted until those products are reassigned.</p>
+            </div>
+
+            <div style={{ ...productPanelStyle, background: '#10100f', border: '1px solid rgba(212,168,83,0.45)' }}>
+              <h3 style={{ ...productHeadingStyle, color: '#d4a853' }}>Add New Product</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+                <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
+                <select value={productCategory} onChange={(e) => { setProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setProductSubcategories([]) }} style={{ padding: '10px' }}>
                   {productCategories.map((category) => (
                     <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
                   ))}
                 </select>
-                {renderSubcategoryControls({ category: editProductCategory, selected: editProductSubcategories, setSelected: setEditProductSubcategories })}
-                <input type="number" step="0.01" placeholder="Price" value={editProductPrice} onChange={(e) => setEditProductPrice(e.target.value)} style={{ padding: '10px' }} />
-                <input type="number" placeholder="Stock quantity" value={editProductStockQuantity} onChange={(e) => setEditProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
+                {renderSubcategoryControls({ category: productCategory, selected: productSubcategories, setSelected: setProductSubcategories })}
+                <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
+                <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-                  <input type="checkbox" checked={editProductIsActive} onChange={(e) => setEditProductIsActive(e.target.checked)} />
+                  <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
                   Active
                 </label>
-                <button onClick={saveProductChanges} style={{ minWidth: '190px', fontSize: '13px', whiteSpace: 'normal' }}>Save Product Changes</button>
-                <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
-                <button onClick={() => deleteProduct(selectedProduct)} style={{ borderColor: 'rgba(255,120,117,0.5)', color: '#ffaaa6' }}>Delete Product</button>
-              </div>
-              <div style={{ marginTop: '12px', padding: '12px', background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px' }}>
-                <strong>Stock adjustment</strong>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginTop: '10px' }}>
-                  <select value={stockMovementType} onChange={(e) => setStockMovementType(e.target.value)} style={{ padding: '10px' }}>
-                    <option value="restock">Add stock / delivery</option>
-                    <option value="damaged">Damaged</option>
-                    <option value="lost">Lost</option>
-                    <option value="manual_remove">Manual remove</option>
-                  </select>
-                  <input type="number" placeholder="Quantity" value={stockMovementQuantity} onChange={(e) => setStockMovementQuantity(e.target.value)} style={{ padding: '10px' }} />
-                  <input placeholder="Restock/damage/loss note" value={stockMovementNote} onChange={(e) => setStockMovementNote(e.target.value)} style={{ padding: '10px' }} />
-                  <button onClick={adjustSelectedProductStock}>Save Stock Movement</button>
-                </div>
+                <button onClick={saveProduct}>Add Product</button>
               </div>
             </div>
-          )}
+
+            <div style={{ display: 'grid', gap: '14px' }}>
+              <div style={productPanelStyle}>
+                <h3 style={productHeadingStyle}>Stock Warnings</h3>
+                {lowStockProducts.length === 0 && outOfStockProducts.length === 0 ? (
+                  <p style={{ color: '#aaa', marginBottom: 0 }}>No low or out of stock products.</p>
+                ) : (
+                  <>
+                    {outOfStockProducts.length > 0 && (
+                      <div style={{ marginBottom: '10px' }}>
+                        <strong style={{ color: '#ff7875' }}>Out of stock</strong>
+                        {outOfStockProducts.map((product) => (
+                          <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} - Stock {getProductStockQuantity(product)}</div>
+                        ))}
+                      </div>
+                    )}
+                    {lowStockProducts.length > 0 && (
+                      <div>
+                        <strong style={{ color: '#ffcc66' }}>Low stock</strong>
+                        {lowStockProducts.map((product) => (
+                          <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} - Stock {getProductStockQuantity(product)}</div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div style={{ ...productPanelStyle, background: '#14120f', border: '1px solid rgba(212,168,83,0.25)' }}>
+                <h3 style={{ ...productHeadingStyle, color: '#f0d28a' }}>Manage Existing Product</h3>
+                <select
+                  value={selectedProductManagementId}
+                  onChange={(e) => selectProductForManagement(e.target.value)}
+                  style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
+                >
+                  <option value="">Select product...</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} - {getProductCategoryLabel(product.category)} - &pound;{Number(product.price || 0).toFixed(2)} - Stock {getProductStockQuantity(product)} - {getProductStockStatus(product)} - {isProductActive(product) ? 'Active' : 'Inactive'}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedProduct && (
+                  <div style={{ marginTop: '12px', padding: '12px', background: '#111', borderRadius: '12px', border: '1px solid #333' }}>
+                    <div>
+                      <strong>{selectedProduct.name}</strong><br />
+                      <span>{getProductCategoryLabel(selectedProduct.category)} - &pound;{Number(selectedProduct.price || 0).toFixed(2)} - Stock {getProductStockQuantity(selectedProduct)}</span><br />
+                      <span style={getProductStockStatusStyle(selectedProduct)}>{getProductStockStatus(selectedProduct)}</span><br />
+                      <span>Status: {isProductActive(selectedProduct) ? 'Active' : 'Inactive'}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
+                      <input placeholder="Product name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} style={{ padding: '10px' }} />
+                      <select value={editProductCategory} onChange={(e) => { setEditProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setEditProductSubcategories([]) }} style={{ padding: '10px' }}>
+                        {productCategories.map((category) => (
+                          <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
+                        ))}
+                      </select>
+                      {renderSubcategoryControls({ category: editProductCategory, selected: editProductSubcategories, setSelected: setEditProductSubcategories })}
+                      <input type="number" step="0.01" placeholder="Price" value={editProductPrice} onChange={(e) => setEditProductPrice(e.target.value)} style={{ padding: '10px' }} />
+                      <input type="number" placeholder="Stock quantity" value={editProductStockQuantity} onChange={(e) => setEditProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
+                        <input type="checkbox" checked={editProductIsActive} onChange={(e) => setEditProductIsActive(e.target.checked)} />
+                        Active
+                      </label>
+                      <button onClick={saveProductChanges} style={{ minWidth: '190px', fontSize: '13px', whiteSpace: 'normal' }}>Save Product Changes</button>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
+                        <button onClick={() => deleteProduct(selectedProduct)} style={{ borderColor: 'rgba(255,120,117,0.5)', color: '#ffaaa6' }}>Delete Product</button>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '12px', padding: '12px', background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px' }}>
+                      <strong>Stock adjustment</strong>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '10px' }}>
+                        <select value={stockMovementType} onChange={(e) => setStockMovementType(e.target.value)} style={{ padding: '10px' }}>
+                          <option value="restock">Add stock / delivery</option>
+                          <option value="damaged">Damaged</option>
+                          <option value="lost">Lost</option>
+                          <option value="manual_remove">Manual remove</option>
+                        </select>
+                        <input type="number" placeholder="Quantity" value={stockMovementQuantity} onChange={(e) => setStockMovementQuantity(e.target.value)} style={{ padding: '10px' }} />
+                        <input placeholder="Restock/damage/loss note" value={stockMovementNote} onChange={(e) => setStockMovementNote(e.target.value)} style={{ padding: '10px' }} />
+                        <button onClick={adjustSelectedProductStock}>Save Stock Movement</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {showStandalonePOS && (
@@ -12392,7 +12415,7 @@ function formatMoney(value) {
               <h2>Products / POS</h2>
               {getActiveProducts().map((product) => (
                 <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '12px', marginBottom: '8px' }}>
-                  <div><strong>{product.name}</strong><br /><small>£{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — <span style={getProductStockStatusStyle(product)}>{getProductStockStatus(product)}</span></small></div>
+                  <div><strong>{product.name}</strong><br /><small>&pound;{Number(product.price || 0).toFixed(2)} - Stock {getProductStockQuantity(product)} - <span style={getProductStockStatusStyle(product)}>{getProductStockStatus(product)}</span></small></div>
                   <button onClick={() => addProductToCart(product)}>Add</button>
                 </div>
               ))}
@@ -12418,7 +12441,7 @@ function formatMoney(value) {
                   <p style={{ margin: 0 }}>
                     Change to give:
                     <strong style={{ marginLeft: '6px', color: '#d4a853' }}>
-                      £{Math.max(0, Number(posCashReceived || 0) - getProductCartTotal()).toFixed(2)}
+                      &pound;{Math.max(0, Number(posCashReceived || 0) - getProductCartTotal()).toFixed(2)}
                     </strong>
                   </p>
                 </div>
