@@ -354,8 +354,22 @@ function App() {
   const [floatMovementSaving, setFloatMovementSaving] = useState(false)
   const [showCashUpLockConfirm, setShowCashUpLockConfirm] = useState(false)
 
-  const [currentStaffUserId, setCurrentStaffUserId] = useState('')
+  const [currentStaffUserId, setCurrentStaffUserId] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('glow_staff_session') || '{}')?.staffId || ''
+    } catch {
+      return ''
+    }
+  })
   const [staffSelectorOpen, setStaffSelectorOpen] = useState(false)
+  const [staffLoginStaffId, setStaffLoginStaffId] = useState('')
+  const [staffLoginPin, setStaffLoginPin] = useState('')
+  const [staffLoginError, setStaffLoginError] = useState('')
+  const [staffLoginLoading, setStaffLoginLoading] = useState(false)
+  const [staffInitialSetupCode, setStaffInitialSetupCode] = useState('')
+  const [staffInitialSetupPin, setStaffInitialSetupPin] = useState('')
+  const [staffPinTargetId, setStaffPinTargetId] = useState('')
+  const [staffPinValue, setStaffPinValue] = useState('')
   const [staffLoadError, setStaffLoadError] = useState('')
   const [staffName, setStaffName] = useState('')
   const [staffRole, setStaffRole] = useState('staff')
@@ -574,6 +588,17 @@ function App() {
       return mergedCategories
     })
   }, [products])
+
+  useEffect(() => {
+    if (!currentStaffUserId || staff.length === 0) return
+    const currentStaff = staff.find((member) => String(member.id) === String(currentStaffUserId))
+    if (!currentStaff || currentStaff.is_active === false || currentStaff.login_active === false) {
+      setCurrentStaffUserId('')
+      setManagerUnlocked(false)
+      setShowManagerView(false)
+      try { localStorage.removeItem('glow_staff_session') } catch {}
+    }
+  }, [staff, currentStaffUserId])
 
   useEffect(() => {
     getBookings()
@@ -2507,12 +2532,12 @@ function formatMoney(value) {
     const report = getSelectedManagerReport()
     if (!report) return
     downloadCsv(`glow_${reportsType}_${reportsStartDate}_to_${reportsEndDate}.csv`, report.rows.map((row) => ({ report: report.title, ...row })))
+    createAuditLog('report_export', `Exported ${report.title} for ${reportsStartDate} to ${reportsEndDate}.`, { report_type: reportsType, from: reportsStartDate, to: reportsEndDate })
   }
 
   function openManagerView() {
     if (!requireStaffSignIn()) return
-
-    if (!requireManagerAccess('Manager PIN required:')) return
+    if (!requireManagerAccess('Manager access required. Managers only.')) return
     setShowManagerView(true)
   }
 
@@ -2693,6 +2718,205 @@ function formatMoney(value) {
     }
   }
 
+  function isManagerStaff(member = getCurrentStaffUser()) {
+    return ['manager', 'admin'].includes(String(member?.role || '').toLowerCase())
+  }
+
+  function hasAnyStaffPin() {
+    return staff.some((member) => member.pin_hash && member.pin_salt && member.is_active !== false && member.login_active !== false)
+  }
+
+  function isValidFourDigitPin(pin) {
+    return /^\d{4}$/.test(String(pin || '').trim())
+  }
+
+  function bytesToBase64(bytes) {
+    return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+  }
+
+  function base64ToBytes(value) {
+    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
+  }
+
+  async function hashStaffPin(pin, saltBase64) {
+    const encoder = new TextEncoder()
+    const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(String(pin)), 'PBKDF2', false, ['deriveBits'])
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: base64ToBytes(saltBase64), iterations: 150000, hash: 'SHA-256' },
+      keyMaterial,
+      256
+    )
+    return bytesToBase64(bits)
+  }
+
+  function createStaffPinSalt() {
+    const salt = new Uint8Array(16)
+    crypto.getRandomValues(salt)
+    return bytesToBase64(salt)
+  }
+
+  async function verifyStaffPin(member, pin) {
+    if (!member?.pin_hash || !member?.pin_salt) return false
+    const hash = await hashStaffPin(pin, member.pin_salt)
+    return hash === member.pin_hash
+  }
+
+  async function createAuditLog(action, details = '', metadata = {}) {
+    const currentStaff = getCurrentStaffUser()
+    const payload = {
+      staff_id: currentStaff?.id || metadata.staff_id || null,
+      staff_name: currentStaff?.name || metadata.staff_name || 'Unknown',
+      action,
+      details: typeof details === 'string' ? details : JSON.stringify(details),
+      metadata,
+      created_at: new Date().toISOString()
+    }
+    const { error } = await supabase.from('GlowAuditLogs').insert(payload)
+    if (error) console.warn('GlowAuditLogs insert failed:', error.message || error)
+  }
+
+  function persistStaffSession(member) {
+    setCurrentStaffUserId(String(member.id))
+    try {
+      localStorage.setItem('glow_staff_session', JSON.stringify({ staffId: String(member.id), staffName: member.name, role: member.role, signedInAt: new Date().toISOString() }))
+    } catch {}
+  }
+
+  async function loginStaffWithPin() {
+    const member = staff.find((item) => String(item.id) === String(staffLoginStaffId))
+    if (!member) {
+      setStaffLoginError('Select a staff member.')
+      return
+    }
+    if (member.is_active === false || member.login_active === false) {
+      setStaffLoginError('This staff login is inactive.')
+      await createAuditLog('failed_pin_attempt', 'Inactive login attempt for ' + member.name + '.', { staff_id: member.id, staff_name: member.name })
+      return
+    }
+    if (!isValidFourDigitPin(staffLoginPin)) {
+      setStaffLoginError('Enter a 4-digit PIN.')
+      return
+    }
+    setStaffLoginLoading(true)
+    setStaffLoginError('')
+    try {
+      const ok = await verifyStaffPin(member, staffLoginPin)
+      if (!ok) {
+        setStaffLoginError('Incorrect PIN.')
+        await supabase.from('Staff').update({ failed_login_attempts: Number(member.failed_login_attempts || 0) + 1 }).eq('id', member.id)
+        await createAuditLog('failed_pin_attempt', 'Failed PIN attempt for ' + member.name + '.', { staff_id: member.id, staff_name: member.name })
+        await getStaff()
+        return
+      }
+      persistStaffSession(member)
+      setStaffSelectorOpen(false)
+      setStaffLoginPin('')
+      setStaffLoginError('')
+      await supabase.from('Staff').update({ last_login_at: new Date().toISOString(), failed_login_attempts: 0 }).eq('id', member.id)
+      await createAuditLog('login', member.name + ' logged in.', { staff_id: member.id, staff_name: member.name, role: member.role })
+      await getStaff()
+    } catch (error) {
+      setStaffLoginError('Login failed. Please check the connection and try again.')
+      console.error('Staff PIN login failed:', error)
+    } finally {
+      setStaffLoginLoading(false)
+    }
+  }
+
+  async function setupInitialManagerPin() {
+    const member = staff.find((item) => String(item.id) === String(staffLoginStaffId))
+    if (!member || !isManagerStaff(member)) {
+      setStaffLoginError('Select a manager to complete initial setup.')
+      return
+    }
+    if (staffInitialSetupCode !== MANAGER_PIN) {
+      setStaffLoginError('Initial setup code is incorrect.')
+      await createAuditLog('failed_pin_attempt', 'Incorrect initial manager setup code.', { staff_id: member.id, staff_name: member.name })
+      return
+    }
+    if (!isValidFourDigitPin(staffInitialSetupPin)) {
+      setStaffLoginError('Enter a new 4-digit manager PIN.')
+      return
+    }
+    setStaffLoginLoading(true)
+    try {
+      await saveStaffPin(member, staffInitialSetupPin, { silent: true })
+      persistStaffSession(member)
+      setManagerUnlocked(true)
+      setShowManagerView(true)
+      setStaffSelectorOpen(false)
+      setStaffInitialSetupCode('')
+      setStaffInitialSetupPin('')
+      await createAuditLog('manager_pin_created', 'Initial manager PIN created for ' + member.name + '.', { staff_id: member.id, staff_name: member.name })
+      await getStaff()
+    } catch (error) {
+      setStaffLoginError('Initial PIN setup failed. Please check the Staff table columns.')
+      console.error('Initial PIN setup failed:', error)
+    } finally {
+      setStaffLoginLoading(false)
+    }
+  }
+
+  async function saveStaffPin(member, pin, { silent = false } = {}) {
+    if (!member) throw new Error('Staff member required')
+    if (!isValidFourDigitPin(pin)) throw new Error('PIN must be 4 digits')
+    const salt = createStaffPinSalt()
+    const hash = await hashStaffPin(pin, salt)
+    const { error } = await supabase.from('Staff').update({
+      pin_hash: hash,
+      pin_salt: salt,
+      pin_set_at: new Date().toISOString(),
+      login_active: true,
+      failed_login_attempts: 0
+    }).eq('id', member.id)
+    if (error) throw error
+    if (!silent) await createAuditLog('staff_pin_reset', 'PIN created/reset for ' + member.name + '.', { staff_id: member.id, staff_name: member.name })
+  }
+
+  async function saveSelectedStaffPin() {
+    if (!requireManagerAccess('Manager access required to manage staff PINs.')) return
+    const member = staff.find((item) => String(item.id) === String(staffPinTargetId))
+    if (!member) {
+      alert('Select a staff member.')
+      return
+    }
+    if (!isValidFourDigitPin(staffPinValue)) {
+      alert('Enter a 4-digit PIN.')
+      return
+    }
+    try {
+      await saveStaffPin(member, staffPinValue)
+      setStaffPinValue('')
+      await getStaff()
+      alert('Staff PIN saved.')
+    } catch (error) {
+      alert('Staff PIN was not saved. Check the Staff table columns.')
+      console.error('Staff PIN save failed:', error)
+    }
+  }
+
+  async function setStaffLoginActive(member, loginActive) {
+    if (!requireManagerAccess('Manager access required to change staff login status.')) return
+    const { error } = await supabase.from('Staff').update({ login_active: loginActive }).eq('id', member.id)
+    if (error) {
+      alert('Staff login status was not updated.')
+      console.error('Staff login status update failed:', error)
+      return
+    }
+    if (!loginActive && String(currentStaffUserId) === String(member.id)) logoutCurrentStaff()
+    await createAuditLog(loginActive ? 'staff_login_activated' : 'staff_login_deactivated', member.name + ' login ' + (loginActive ? 'activated' : 'deactivated') + '.', { staff_id: member.id, staff_name: member.name })
+    await getStaff()
+  }
+
+  async function logoutCurrentStaff() {
+    const member = getCurrentStaffUser()
+    if (member) await createAuditLog('logout', member.name + ' logged out.', { staff_id: member.id, staff_name: member.name })
+    setCurrentStaffUserId('')
+    setManagerUnlocked(false)
+    setShowManagerView(false)
+    try { localStorage.removeItem('glow_staff_session') } catch {}
+  }
+
   function requireStaffSignIn() {
     if (getCurrentStaffUser()) return true
     alert('Please sign in as staff first.')
@@ -2700,25 +2924,24 @@ function formatMoney(value) {
     return false
   }
 
-  function requireManagerPin(promptText = 'Manager PIN required:') {
-    const pin = window.prompt(promptText)
-    if (pin !== MANAGER_PIN) {
-      alert('Incorrect manager PIN.')
-      return false
-    }
-    return true
+  function requireManagerPin(promptText = 'Manager access required:') {
+    return requireManagerAccess(promptText)
   }
 
-  function requireManagerAccess(promptText = 'Manager PIN required:') {
-    if (managerUnlocked) return true
-    if (!requireManagerPin(promptText)) return false
-    setManagerUnlocked(true)
-    return true
+  function requireManagerAccess(promptText = 'Manager access required:') {
+    const currentStaff = getCurrentStaffUser()
+    if (currentStaff && isManagerStaff(currentStaff)) {
+      setManagerUnlocked(true)
+      return true
+    }
+    alert(currentStaff ? 'Manager access required. Please log in as a manager.' : (promptText || 'Manager access required.'))
+    return false
   }
 
   function selectCurrentStaffUser(member) {
-    setCurrentStaffUserId(String(member.id))
-    setStaffSelectorOpen(false)
+    setStaffLoginStaffId(String(member.id))
+    setStaffLoginPin('')
+    setStaffLoginError('')
   }
 
   function isStaffFreeBooking(booking) {
@@ -3164,6 +3387,7 @@ function formatMoney(value) {
       console.log(error)
       return false
     }
+    await createAuditLog('receipt_created', `Receipt saved: ${receiptType} / ?${Number(total || 0).toFixed(2)}.`, { customer_id: customer?.id || null, customer_name: customer?.name || customerName || null, receipt_type: receiptType, total: Number(total || 0) })
     return true
   }
 
@@ -3935,6 +4159,7 @@ function formatMoney(value) {
         return
       }
 
+      await createAuditLog('cash_up_float_saved', `Start-of-day float saved for ${selectedDate}: ?${Number(startFloat || 0).toFixed(2)}.`, { cashup_date: selectedDate, start_float: Number(startFloat || 0) })
       await getCashUpForSelectedDate()
       alert('Start-of-day cash float saved.')
     } catch (error) {
@@ -4020,6 +4245,7 @@ function formatMoney(value) {
         return
       }
 
+      await createAuditLog('cash_up_completed_locked', `Cash-up completed and locked for ${selectedDate}. Variance ?${Number(variance || 0).toFixed(2)}.`, { cashup_date: selectedDate, variance: Number(variance || 0), completed_by: signOffName })
       setShowCashUpLockConfirm(false)
       await getCashUpForSelectedDate()
       alert('End-of-day cash-up completed and locked.')
@@ -6468,6 +6694,7 @@ function formatMoney(value) {
           return
         }
       }
+      await createAuditLog('booking_created', `Booking created for ${customer.name} on bed ${modalSlot.bedId}.`, { customer_id: customer.id, bed_id: Number(modalSlot.bedId), minutes: Number(selectedMinutes), appointment_time: appointmentDateTime.toISOString() })
       closeModal()
       getBookings()
       getCustomers()
@@ -6675,6 +6902,7 @@ function formatMoney(value) {
     }
 
     const { error } = await supabase.from('Bookings').update({ status: newStatus }).eq('id', id)
+    if (!error) await createAuditLog('booking_status_changed', `Booking ${id} status changed to ${newStatus}.`, { booking_id: id, status: newStatus })
     if (error) {
       alert('Booking status was not saved. Please check the connection and try again.')
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
@@ -6951,6 +7179,7 @@ function formatMoney(value) {
       return
     }
 
+    await createAuditLog('booking_session_started', `Session started for booking ${booking.id}.`, { booking_id: booking.id, bed_id: booking.bed_id, minutes: booking.minutes })
     closeModal()
     getBookings()
     getCustomers()
@@ -8963,6 +9192,7 @@ function formatMoney(value) {
       return
     }
 
+    await createAuditLog(staffEditingId ? 'staff_edited' : 'staff_created', `${payload.name} staff account saved.`, { staff_id: staffEditingId || null, staff_name: payload.name, role: payload.role })
     setStaffName('')
     setStaffRole('staff')
     setStaffCanSprayTan(false)
@@ -8991,6 +9221,7 @@ function formatMoney(value) {
       return
     }
     await createStaffLog(member, 'Staff deactivated', 'Staff member was marked inactive.')
+    await createAuditLog('staff_deactivated', `${member.name} was deactivated.`, { staff_id: member.id, staff_name: member.name })
     getStaff()
   }
 
@@ -9095,6 +9326,7 @@ function formatMoney(value) {
       return
     }
 
+    await createAuditLog('product_created', `Product created: ${payload.name}.`, { product_name: payload.name, category: payload.category, price: payload.price })
     await getProducts()
     clearProductForm()
   }
@@ -9130,6 +9362,7 @@ function formatMoney(value) {
 
     const currentProduct = products.find((product) => String(product.id) === String(productEditingId))
     const updatedProduct = { ...currentProduct, ...payload, id: productEditingId }
+    await createAuditLog('product_edited', `Product edited: ${payload.name}.`, { product_id: productEditingId, product_name: payload.name, category: payload.category, price: payload.price })
     setProducts((current) => current.map((product) => String(product.id) === String(productEditingId) ? { ...product, ...payload } : product))
     editProduct(updatedProduct)
     await getProducts()
@@ -11675,18 +11908,39 @@ function formatMoney(value) {
 
   function renderStaffSelectorModal() {
     if (!staffSelectorOpen) return null
-    const activeStaff = dedupeStaffByName(staff).filter((member) => member.is_active !== false)
+    const activeStaff = dedupeStaffByName(staff).filter((member) => member.is_active !== false && member.login_active !== false)
+    const initialSetupRequired = staff.length > 0 && !hasAnyStaffPin()
+    const selectedLoginStaff = staff.find((member) => String(member.id) === String(staffLoginStaffId))
 
     return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ background: '#1e1e1e', padding: '24px', borderRadius: '18px', width: '420px', maxWidth: '92%' }}>
-          <h2>Select Staff User</h2>
-          {activeStaff.map((member) => (
-            <button key={member.id} onClick={() => selectCurrentStaffUser(member)} style={{ width: '100%', marginBottom: '8px', textAlign: 'left' }}>
-              {member.name} — {formatStatus(member.role)}
-            </button>
-          ))}
-          <button onClick={() => setStaffSelectorOpen(false)}>Cancel</button>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
+        <div style={{ background: '#111', padding: '24px', borderRadius: '10px', width: '440px', maxWidth: '94%', border: '1px solid rgba(212,168,83,0.45)', boxShadow: '0 24px 70px rgba(0,0,0,0.65)' }}>
+          <h2 style={{ marginTop: 0, textAlign: 'center', color: '#d4a853' }}>{initialSetupRequired ? 'Initial Manager PIN Setup' : 'Staff Login'}</h2>
+          <p style={{ color: '#aaa', textAlign: 'center' }}>{initialSetupRequired ? 'No staff PINs are set yet. Create the first manager PIN to start using authenticated staff login.' : 'Select your staff account and enter your 4-digit PIN.'}</p>
+          <select value={staffLoginStaffId} onChange={(e) => { setStaffLoginStaffId(e.target.value); setStaffLoginError('') }} style={{ width: '100%', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }}>
+            <option value="">Select staff...</option>
+            {(initialSetupRequired ? activeStaff.filter((member) => isManagerStaff(member)) : activeStaff).map((member) => (
+              <option key={member.id} value={member.id}>{member.name} - {formatStatus(member.role)}</option>
+            ))}
+          </select>
+
+          {initialSetupRequired ? (
+            <>
+              <input type="password" inputMode="numeric" maxLength="4" placeholder="Setup code" value={staffInitialSetupCode} onChange={(e) => setStaffInitialSetupCode(e.target.value.replace(/\D/g, '').slice(0, 4))} style={{ width: '100%', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }} />
+              <input type="password" inputMode="numeric" maxLength="4" placeholder="New 4-digit manager PIN" value={staffInitialSetupPin} onChange={(e) => setStaffInitialSetupPin(e.target.value.replace(/\D/g, '').slice(0, 4))} style={{ width: '100%', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }} />
+              <button type="button" onClick={setupInitialManagerPin} disabled={staffLoginLoading || !selectedLoginStaff} style={{ width: '100%' }}>{staffLoginLoading ? 'Saving...' : 'Create Manager PIN'}</button>
+            </>
+          ) : (
+            <>
+              <input type="password" inputMode="numeric" maxLength="4" placeholder="4-digit PIN" value={staffLoginPin} onChange={(e) => setStaffLoginPin(e.target.value.replace(/\D/g, '').slice(0, 4))} onKeyDown={(e) => { if (e.key === 'Enter') loginStaffWithPin() }} style={{ width: '100%', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }} />
+              <button type="button" onClick={loginStaffWithPin} disabled={staffLoginLoading || !selectedLoginStaff} style={{ width: '100%' }}>{staffLoginLoading ? 'Signing in...' : 'Sign In'}</button>
+            </>
+          )}
+
+          {staffLoginError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{staffLoginError}</p>}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+            <button type="button" onClick={() => { setStaffSelectorOpen(false); setStaffLoginPin(''); setStaffLoginError('') }}>Cancel</button>
+          </div>
         </div>
       </div>
     )
@@ -12141,15 +12395,31 @@ function formatMoney(value) {
               <option value="">Select staff to edit...</option>
               {staff.map((member) => (
                 <option key={member.id} value={member.id}>
-                  {member.name} - {formatStatus(member.role)} - {member.weekly_free_minutes_balance || 0} mins - {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} - {member.is_active === false ? 'Inactive' : 'Active'}
+                  {member.name} - {formatStatus(member.role)} - {member.weekly_free_minutes_balance || 0} mins - {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} - {member.login_active === false ? 'Login inactive' : member.pin_hash ? 'PIN set' : 'No PIN'} - {member.is_active === false ? 'Inactive' : 'Active'}
                 </option>
               ))}
             </select>
 
+            <div style={{ border: '1px solid rgba(212,168,83,0.35)', background: '#10100f', padding: '10px', marginBottom: '12px' }}>
+              <strong style={{ display: 'block', color: '#d4a853', marginBottom: '8px', textAlign: 'center' }}>Staff Login PIN</strong>
+              <select value={staffPinTargetId} onChange={(e) => setStaffPinTargetId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
+                <option value="">Select staff for PIN...</option>
+                {staff.map((member) => <option key={member.id} value={member.id}>{member.name} - {member.pin_hash ? 'PIN set' : 'No PIN'} - {member.login_active === false ? 'Login inactive' : 'Login active'}</option>)}
+              </select>
+              <input type="password" inputMode="numeric" maxLength="4" placeholder="New 4-digit PIN" value={staffPinValue} onChange={(e) => setStaffPinValue(e.target.value.replace(/D/g, '').slice(0, 4))} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button type="button" onClick={saveSelectedStaffPin}>Save / Reset PIN</button>
+                {staffPinTargetId && (() => {
+                  const pinMember = staff.find((member) => String(member.id) === String(staffPinTargetId))
+                  return pinMember ? <button type="button" onClick={() => setStaffLoginActive(pinMember, pinMember.login_active === false)}>{pinMember.login_active === false ? 'Reactivate Login' : 'Deactivate Login'}</button> : null
+                })()}
+              </div>
+            </div>
+
             <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px' }}>
               {staff.map((member) => (
                 <div key={member.id} style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '10px', borderBottom: '1px solid #222' }}>
-                  <span><strong>{member.name}</strong> - {formatStatus(member.role)} - {member.weekly_free_minutes_balance || 0} mins - {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} - {member.is_active === false ? 'Inactive' : 'Active'}</span>
+                  <span><strong>{member.name}</strong> - {formatStatus(member.role)} - {member.weekly_free_minutes_balance || 0} mins - {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} - {member.pin_hash ? 'PIN set' : 'No PIN'} - {member.login_active === false ? 'Login inactive' : 'Login active'} - {member.is_active === false ? 'Inactive' : 'Active'}</span>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button onClick={() => editStaffMember(member)}>Edit</button>
                     <button onClick={() => deactivateStaffMember(member)}>Deactivate</button>
@@ -13075,6 +13345,7 @@ function formatMoney(value) {
               <span>Signed in</span>
               <strong>{currentStaffUser.name}</strong>
               <button type="button" onClick={() => setStaffSelectorOpen(true)}>Switch User</button>
+              <button type="button" onClick={logoutCurrentStaff}>Logout</button>
             </>
           ) : (
             <button type="button" onClick={() => setStaffSelectorOpen(true)}>Staff Sign In</button>
@@ -13173,6 +13444,7 @@ function formatMoney(value) {
             <div className="top-staff-chip" style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '10px' }}>
               <span>Signed in: <strong>{currentStaffUser.name}</strong></span>
               <button onClick={() => setStaffSelectorOpen(true)} style={{ marginTop: '6px' }}>Switch User</button>
+              <button onClick={logoutCurrentStaff} style={{ marginTop: '6px' }}>Logout</button>
             </div>
           ) : (
             <button onClick={() => setStaffSelectorOpen(true)}>Staff Sign In</button>
