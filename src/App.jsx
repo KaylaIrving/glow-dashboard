@@ -10722,14 +10722,29 @@ function formatMoney(value) {
     const visibleCommissionTargetOptions = commissionRuleMatch && !commissionTargetOptions.some((option) => option.value === commissionRuleMatch)
       ? [{ value: commissionRuleMatch, label: commissionRuleMatch }, ...commissionTargetOptions]
       : commissionTargetOptions
+    const panelStyle = {
+      background: '#0b0b0b',
+      border: '1px solid #333',
+      borderRadius: '14px',
+      padding: '14px',
+      maxWidth: '980px',
+      margin: '0 auto',
+      width: '100%',
+      boxSizing: 'border-box',
+    }
+    const formGridStyle = {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: '10px',
+      marginBottom: '12px',
+      alignItems: 'center',
+    }
 
-    return renderCollapsibleSection(
-      'Commission Settings',
-      collapseCommissionSettings,
-      setCollapseCommissionSettings,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
+    return (
+      <div style={panelStyle}>
+        <h3 style={{ marginTop: 0, textAlign: 'center' }}>Commission Settings</h3>
         {commissionRulesError && <p style={{ color: '#ffcc66' }}>Commission settings table not loaded: {commissionRulesError}</p>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+        <div style={formGridStyle}>
           <select
             value={commissionRuleScope}
             onChange={(e) => {
@@ -10756,7 +10771,7 @@ function formatMoney(value) {
           </select>
           <select value={commissionRuleType} onChange={(e) => setCommissionRuleType(e.target.value)} style={{ padding: '10px' }}>
             <option value="percentage">% percentage</option>
-            <option value="fixed">£ fixed amount</option>
+            <option value="fixed">&pound; fixed amount</option>
           </select>
           <input type="number" step="0.01" placeholder="Commission value" value={commissionRuleValue} onChange={(e) => setCommissionRuleValue(e.target.value)} style={{ padding: '10px' }} />
           <select value={commissionRuleStaffId} onChange={(e) => setCommissionRuleStaffId(e.target.value)} style={{ padding: '10px' }}>
@@ -10767,7 +10782,7 @@ function formatMoney(value) {
             <input type="checkbox" checked={commissionRuleActive} onChange={(e) => setCommissionRuleActive(e.target.checked)} />
             Active
           </label>
-          <button onClick={saveCommissionRule} style={{ minWidth: '108px', whiteSpace: 'nowrap' }}>{commissionRuleEditingId ? 'Save Rule' : 'Add Rule'}</button>
+          <button onClick={saveCommissionRule} style={{ minWidth: '116px', whiteSpace: 'nowrap' }}>{commissionRuleEditingId ? 'Save Rule' : 'Add Rule'}</button>
           {commissionRuleEditingId && <button onClick={clearCommissionRuleForm}>Cancel Edit</button>}
         </div>
 
@@ -10777,9 +10792,9 @@ function formatMoney(value) {
           ) : commissionRules.map((rule) => (
             <div key={rule.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
               <span>
-                <strong>{formatStatus(rule.rule_scope)}</strong> · {rule.match_value}<br />
+                <strong>{formatStatus(rule.rule_scope)}</strong> - {rule.match_value}<br />
                 <small style={{ color: '#aaa' }}>
-                  {rule.commission_type === 'fixed' ? formatMoney(rule.commission_value) : `${Number(rule.commission_value || 0)}%`} · {rule.staff_name || 'All staff'} · {rule.is_active === false ? 'Inactive' : 'Active'}
+                  {rule.commission_type === 'fixed' ? formatMoney(rule.commission_value) : `${Number(rule.commission_value || 0)}%`} - {rule.staff_name || 'All staff'} - {rule.is_active === false ? 'Inactive' : 'Active'}
                 </small>
               </span>
               <button onClick={() => editCommissionRule(rule)}>Edit</button>
@@ -12091,7 +12106,7 @@ function formatMoney(value) {
       'Staff Management',
       collapseStaffManagement,
       setCollapseStaffManagement,
-      <>
+      <div style={{ maxWidth: '980px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         {staffLoadError && <p style={{ color: '#ff7875' }}>{staffLoadError}</p>}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '15px' }}>
@@ -12136,7 +12151,7 @@ function formatMoney(value) {
         </div>
 
         <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-          <h3 style={{ marginTop: 0 }}>Adjust Staff Free Minutes</h3>
+          <h3 style={{ marginTop: 0, textAlign: 'center' }}>Adjust Staff Free Minutes</h3>
           <select value={staffAdjustmentId} onChange={(e) => setStaffAdjustmentId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
             <option value="">Select staff</option>
             {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
@@ -12154,7 +12169,7 @@ function formatMoney(value) {
         <div style={{ marginTop: '14px' }}>
           {renderCommissionSettingsPanel()}
         </div>
-      </>
+      </div>
     )
   }
 
@@ -12543,7 +12558,7 @@ function formatMoney(value) {
       .slice()
       .sort((a, b) => (getBookingDisplayDateTime(a)?.getTime() || 0) - (getBookingDisplayDateTime(b)?.getTime() || 0))
 
-    const timelineSlots = generateTimeSlots('09:00', '21:00')
+    const timelineSlots = generateTimeSlots('08:00', '21:00')
 
     return (
       <div className="spraytan-view">
@@ -12642,7 +12657,7 @@ function formatMoney(value) {
     const sprayTanBookings = getSprayTanBookingsForSelectedDate()
       .slice()
       .sort((a, b) => (getBookingDisplayDateTime(a)?.getTime() || 0) - (getBookingDisplayDateTime(b)?.getTime() || 0))
-    const timelineSlots = generateTimeSlots('09:00', '21:00')
+    const timelineSlots = generateTimeSlots('08:00', '21:00')
 
     return (
       <div className="spraytan-view">
