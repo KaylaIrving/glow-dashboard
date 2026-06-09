@@ -12256,6 +12256,9 @@ function formatMoney(value) {
         {productLoadError && <p style={{ color: '#ff7875' }}>{productLoadError}</p>}
 
         <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+            <button onClick={() => { if (requireStaffSignIn()) setShowStandalonePOS(true) }}>Products / POS</button>
+          </div>
 
           <div style={productColumnGridStyle}>
             <div style={productPanelStyle}>

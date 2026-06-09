@@ -15,7 +15,6 @@ const MANAGER_REPORT_TYPES = [
   { value: 'sunbed_sales', label: 'Sunbed sales' },
   { value: 'spray_tan_sales', label: 'Spray tan sales' },
   { value: 'product_sales', label: 'Product sales' },
-  { value: 'current_stock', label: 'Current Stock Report' },
   { value: 'product_sales_by_staff', label: 'Product sales by staff' },
   { value: 'staff_commission', label: 'Staff commission' },
   { value: 'staff_performance', label: 'Staff performance' },
@@ -38,17 +37,17 @@ const MANAGER_REPORT_TYPES = [
 // Keep empty for now so Wix cannot silently guess the wrong bed/minutes.
 const WIX_SERVICE_BOOKING_MAP = {}
 const WIX_REQUIRED_SERVICE_MAPPINGS = [
-  { wix_service_name: 'Hybrid Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 2, minutes: 20, spraytan_service: '', default_status: 'booked' },
-  { wix_service_name: 'Prestige Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 3, minutes: 20, spraytan_service: '', default_status: 'booked' },
-  { wix_service_name: "Stand Up 'Tone & Tan' Sunbed", service_type: 'sunbed', bed_id: 1, minutes: 20, spraytan_service: '', default_status: 'booked' },
-  { wix_service_name: 'Stand Up Tone & Tan Sunbed', service_type: 'sunbed', bed_id: 1, minutes: 20, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Hybrid Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Prestige Tanning Lay Down Sunbed', service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: "Stand Up 'Tone & Tan' Sunbed", service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' },
+  { wix_service_name: 'Stand Up Tone & Tan Sunbed', service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' },
   { wix_service_name: 'Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Full Body Spray Tan', default_status: 'pending' },
   { wix_service_name: 'EXPRESS Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'EXPRESS Full Body Spray Tan', default_status: 'pending' },
   { wix_service_name: 'Spray Tan patch test', service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: 'Spray Tan patch test', default_status: 'pending' },
   { wix_service_name: 'BLUE Light Full Body Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'BLUE Light Full Body Spray Tan', default_status: 'pending' },
-  { wix_service_name: 'Upper Body & Face Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Upper Body & Face Spray Tan', default_status: 'pending' },
-  { wix_service_name: 'Face & Neck Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Face & Neck Spray Tan', default_status: 'pending' },
-  { wix_service_name: 'Legs Only Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 30, spraytan_service: 'Legs Only Spray Tan', default_status: 'pending' }
+  { wix_service_name: 'Upper Body & Face Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Upper Body & Face Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'Face & Neck Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Face & Neck Spray Tan', default_status: 'pending' },
+  { wix_service_name: 'Legs Only Spray Tan', service_type: 'spraytan', bed_id: '', minutes: 15, spraytan_service: 'Legs Only Spray Tan', default_status: 'pending' }
 ]
 const WIX_LIVE_SERVICE_DEFAULTS = Object.fromEntries(
   WIX_REQUIRED_SERVICE_MAPPINGS.map((mapping) => [mapping.wix_service_name.trim().replace(/\s+/g, ' ').toLowerCase(), mapping])
@@ -58,11 +57,11 @@ function inferWixServiceMapping(serviceName) {
   const key = String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
   if (!key) return null
   if (key.includes('patch')) return { service_type: 'patch_test', bed_id: '', minutes: 10, spraytan_service: serviceName || 'Spray Tan patch test', default_status: 'pending' }
-  if (key.includes('prestige') || key.includes('excellence')) return { service_type: 'sunbed', bed_id: 3, minutes: 20, spraytan_service: '', default_status: 'booked' }
-  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { service_type: 'sunbed', bed_id: 1, minutes: 20, spraytan_service: '', default_status: 'booked' }
-  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light') || key.includes('relaxing premium') || key.includes('vitamin d') || key.includes('red light') || key.includes('lay down sunbed') || key === 'lay down sunbed') return { service_type: 'sunbed', bed_id: 2, minutes: 20, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('prestige') || key.includes('excellence')) return { service_type: 'sunbed', bed_id: 3, minutes: 15, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('stand up') || key.includes('tone') || key.includes('tan stand')) return { service_type: 'sunbed', bed_id: 1, minutes: 15, spraytan_service: '', default_status: 'booked' }
+  if (key.includes('hybrid') || key.includes('collagen') || key.includes('pink light') || key.includes('relaxing premium') || key.includes('vitamin d') || key.includes('red light') || key.includes('lay down sunbed') || key === 'lay down sunbed') return { service_type: 'sunbed', bed_id: 2, minutes: 15, spraytan_service: '', default_status: 'booked' }
   if (key.includes('spray')) {
-    const duration = 30
+    const duration = key.includes('upper') || key.includes('face') || key.includes('legs') ? 15 : 30
     return { service_type: 'spraytan', bed_id: '', minutes: duration, spraytan_service: serviceName, default_status: 'pending' }
   }
   return null
@@ -115,8 +114,6 @@ const STAFF_SCHEDULE_TYPES = [
   { value: 'holiday', label: 'Holiday' },
   { value: 'spray_tan_available', label: 'Spray Tan Available' }
 ]
-
-const WIX_AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000
 
 const CASH_DENOMINATIONS = [
   { key: 'note50', label: '£50 notes', value: 50 },
@@ -342,7 +339,6 @@ function App() {
   const [cashUpStartFloat, setCashUpStartFloat] = useState('')
   const [cashUpExistingRecord, setCashUpExistingRecord] = useState(null)
   const [cashUpLoadError, setCashUpLoadError] = useState('')
-  const [startCashDenominations, setStartCashDenominations] = useState(EMPTY_CASH_DENOMINATIONS)
   const [cashDenominations, setCashDenominations] = useState(EMPTY_CASH_DENOMINATIONS)
   const [floatMovements, setFloatMovements] = useState([])
   const [floatMovementLoadError, setFloatMovementLoadError] = useState('')
@@ -363,7 +359,6 @@ function App() {
   const [staffEditingId, setStaffEditingId] = useState('')
   const [staffAdjustmentId, setStaffAdjustmentId] = useState('')
   const [staffAdjustmentAmount, setStaffAdjustmentAmount] = useState('')
-  const [staffAdjustmentExpiryDate, setStaffAdjustmentExpiryDate] = useState('')
   const [staffAdjustmentReason, setStaffAdjustmentReason] = useState('')
   const [staffSchedule, setStaffSchedule] = useState([])
   const [staffScheduleLoadError, setStaffScheduleLoadError] = useState('')
@@ -455,8 +450,6 @@ function App() {
   const [wixImportedCount, setWixImportedCount] = useState(0)
   const [wixFailedCount, setWixFailedCount] = useState(0)
   const [wixSyncRunning, setWixSyncRunning] = useState(false)
-  const wixSyncRunningRef = useRef(false)
-  const [wixNextAutoSyncAt, setWixNextAutoSyncAt] = useState(() => wixSyncHealth?.nextSyncAt || '')
   const [wixSyncDiagnostics, setWixSyncDiagnostics] = useState(() => {
     if (typeof window === 'undefined') return null
     try {
@@ -472,8 +465,7 @@ function App() {
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
   const [managerReceipts, setManagerReceipts] = useState([])
-  const [receiptSearchStartDate, setReceiptSearchStartDate] = useState(formatLocalDate(new Date()))
-  const [receiptSearchEndDate, setReceiptSearchEndDate] = useState(formatLocalDate(new Date()))
+  const [receiptSearchDate, setReceiptSearchDate] = useState(formatLocalDate(new Date()))
   const [receiptSearchCustomer, setReceiptSearchCustomer] = useState('')
   const [receiptSearchType, setReceiptSearchType] = useState('')
   const [receiptSearchPaymentMethod, setReceiptSearchPaymentMethod] = useState('')
@@ -535,12 +527,9 @@ function App() {
 
   useEffect(() => {
     if (!wixSyncEndpoint) return undefined
-    const updateNextSyncTime = () => setWixNextAutoSyncAt(new Date(Date.now() + WIX_AUTO_SYNC_INTERVAL_MS).toISOString())
-    updateNextSyncTime()
     const syncTimer = window.setInterval(() => {
-      updateNextSyncTime()
-      if (!wixSyncRunningRef.current) runWixBookingSync({ automatic: true })
-    }, WIX_AUTO_SYNC_INTERVAL_MS)
+      runWixBookingSync({ automatic: true })
+    }, 15 * 60 * 1000)
     return () => window.clearInterval(syncTimer)
   }, [wixSyncEndpoint])
 
@@ -636,12 +625,6 @@ function App() {
     return base
   }, [dailyTakings, dailyProductSales])
 
-  const startCashDenominationTotal = useMemo(() => {
-    return CASH_DENOMINATIONS.reduce((total, denomination) => {
-      return total + (Number(startCashDenominations[denomination.key] || 0) * denomination.value)
-    }, 0)
-  }, [startCashDenominations])
-
   const cashDenominationTotal = useMemo(() => {
     return CASH_DENOMINATIONS.reduce((total, denomination) => {
       return total + (Number(cashDenominations[denomination.key] || 0) * denomination.value)
@@ -688,18 +671,6 @@ function App() {
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
-  }
-
-  function getLocalDateStringFromValue(value) {
-    if (!value) return ''
-    const parsed = value instanceof Date ? value : new Date(value)
-    if (Number.isNaN(parsed.getTime())) return ''
-    return formatLocalDate(parsed)
-  }
-
-  function isBookingOnSelectedDate(booking) {
-    const startSource = booking?.booking_start || booking?.appointment_time || booking?.start_time
-    return getLocalDateStringFromValue(startSource) === selectedDate
   }
 
   function getWeekDates(dateString = selectedDate) {
@@ -1024,15 +995,13 @@ function formatMoney(value) {
 
     for (const member of dedupedStaff) {
       if (member.is_active && member.last_weekly_reset_date !== weekStart) {
-        const preservedTopUpMinutes = await getActiveStaffTopUpMinutes(member)
-        const resetBalance = WEEKLY_STAFF_FREE_MINUTES + preservedTopUpMinutes
-        const updatedMember = { ...member, weekly_free_minutes_balance: resetBalance, last_weekly_reset_date: weekStart }
+        const updatedMember = { ...member, weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES, last_weekly_reset_date: weekStart }
         resetStaff.push(updatedMember)
         await supabase.from('Staff').update({
-          weekly_free_minutes_balance: resetBalance,
+          weekly_free_minutes_balance: WEEKLY_STAFF_FREE_MINUTES,
           last_weekly_reset_date: weekStart
         }).eq('id', member.id)
-        await createStaffLog(member, 'Weekly free minutes reset', `Weekly free minutes reset to ${WEEKLY_STAFF_FREE_MINUTES}. Preserved active top-ups: ${preservedTopUpMinutes}.`)
+        await createStaffLog(member, 'Weekly free minutes reset', `Weekly free minutes reset to ${WEEKLY_STAFF_FREE_MINUTES}.`)
       } else {
         resetStaff.push(member)
       }
@@ -1091,61 +1060,6 @@ function formatMoney(value) {
   async function createStaffLog(member, action, details) {
     if (!member || String(member.id).startsWith('default-')) return
     await supabase.from('StaffLogs').insert({ staff_id: member.id, staff_name: member.name, action, details })
-  }
-
-  async function getActiveStaffTopUpAllocations(member) {
-    if (!member?.id || String(member.id).startsWith('default-')) return []
-    const today = formatLocalDate(new Date())
-    const { data, error } = await supabase
-      .from('StaffMinuteTopUps')
-      .select('*')
-      .eq('staff_id', member.id)
-      .eq('expired', false)
-      .order('expiry_date', { ascending: true })
-
-    if (error) {
-      console.log('StaffMinuteTopUps could not be loaded:', error)
-      return []
-    }
-
-    const active = []
-    for (const topUp of data || []) {
-      const remaining = Number(topUp.minutes_remaining ?? topUp.minutes_amount ?? 0)
-      const isExpired = topUp.expiry_date && topUp.expiry_date < today
-      if (isExpired || remaining <= 0) {
-        await supabase.from('StaffMinuteTopUps').update({ expired: true, expired_at: new Date().toISOString(), minutes_remaining: 0 }).eq('id', topUp.id)
-        await createStaffLog(member, 'Staff top-up minutes expired', `${remaining} topped-up staff minutes expired${topUp.expiry_date ? ` on ${topUp.expiry_date}` : ''}.`)
-      } else {
-        active.push({ ...topUp, minutes_remaining: remaining })
-      }
-    }
-    return active
-  }
-
-  async function getActiveStaffTopUpMinutes(member) {
-    const allocations = await getActiveStaffTopUpAllocations(member)
-    return allocations.reduce((total, topUp) => total + Number(topUp.minutes_remaining || 0), 0)
-  }
-
-  async function consumeStaffTopUpMinutes(member, minutesToUse, oldBalance) {
-    const allocations = await getActiveStaffTopUpAllocations(member)
-    const activeTopUpTotal = allocations.reduce((total, topUp) => total + Number(topUp.minutes_remaining || 0), 0)
-    const weeklyRemaining = Math.max(0, Number(oldBalance || 0) - activeTopUpTotal)
-    let minutesFromTopUps = Math.max(0, Number(minutesToUse || 0) - weeklyRemaining)
-    if (minutesFromTopUps <= 0) return
-
-    for (const topUp of allocations) {
-      if (minutesFromTopUps <= 0) break
-      const before = Number(topUp.minutes_remaining || 0)
-      const used = Math.min(before, minutesFromTopUps)
-      const after = before - used
-      minutesFromTopUps -= used
-      await supabase.from('StaffMinuteTopUps').update({
-        minutes_remaining: after,
-        expired: after <= 0,
-        expired_at: after <= 0 ? new Date().toISOString() : null
-      }).eq('id', topUp.id)
-    }
   }
 
   function clearStaffScheduleForm() {
@@ -1531,51 +1445,29 @@ function formatMoney(value) {
     setDailyProductSales(productSalesData || [])
   }
 
-  function getCashUpRecordDate(record) {
-    return record?.cashup_date || record?.date || record?.cash_up_date || ''
-  }
-
-  function getCashUpRecordStartFloat(record) {
-    return record?.starting_cash_float ?? record?.starting_float ?? record?.start_day_float ?? record?.cash_float ?? ''
-  }
-
-  function getCashUpRecordActualCash(record) {
-    return record?.actual_cash ?? record?.actual_cash_counted ?? record?.actual_cash_in_till ?? ''
-  }
-
   async function getCashUpForSelectedDate(dateOverride = selectedDate) {
-    const dateColumns = ['cashup_date', 'date', 'cash_up_date']
-    let lastError = null
+    const { data, error } = await supabase
+      .from('CashUps')
+      .select('*')
+      .eq('cashup_date', dateOverride)
+      .order('created_at', { ascending: false })
+      .limit(1)
 
-    for (const dateColumn of dateColumns) {
-      const { data, error } = await supabase
-        .from('CashUps')
-        .select('*')
-        .eq(dateColumn, dateOverride)
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      if (!error) {
-        const record = data?.[0] || null
-        setCashUpLoadError('')
-        setCashUpExistingRecord(record)
-        setCashUpStartFloat(getCashUpRecordStartFloat(record))
-        setCashUpActualCash(getCashUpRecordActualCash(record))
-        setCashUpVarianceNotes(record?.variance_notes || '')
-        setCashUpManagerName(record?.cash_up_completed_by_staff || '')
-        return
-      }
-
-      lastError = error
-      const missingColumn = getMissingSupabaseColumn(error)
-      if (missingColumn === dateColumn) continue
-      break
+    if (error) {
+      setCashUpLoadError(error.message || 'Could not load CashUps table.')
+      showDataLoadWarning('Cash-up record could not be loaded. Please check the connection.', error)
+      console.error('Cash-up load failed:', { table: 'CashUps', date: dateOverride, error })
+      setCashUpExistingRecord(null)
+      return
     }
 
-    setCashUpLoadError(lastError?.message || 'Could not load CashUps table.')
-    showDataLoadWarning('Cash-up record could not be loaded. Please check the connection.', lastError)
-    console.error('Cash-up load failed:', { table: 'CashUps', date: dateOverride, error: lastError })
-    setCashUpExistingRecord(null)
+    const record = data?.[0] || null
+    setCashUpLoadError('')
+    setCashUpExistingRecord(record)
+    setCashUpStartFloat(record?.starting_cash_float ?? '')
+    setCashUpActualCash(record?.actual_cash ?? '')
+    setCashUpVarianceNotes(record?.variance_notes || '')
+    setCashUpManagerName(record?.cash_up_completed_by_staff || '')
   }
 
   async function getFloatMovements(dateOverride = selectedDate) {
@@ -1847,18 +1739,26 @@ function formatMoney(value) {
 
     if (scope === 'product') {
       getActiveProducts().forEach((product) => addOption(product.name, product.name))
-    } else if (scope === 'reward') {
-      loyaltyRules.forEach((rule) => addOption(rule.reward_name, rule.reward_name))
-    } else if (scope === 'promo') {
-      promos.forEach((promo) => addOption(promo.promo_name, promo.promo_name))
+    } else if (scope === 'category') {
+      productCategories.forEach((category) => addOption(category.value || category.label, category.label || category.value))
     } else if (scope === 'spraytan') {
       SPRAY_TAN_SERVICES.forEach((service) => addOption(service.name, service.name))
-      Array.from(new Set(bookings.filter((booking) => isSprayTanBooking(booking)).map((booking) => booking.spraytan_service || booking.wix_service_name).filter(Boolean))).forEach((serviceName) => addOption(serviceName, serviceName))
-    } else if (scope === 'sunbed_minutes') {
-      addOption('Sunbed Minutes', 'Sunbed Minutes')
+    } else if (scope === 'sunbed') {
+      beds.forEach((bed) => addOption(getBedName(bed.id), getBedName(bed.id)))
       addOption('Standard Minutes', 'Standard Minutes')
+      addOption('Standard Minutes - Bed 1 and Bed 3', 'Standard Minutes - Bed 1 and Bed 3')
       addOption('Collagen Minutes', 'Collagen Minutes')
-      COMMON_BOOKING_MINUTES.forEach((minutes) => addOption(String(minutes) + ' minute sunbed', String(minutes) + ' minute sunbed'))
+      addOption('Hybrid Minutes', 'Hybrid Minutes')
+      addOption('Hybrid Minutes - Any Bed', 'Hybrid Minutes - Any Bed')
+      addOption('Custom Standard Minutes', 'Custom Standard Minutes')
+      addOption('Custom Hybrid Minutes', 'Custom Hybrid Minutes')
+      COMMON_BOOKING_MINUTES.forEach((minutes) => addOption(`${minutes} minute sunbed`, `${minutes} minute sunbed`))
+    } else if (scope === 'package') {
+      Object.values(PURCHASE_OPTIONS)
+        .filter((option) => option.minutes !== null)
+        .forEach((option) => addOption(option.name, option.label || option.name))
+    } else if (scope === 'promo') {
+      promos.forEach((promo) => addOption(promo.promo_name, promo.promo_name))
     }
 
     return Array.from(optionMap.values()).sort((a, b) => a.label.localeCompare(b.label))
@@ -2222,21 +2122,6 @@ function formatMoney(value) {
       sprayTan: Array.from(sprayTanMap.values()).map((row) => ({ ...row, artists: Array.from(row.artists).join(', ') || 'Unassigned' })),
       staffActivity: Array.from(staffActivityMap.values()).sort((a, b) => (b.bookings + b.cash_ups) - (a.bookings + a.cash_ups)),
       stockMovement: products.map((product) => ({ name: product.name, category: product.category || 'Uncategorised', current_stock: getProductStockQuantity(product), status: getProductStockStatus(product) })),
-      currentStock: products
-        .slice()
-        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-        .map((product) => {
-          const stockStatus = getProductStockStatus(product)
-          return {
-            product_name: product.name || 'Unnamed product',
-            category: getProductCategoryLabel(product.category),
-            subcategories: getProductSubcategories(product).join(', ') || '-',
-            current_stock: getProductStockQuantity(product),
-            low_stock_threshold: Number(product.low_stock_threshold ?? LOW_STOCK_THRESHOLD),
-            low_stock_warning: stockStatus === 'In stock' ? '' : stockStatus,
-            active: isProductActive(product) ? 'Active' : 'Inactive'
-          }
-        }),
       expiredMinutes: expiredMinutesRows,
       duplicateCustomers: duplicateCustomerRows,
       customerRegistrations: customerRegistrationRows,
@@ -2303,19 +2188,6 @@ function formatMoney(value) {
           { key: 'category', label: 'Category' },
           { key: 'quantity', label: 'Qty' },
           { key: 'total', label: 'Total', format: money }
-        ]
-      },
-      current_stock: {
-        title: 'Current Stock Report',
-        rows: data.currentStock || [],
-        columns: [
-          { key: 'product_name', label: 'Product name' },
-          { key: 'category', label: 'Category' },
-          { key: 'subcategories', label: 'Subcategories' },
-          { key: 'current_stock', label: 'Current stock' },
-          { key: 'low_stock_threshold', label: 'Low stock at' },
-          { key: 'low_stock_warning', label: 'Low stock warning' },
-          { key: 'active', label: 'Status' }
         ]
       },
       product_sales_by_staff: {
@@ -2540,10 +2412,7 @@ function formatMoney(value) {
   function openManagerSection(sectionName, currentlyOpen) {
     closeAllManagerSections()
     if (currentlyOpen) return
-    if (sectionName === 'staff') {
-      setCollapseStaffManagement(false)
-      setCollapseCommissionSettings(false)
-    }
+    if (sectionName === 'staff') setCollapseStaffManagement(false)
     if (sectionName === 'maintenance') setCollapseMaintenance(false)
     if (sectionName === 'products') setCollapseProducts(false)
     if (sectionName === 'corrections') setCollapseCorrections(false)
@@ -2555,10 +2424,7 @@ function formatMoney(value) {
     if (sectionName === 'promos') setCollapsePromos(false)
     if (sectionName === 'commission') setCollapseCommissionSettings(false)
     if (sectionName === 'duplicates') setCollapseDuplicateCustomers(false)
-    if (sectionName === 'loyalty') {
-      setCollapseLoyaltyRewards(false)
-      setCollapsePromos(false)
-    }
+    if (sectionName === 'loyalty') setCollapseLoyaltyRewards(false)
   }
 
   function scrollToTop() {
@@ -2605,37 +2471,6 @@ function formatMoney(value) {
     return slots
   }
 
-  function getMinutesFromTimeString(time) {
-    const [hours, minutes] = String(time || '00:00').split(':').map(Number)
-    return Number(hours || 0) * 60 + Number(minutes || 0)
-  }
-
-  function getTimeStringFromMinutes(totalMinutes) {
-    const boundedMinutes = Math.max(0, Math.min(23 * 60 + 59, Number(totalMinutes || 0)))
-    const hours = Math.floor(boundedMinutes / 60)
-    const minutes = boundedMinutes % 60
-    return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0')
-  }
-
-  function getSunbedCalendarTimeRange() {
-    let startMinutes = getMinutesFromTimeString('08:00')
-    let endMinutes = getMinutesFromTimeString('21:00')
-
-    getBookingsForSelectedDate().forEach((booking) => {
-      const interval = getBookingCalendarDisplayInterval(booking)
-      if (!interval) return
-      const bookingStartMinutes = interval.start.getHours() * 60 + interval.start.getMinutes()
-      const bookingEndMinutes = interval.end.getHours() * 60 + interval.end.getMinutes()
-      startMinutes = Math.min(startMinutes, Math.floor(bookingStartMinutes / SLOT_MINUTES) * SLOT_MINUTES)
-      endMinutes = Math.max(endMinutes, Math.ceil(bookingEndMinutes / SLOT_MINUTES) * SLOT_MINUTES)
-    })
-
-    return {
-      start: getTimeStringFromMinutes(startMinutes),
-      end: getTimeStringFromMinutes(endMinutes)
-    }
-  }
-
   function getSelectedCustomer() {
     return customers.find((customer) => customer.id === Number(selectedCustomerId))
   }
@@ -2675,21 +2510,23 @@ function formatMoney(value) {
 
   function getPaymentStaffFields() {
     const { staffId, staffName } = getCurrentStaffAttribution()
+    const commissionStaff = commissionStaffId ? staff.find((member) => String(member.id) === String(commissionStaffId)) : null
     return {
       taken_by_staff_id: staffId,
       taken_by_staff_name: staffName,
-      commission_staff_id: staffId,
-      commission_staff_name: staffName
+      commission_staff_id: commissionStaff?.id || staffId,
+      commission_staff_name: commissionStaff?.name || staffName
     }
   }
 
   function getProductSaleStaffFields() {
     const { staffId, staffName } = getCurrentStaffAttribution()
+    const commissionStaff = commissionStaffId ? staff.find((member) => String(member.id) === String(commissionStaffId)) : null
     return {
       sold_by_staff_id: staffId,
       sold_by_staff_name: staffName,
-      commission_staff_id: staffId,
-      commission_staff_name: staffName
+      commission_staff_id: commissionStaff?.id || staffId,
+      commission_staff_name: commissionStaff?.name || staffName
     }
   }
 
@@ -3636,17 +3473,6 @@ function formatMoney(value) {
     return cashUpStartFloat === '' ? 0 : Number(cashUpStartFloat || 0)
   }
 
-  function updateStartCashDenomination(key, value) {
-    setStartCashDenominations((current) => {
-      const next = { ...current, [key]: value }
-      const calculated = CASH_DENOMINATIONS.reduce((total, denomination) => {
-        return total + (Number(next[denomination.key] || 0) * denomination.value)
-      }, 0)
-      setCashUpStartFloat(calculated > 0 ? calculated.toFixed(2) : '')
-      return next
-    })
-  }
-
   function updateCashDenomination(key, value) {
     setCashDenominations((current) => {
       const next = { ...current, [key]: value }
@@ -3703,14 +3529,6 @@ function formatMoney(value) {
     return message.match(/'([^']+)' column/)?.[1] || message.match(/column "([^"]+)"/)?.[1] || ''
   }
 
-  function swapCashUpPayloadColumn(payload, fromColumn, candidateColumns, value) {
-    const currentIndex = candidateColumns.indexOf(fromColumn)
-    const nextColumn = candidateColumns.slice(currentIndex + 1).find((column) => !Object.prototype.hasOwnProperty.call(payload, column))
-    if (!nextColumn) return null
-    const { [fromColumn]: _removed, ...nextPayload } = payload
-    return { ...nextPayload, [nextColumn]: value }
-  }
-
   async function writeCashUpRecord(payload) {
     const optionalColumns = new Set([
       'variance_notes',
@@ -3722,26 +3540,11 @@ function formatMoney(value) {
       'cash_up_locked_by_staff',
       'cash_up_locked_at',
       'cash_up_reopened_by_staff',
-      'cash_up_reopened_at',
-      'expected_cash',
-      'total_revenue',
-      'card_total',
-      'cash_total',
-      'bank_transfer_total',
-      'other_total',
-      'product_sales_total',
-      'minutes_sales_total',
-      'variance'
+      'cash_up_reopened_at'
     ])
-    const dateColumns = ['cashup_date', 'date', 'cash_up_date']
-    const startFloatColumns = ['starting_cash_float', 'starting_float', 'start_day_float', 'cash_float']
-    const actualCashColumns = ['actual_cash', 'actual_cash_counted', 'actual_cash_in_till']
-    const dateValue = payload.cashup_date || payload.date || payload.cash_up_date || selectedDate
-    const startFloatValue = payload.starting_cash_float ?? payload.starting_float ?? payload.start_day_float ?? payload.cash_float ?? 0
-    const actualCashValue = payload.actual_cash ?? payload.actual_cash_counted ?? payload.actual_cash_in_till ?? 0
     let safePayload = { ...payload }
 
-    for (let attempt = 0; attempt < 16; attempt += 1) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
       const request = cashUpExistingRecord?.id
         ? supabase.from('CashUps').update(safePayload).eq('id', cashUpExistingRecord.id)
         : supabase.from('CashUps').insert(safePayload)
@@ -3749,33 +3552,6 @@ function formatMoney(value) {
       if (!error) return { error: null, payload: safePayload }
 
       const missingColumn = getMissingSupabaseColumn(error)
-      if (missingColumn && dateColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
-        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, dateColumns, dateValue)
-        if (nextPayload) {
-          console.warn('CashUps date column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
-          safePayload = nextPayload
-          continue
-        }
-      }
-
-      if (missingColumn && startFloatColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
-        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, startFloatColumns, startFloatValue)
-        if (nextPayload) {
-          console.warn('CashUps start float column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
-          safePayload = nextPayload
-          continue
-        }
-      }
-
-      if (missingColumn && actualCashColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
-        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, actualCashColumns, actualCashValue)
-        if (nextPayload) {
-          console.warn('CashUps actual cash column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
-          safePayload = nextPayload
-          continue
-        }
-      }
-
       if (missingColumn && optionalColumns.has(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
         console.warn('CashUps optional column missing, retrying without it:', missingColumn)
         const { [missingColumn]: _removed, ...nextPayload } = safePayload
@@ -3783,11 +3559,10 @@ function formatMoney(value) {
         continue
       }
 
-      console.error('CashUps save failed with non-retryable error:', { missingColumn, payload: safePayload, error })
       return { error, payload: safePayload }
     }
 
-    return { error: new Error('CashUps save failed after retrying column fallbacks.'), payload: safePayload }
+    return { error: new Error('CashUps save failed after retrying optional columns.'), payload: safePayload }
   }
 
   function clearFloatMovementForm() {
@@ -4147,54 +3922,6 @@ function formatMoney(value) {
     })
   }
 
-  function getExportDateRange() {
-    const fromDate = exportFromDate || selectedDate
-    const toDate = exportToDate || fromDate
-    return {
-      fromDate,
-      toDate,
-      dayStart: new Date(`${fromDate}T00:00:00`),
-      dayEnd: new Date(`${toDate}T23:59:59.999`)
-    }
-  }
-
-  function exportWixSyncedBookingsCsv() {
-    const { fromDate, toDate, dayStart, dayEnd } = getExportDateRange()
-    exportTableRows({
-      tableName: 'Bookings',
-      filename: `glow_wix_bookings_${fromDate}_to_${toDate}.csv`,
-      queryBuilder: (query) => query
-        .select('*')
-        .or('booking_source.eq.wix,source.eq.wix,wix_booking_id.not.is.null')
-        .gte('appointment_time', dayStart.toISOString())
-        .lte('appointment_time', dayEnd.toISOString())
-        .order('appointment_time', { ascending: true })
-    })
-  }
-
-  function exportFailedWixImportsCsv() {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required for export:')) return
-    const rows = Array.isArray(wixSyncDiagnostics?.errors) ? wixSyncDiagnostics.errors : []
-    downloadCsv(`glow_failed_wix_imports_${formatLocalDate(new Date())}.csv`, rows)
-  }
-
-  function exportDuplicateCustomersCsv() {
-    if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager PIN required for export:')) return
-    const rows = getDuplicateCustomerMatches().map((match) => ({
-      customer_a: match.customerA.name || 'Unnamed',
-      customer_b: match.customerB.name || 'Unnamed',
-      customer_a_phone: match.customerA.phone || '',
-      customer_b_phone: match.customerB.phone || '',
-      customer_a_email: match.customerA.email || '',
-      customer_b_email: match.customerB.email || '',
-      reason: match.reason,
-      action: 'Merge Customers - future feature'
-    }))
-    downloadCsv(`glow_duplicate_customers_${formatLocalDate(new Date())}.csv`, rows)
-  }
-
   async function sellProductsOnly() {
     if (!requireStaffSignIn()) return
 
@@ -4253,7 +3980,7 @@ function formatMoney(value) {
     return currentTime >= slotStart && currentTime < slotEnd
   }
 
-  function isCurrentTimelineSlot(time, slotMinutes = SLOT_MINUTES) {
+  function isCurrentTimelineSlot(time, slotMinutes = 15) {
     if (selectedDate !== formatLocalDate(currentTime)) return false
     const slotStart = getSlotDateTime(time)
     const slotEnd = new Date(slotStart.getTime() + slotMinutes * 60000)
@@ -4786,24 +4513,7 @@ function formatMoney(value) {
     return true
   }
 
-  function getDisplaySunbedMinutes(booking) {
-    if (!booking) return 0
-    const minutes = Number(booking.minutes || 0)
-    if (isWixBooking(booking) && isSunbedBooking(booking) && (!minutes || minutes === 15)) return 20
-    return minutes
-  }
-
-  function getSprayTanDisplayDurationMinutes(booking) {
-    const type = String(booking?.booking_type || '').toLowerCase()
-    const serviceName = String(booking?.spraytan_service || booking?.wix_service_name || '').toLowerCase()
-    if (type === 'patch_test' || serviceName.includes('patch')) return 10
-    if (isSprayTanBooking(booking)) return Math.max(30, Number(booking.spraytan_duration_minutes || booking.minutes || 30))
-    return Number(booking?.spraytan_duration_minutes || booking?.minutes || 0)
-  }
-
   function getTotalBlockMinutes(booking) {
-    if (isSprayTanBooking(booking)) return getSprayTanDisplayDurationMinutes(booking)
-    if (isWixBooking(booking) && isSunbedBooking(booking)) return getDisplaySunbedMinutes(booking) || 20
     return Number(booking.minutes || 0) + UNDRESS_SECONDS / 60 + COOLDOWN_SECONDS / 60
   }
 
@@ -4830,8 +4540,7 @@ function formatMoney(value) {
     const appointmentStart = new Date(startSource)
     if (Number.isNaN(appointmentStart.getTime())) return null
     const explicitEnd = booking?.booking_end ? new Date(booking.booking_end) : null
-    const useCalculatedEnd = (isWixBooking(booking) && isSunbedBooking(booking) && Number(booking.minutes || 0) === 15) || isSprayTanBooking(booking)
-    const plannedEnd = explicitEnd && !Number.isNaN(explicitEnd.getTime()) && !useCalculatedEnd
+    const plannedEnd = explicitEnd && !Number.isNaN(explicitEnd.getTime())
       ? explicitEnd
       : new Date(appointmentStart.getTime() + getTotalBlockMinutes(booking) * 60000)
     return { start: appointmentStart, end: plannedEnd }
@@ -4864,9 +4573,8 @@ function formatMoney(value) {
   function getBookingsForSelectedDate() {
     return bookings.filter((booking) => {
       if (!isSunbedBooking(booking)) return false
-      if (String(booking?.booking_type || 'sunbed').toLowerCase() === 'sunbed' && !booking?.bed_id) return false
       const interval = getBookingCalendarDisplayInterval(booking)
-      return interval && getLocalDateStringFromValue(interval.start) === selectedDate
+      return interval && formatLocalDate(interval.start) === selectedDate
     })
   }
 
@@ -4874,7 +4582,8 @@ function formatMoney(value) {
     return bookings.filter((booking) => {
       if (!isSprayTanBooking(booking)) return false
       if (isWixBooking(booking) && (!booking.booking_start || !booking.booking_end)) return false
-      return isBookingOnSelectedDate(booking)
+      const bookingTime = getBookingDisplayDateTime(booking)
+      return bookingTime && formatLocalDate(bookingTime) === selectedDate
     })
   }
 
@@ -4896,32 +4605,6 @@ function formatMoney(value) {
     if (bookingType === 'patch_test' || serviceName.includes('patch')) return 'patch_test'
     if (serviceName.includes('express')) return 'express_tan'
     return 'spray_tan'
-  }
-
-  function getSprayTanBookingEndDateTime(booking) {
-    const start = getBookingDisplayDateTime(booking)
-    if (!start) return null
-    return new Date(start.getTime() + getSprayTanDisplayDurationMinutes(booking) * 60000)
-  }
-
-  function getSprayTanDisplaySlotCount(booking) {
-    return Math.max(1, Math.ceil(getSprayTanDisplayDurationMinutes(booking) / SLOT_MINUTES))
-  }
-
-  function isSprayTanBookingStartingAtSlot(booking, time) {
-    return getBookingStartTimeString(booking) === time
-  }
-
-  function isSprayTanBookingCoveringSlot(booking, time) {
-    const slotTime = getSlotDateTime(time)
-    const start = getBookingDisplayDateTime(booking)
-    const end = getSprayTanBookingEndDateTime(booking)
-    if (!start || !end) return false
-    return slotTime >= start && slotTime < end
-  }
-
-  function isSprayTanSlotCoveredByEarlierBooking(bookingsForColumn, time) {
-    return bookingsForColumn.some((booking) => isSprayTanBookingCoveringSlot(booking, time) && !isSprayTanBookingStartingAtSlot(booking, time))
   }
 
   function getDefaultSprayTanDeposit(serviceName) {
@@ -5135,14 +4818,6 @@ function formatMoney(value) {
     return String(booking?.status || '').toLowerCase()
   }
 
-  function isStartedSessionStatus(status) {
-    return ['undressing', 'running', 'cooldown', 'active', 'time_sent', 'sent', 'customer_started', 'waiting_to_start', 'in_use'].includes(String(status || '').toLowerCase())
-  }
-
-  function hasSessionStarted(booking) {
-    return Boolean(booking?.tmax_sent_at || booking?.customer_started_at || isStartedSessionStatus(booking?.status))
-  }
-
   function isFinishedBookingStatus(booking) {
     const status = getBookingStatusKey(booking)
     if (status === 'force_stopped') {
@@ -5193,8 +4868,6 @@ function formatMoney(value) {
       if (now < cooldownEnd) return 'cooldown'
       return 'completed'
     }
-
-    if (!hasSessionStarted(booking)) return status || 'booked'
 
     const startSource = booking?.tmax_sent_at || booking?.booking_start
     if (!startSource) return status
@@ -5324,8 +4997,8 @@ function formatMoney(value) {
       return { wix_service_id: '', wix_service_name: service.trim().replace(/\s+/g, ' '), is_active: true }
     }
     return {
-      wix_service_id: getWixBookingServiceId(service),
-      wix_service_name: getWixBookingServiceName(service).trim().replace(/\s+/g, ' '),
+      wix_service_id: String(service?.wix_service_id || service?.service_id || '').trim(),
+      wix_service_name: String(service?.wix_service_name || service?.service_name || '').trim().replace(/\s+/g, ' '),
       is_active: service?.is_active !== false
     }
   }
@@ -5335,31 +5008,12 @@ function formatMoney(value) {
     return normalized.wix_service_id || normalizeWixServiceKey(normalized.wix_service_name)
   }
 
-  function getWixBookingServiceName(wixBookingPayload = {}) {
-    return String(
-      wixBookingPayload.wix_service_name
-      || wixBookingPayload.service_name
-      || wixBookingPayload.serviceName
-      || wixBookingPayload.bookedEntity?.title
-      || wixBookingPayload.bookedEntity?.name
-      || wixBookingPayload.service?.name
-      || wixBookingPayload.service?.title
-      || wixBookingPayload.spraytan_service
-      || ''
-    )
+  function getWixBookingServiceName(wixBookingPayload) {
+    return wixBookingPayload.service_name || wixBookingPayload.wix_service_name || wixBookingPayload.spraytan_service || ''
   }
 
-  function getWixBookingServiceId(wixBookingPayload = {}) {
-    return String(
-      wixBookingPayload.wix_service_id
-      || wixBookingPayload.service_id
-      || wixBookingPayload.serviceId
-      || wixBookingPayload.bookedEntity?.slot?.serviceId
-      || wixBookingPayload.bookedEntity?.serviceId
-      || wixBookingPayload.bookedEntity?.id
-      || wixBookingPayload.service?.id
-      || ''
-    ).trim()
+  function getWixBookingServiceId(wixBookingPayload) {
+    return String(wixBookingPayload.wix_service_id || wixBookingPayload.service_id || '').trim()
   }
 
   function addMinutesToIsoDate(startTime, minutes) {
@@ -5435,20 +5089,12 @@ function formatMoney(value) {
       const serviceRecord = matchingWixService || { wix_service_id: '', wix_service_name: required.wix_service_name }
       const existing = getAnyWixMappingForService(serviceRecord, currentMappings)
       if (existing) {
-        const updatePayload = { updated_at: new Date().toISOString() }
-        if (matchingWixService?.wix_service_id && !existing.wix_service_id) updatePayload.wix_service_id = matchingWixService.wix_service_id
-        if (matchingWixService?.wix_service_name && existing.wix_service_name !== matchingWixService.wix_service_name) updatePayload.wix_service_name = matchingWixService.wix_service_name
-        if ((existing.glow_service_type || existing.service_type) !== required.service_type) updatePayload.glow_service_type = required.service_type
-        if (required.service_type === 'sunbed' && Number(existing.bed_id || 0) !== Number(required.bed_id || 0)) updatePayload.bed_id = Number(required.bed_id)
-        if (Number(existing.minutes || 0) !== Number(required.minutes || 0)) updatePayload.minutes = Number(required.minutes || 0)
-        if (['spraytan', 'patch_test'].includes(required.service_type) && existing.spraytan_service !== required.spraytan_service) updatePayload.spraytan_service = required.spraytan_service
-        if ((existing.default_status || '') !== required.default_status) updatePayload.default_status = required.default_status
-        if (Object.keys(updatePayload).length > 1) {
+        if (matchingWixService?.wix_service_id && !existing.wix_service_id) {
           const { error } = await supabase
             .from('wix_service_booking_map')
-            .update(updatePayload)
+            .update({ wix_service_id: matchingWixService.wix_service_id, wix_service_name: matchingWixService.wix_service_name, updated_at: new Date().toISOString() })
             .eq('id', existing.id)
-          if (error) console.error('Wix default mapping update failed:', { required, updatePayload, error })
+          if (error) console.error('Wix default mapping service ID update failed:', { required, error })
         }
         continue
       }
@@ -5501,31 +5147,29 @@ function formatMoney(value) {
         }
 
         if (mappedBooking.booking_type === 'sunbed') {
-          const mappedMinutes = Number(mappedBooking.minutes || 20)
-          const needsSunbedMapping = !booking.bed_id || Number(booking.bed_id) !== Number(mappedBooking.bed_id) || Number(booking.minutes || 0) !== mappedMinutes
-          const needsTimeline = !booking.booking_start || !booking.booking_end || (timeline.bookingEnd && new Date(booking.booking_end).getTime() !== new Date(timeline.bookingEnd).getTime())
+          const needsSunbedMapping = !booking.bed_id || !booking.minutes
+          const needsTimeline = !booking.booking_start || !booking.booking_end
           if (!needsSunbedMapping && !needsTimeline) continue
           if (needsSunbedMapping) {
             updatePayload.bed_id = Number(mappedBooking.bed_id)
-            updatePayload.minutes = mappedMinutes
+            updatePayload.minutes = Number(mappedBooking.minutes)
           }
           updatePayload.approval_status = mappedBooking.approval_status || booking.approval_status || 'approved'
         } else {
-          const mappedDuration = getSprayTanDisplayDurationMinutes(mappedBooking)
-          const needsSprayTanMapping = !booking.spraytan_service || Number(booking.spraytan_duration_minutes || 0) !== mappedDuration
-          const needsTimeline = !booking.booking_start || !booking.booking_end || (timeline.bookingEnd && new Date(booking.booking_end).getTime() !== new Date(timeline.bookingEnd).getTime())
+          const needsSprayTanMapping = !booking.spraytan_service || !booking.spraytan_duration_minutes
+          const needsTimeline = !booking.booking_start || !booking.booking_end
           if (!needsSprayTanMapping && !needsTimeline) continue
           if (needsSprayTanMapping) {
             updatePayload.spraytan_service = mappedBooking.spraytan_service
             updatePayload.spraytan_column = mappedBooking.spraytan_column
-            updatePayload.spraytan_duration_minutes = mappedDuration
+            updatePayload.spraytan_duration_minutes = mappedBooking.spraytan_duration_minutes
           }
           updatePayload.approval_status = mappedBooking.approval_status || booking.approval_status || 'pending'
           updatePayload.patch_test_required = mappedBooking.patch_test_required
         }
 
-        if (timeline.bookingStart) updatePayload.booking_start = timeline.bookingStart
-        if (timeline.bookingEnd) updatePayload.booking_end = timeline.bookingEnd
+        if (!booking.booking_start && timeline.bookingStart) updatePayload.booking_start = timeline.bookingStart
+        if (!booking.booking_end && timeline.bookingEnd) updatePayload.booking_end = timeline.bookingEnd
 
         const { error: updateError } = await supabase.from('Bookings').update(updatePayload).eq('id', booking.id)
         if (updateError) throw updateError
@@ -5564,53 +5208,19 @@ function formatMoney(value) {
     }
   }
 
-  function findServiceMapping(service, mappings = wixServiceMappings, { activeOnly = false, log = false } = {}) {
-    const normalized = normalizeWixServiceRecord(service)
-    const wixServiceId = normalized.wix_service_id
-    const wixServiceName = normalized.wix_service_name
-    const availableMappings = activeOnly
-      ? (mappings || []).filter((mapping) => mapping?.is_active !== false)
-      : (mappings || [])
-
-    let match = null
-    let matchType = ''
-
-    if (wixServiceId) {
-      match = availableMappings.find((mapping) => {
-        const mappingServiceId = String(mapping?.wix_service_id || '').trim()
-        return mappingServiceId && mappingServiceId === wixServiceId
-      }) || null
-      if (match) matchType = 'id'
-    }
-
-    if (!match) {
-      const serviceKey = normalizeWixServiceKey(wixServiceName)
-      if (serviceKey) {
-        match = availableMappings.find((mapping) => normalizeWixServiceKey(mapping?.wix_service_name) === serviceKey) || null
-        if (match) matchType = 'name'
-      }
-    }
-
-    if (log) {
-      console.log('WIX SERVICE MAPPING MATCH', {
-        wixServiceId,
-        wixServiceName,
-        matchType: match ? matchType : 'none',
-        mappingId: match?.id || null,
-        mappingServiceId: match?.wix_service_id || null,
-        mappingServiceName: match?.wix_service_name || null
-      })
-    }
-
-    return match
-  }
-
   function getSavedWixMappingForService(service, mappings = wixServiceMappings) {
-    return findServiceMapping(service, mappings, { activeOnly: true })
+    const mapping = getAnyWixMappingForService(service, mappings)
+    return mapping?.is_active !== false ? mapping : null
   }
 
   function getAnyWixMappingForService(service, mappings = wixServiceMappings) {
-    return findServiceMapping(service, mappings)
+    const normalized = normalizeWixServiceRecord(service)
+    if (normalized.wix_service_id) {
+      const idMatch = (mappings || []).find((mapping) => String(mapping.wix_service_id || '').trim() === normalized.wix_service_id)
+      if (idMatch) return idMatch
+    }
+    const serviceKey = normalizeWixServiceKey(normalized.wix_service_name)
+    return (mappings || []).find((mapping) => normalizeWixServiceKey(mapping.wix_service_name) === serviceKey) || null
   }
 
   function getWixMappingDraft(service) {
@@ -5642,19 +5252,9 @@ function formatMoney(value) {
   function applyWixServiceMapping(wixBookingPayload, mappings = wixServiceMappings) {
     const serviceName = getWixBookingServiceName(wixBookingPayload)
     const serviceId = getWixBookingServiceId(wixBookingPayload)
-    let mapping = findServiceMapping(wixBookingPayload, mappings, { activeOnly: true, log: true })
-    if (!mapping) {
-      mapping = WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(serviceName)] || null
-      if (mapping) {
-        console.log('WIX SERVICE MAPPING MATCH', { wixServiceId: serviceId, wixServiceName: serviceName, matchType: 'live_default' })
-      }
-    }
-    if (!mapping) {
-      mapping = inferWixServiceMapping(serviceName)
-      if (mapping) {
-        console.log('WIX SERVICE MAPPING MATCH', { wixServiceId: serviceId, wixServiceName: serviceName, matchType: 'inferred' })
-      }
-    }
+    const mapping = getAnyWixMappingForService({ wix_service_id: serviceId, wix_service_name: serviceName }, mappings)
+      || WIX_LIVE_SERVICE_DEFAULTS[normalizeWixServiceKey(serviceName)]
+      || inferWixServiceMapping(serviceName)
 
     if (!mapping) {
       throw new Error(`Wix service "${serviceName || 'Unknown service'}" needs mapping in Manager > Integrations > Wix > Service Booking Map.`)
@@ -5969,14 +5569,9 @@ function formatMoney(value) {
   function updateWixSyncHealth(nextHealth) {
     const merged = { ...wixSyncHealth, ...nextHealth }
     setWixSyncHealth(merged)
-    if (merged.nextSyncAt) setWixNextAutoSyncAt(merged.nextSyncAt)
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('glow_wix_sync_health', JSON.stringify(merged))
     }
-  }
-
-  function getNextWixAutoSyncIso() {
-    return new Date(Date.now() + WIX_AUTO_SYNC_INTERVAL_MS).toISOString()
   }
 
   function showToast(message, type = 'success') {
@@ -6061,11 +5656,6 @@ function formatMoney(value) {
   }
 
   async function runWixBookingSync({ automatic = false } = {}) {
-    if (wixSyncRunningRef.current) {
-      if (!automatic) showToast('Wix sync is already running.', 'warning')
-      return
-    }
-
     if (!automatic) {
       if (!requireStaffSignIn()) return
     }
@@ -6080,7 +5670,6 @@ function formatMoney(value) {
 
     setWixSyncRunning(true)
     setWixSyncStatus(automatic ? 'Automatic Wix sync running...' : 'Syncing Wix bookings...')
-    wixSyncRunningRef.current = true
     const diagnostics = {
       startedAt: new Date().toISOString(),
       finishedAt: '',
@@ -6090,8 +5679,6 @@ function formatMoney(value) {
       updated: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       skipped: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       warnings: { customers: 0, bookings: 0, runtime: 0, total: 0, messages: [] },
-      cancelled: { bookings: 0 },
-      rescheduled: { bookings: 0 },
       failed: { customers: 0, bookings: 0, forms: 0, notes: 0, total: 0 },
       errors: [],
       endpointErrors: [],
@@ -6105,7 +5692,7 @@ function formatMoney(value) {
     try {
       // Vercel fetches Wix data server-side with WIX_API_KEY/WIX_SITE_ID, then returns
       // normalized { customers: [...], bookings: [...] } for this dashboard to store.
-      const response = await fetch(wixSyncEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: automatic ? 'auto' : 'manual', sync_from_date: formatLocalDate(new Date()) }) })
+      const response = await fetch(wixSyncEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       if (!response.ok) throw new Error(`Wix sync endpoint returned ${response.status}`)
       const payload = await response.json()
       const wixCustomers = Array.isArray(payload?.customers) ? payload.customers : []
@@ -6159,18 +5746,14 @@ function formatMoney(value) {
             continue
           }
           const existingWixBooking = await checkWixBookingExists(mappedWixBooking.wix_booking_id)
-          const wasRescheduled = existingWixBooking && mappedWixBooking.booking_start && existingWixBooking.booking_start && new Date(mappedWixBooking.booking_start).getTime() !== new Date(existingWixBooking.booking_start).getTime()
-          const wasCancelled = ['cancelled', 'canceled'].includes(String(mappedWixBooking.status || '').toLowerCase()) || ['cancelled', 'canceled'].includes(String(mappedWixBooking.approval_status || '').toLowerCase())
           await upsertWixBooking(mappedWixBooking)
           if (existingWixBooking) {
             diagnostics.updated.bookings += 1
             diagnostics.updated.total += 1
-            if (wasRescheduled) diagnostics.rescheduled.bookings += 1
           } else {
             diagnostics.imported.bookings += 1
             diagnostics.imported.total += 1
           }
-          if (wasCancelled) diagnostics.cancelled.bookings += 1
         } catch (bookingError) {
           diagnostics.failed.bookings += 1
           diagnostics.failed.total += 1
@@ -6196,7 +5779,7 @@ function formatMoney(value) {
         : diagnostics.endpointErrors[0] || ''
       const syncStatusMessage = firstRealError ? `${syncSummary} First error: ${firstRealError}` : syncSummary
       setWixSyncStatus(syncStatusMessage)
-      updateWixSyncHealth({ state: diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), nextSyncAt: getNextWixAutoSyncIso(), error: firstRealError })
+      updateWixSyncHealth({ state: diagnostics.failed.total > 0 || diagnostics.endpointErrors.length > 0 ? 'failed' : 'connected', lastSyncAt: new Date().toISOString(), error: firstRealError })
       persistWixSyncDiagnostics(diagnostics)
       if (successfulTotal > 0) {
         await getBookings()
@@ -6212,12 +5795,11 @@ function formatMoney(value) {
       persistWixSyncDiagnostics(diagnostics)
       setWixFailedCount((count) => count + 1)
       setWixSyncStatus(error.message || 'Wix sync failed.')
-      updateWixSyncHealth({ state: 'failed', lastSyncAt: new Date().toISOString(), nextSyncAt: getNextWixAutoSyncIso(), error: 'Sync failed - check connection' })
+      updateWixSyncHealth({ state: 'failed', lastSyncAt: new Date().toISOString(), error: 'Sync failed - check connection' })
       if (!automatic) showDataLoadWarning('Wix booking sync failed. Check Vercel API route and credentials.', error)
       if (!automatic) showToast('Wix sync failed. Check connection.', 'error')
       console.error('Wix booking sync failed:', error)
     } finally {
-      wixSyncRunningRef.current = false
       setWixSyncRunning(false)
     }
   }
@@ -6229,7 +5811,7 @@ function formatMoney(value) {
       throw new Error('Wix booking payload must include wix_booking_id.')
     }
 
-    if (['spraytan', 'patch_test'].includes(String(wixBookingPayload.booking_type || '').toLowerCase())) {
+    if (wixBookingPayload.booking_type === 'spraytan') {
       const existingBooking = await checkWixBookingExists(wixBookingPayload.wix_booking_id)
       if (!existingBooking) return insertWixBooking(wixBookingPayload)
       if (!isExistingWixBookingRecord(existingBooking)) {
@@ -6878,8 +6460,6 @@ function formatMoney(value) {
       return false
     }
 
-    await consumeStaffTopUpMinutes(member, sessionMinutes, oldBalance)
-
     const { error: staffError } = await supabase.from('Staff').update({ weekly_free_minutes_balance: newBalance }).eq('id', staffId)
     if (staffError) {
       alert('Staff free minutes were not deducted. Please check the connection before starting the session.')
@@ -6904,7 +6484,7 @@ function formatMoney(value) {
   async function startSession(booking) {
     if (!requireStaffSignIn()) return
 
-    if (!booking || hasSessionStarted(booking)) {
+    if (!booking || booking.booking_start || ['undressing', 'running', 'cooldown'].includes(String(booking.status || '').toLowerCase())) {
       alert('This session has already been started.')
       return
     }
@@ -7080,7 +6660,7 @@ function formatMoney(value) {
       return 'Force Stopped'
     }
 
-    if (!hasSessionStarted(booking)) {
+    if (!booking?.booking_start && !booking?.customer_started_at) {
       return formatStatus(booking?.status || 'booked')
     }
 
@@ -7112,7 +6692,7 @@ function formatMoney(value) {
   }
 
   function getRemainingTime(booking) {
-    if (!hasSessionStarted(booking)) return null
+    if (!booking?.booking_start && !booking?.customer_started_at) return null
 
     const phase = getPhase(booking)
     let targetTime
@@ -8236,8 +7816,8 @@ function formatMoney(value) {
 
     setReceiptSearchLoading(true)
     setReceiptSearchError('')
-    const dayStart = receiptSearchStartDate ? new Date(`${receiptSearchStartDate}T00:00:00`) : null
-    const dayEnd = receiptSearchEndDate ? new Date(`${receiptSearchEndDate}T23:59:59.999`) : null
+    const dayStart = receiptSearchDate ? new Date(`${receiptSearchDate}T00:00:00`) : null
+    const dayEnd = receiptSearchDate ? new Date(`${receiptSearchDate}T23:59:59.999`) : null
     let query = supabase.from('Receipts').select('*').order('created_at', { ascending: false }).limit(200)
     if (dayStart && dayEnd) query = query.gte('created_at', dayStart.toISOString()).lte('created_at', dayEnd.toISOString())
     if (receiptSearchType) query = query.eq('receipt_type', receiptSearchType)
@@ -9016,25 +8596,6 @@ function formatMoney(value) {
     const oldBalance = Number(member.weekly_free_minutes_balance || 0)
     const newBalance = Math.max(0, oldBalance + amount)
 
-    if (amount > 0 && !String(member.id).startsWith('default-')) {
-      const { error: topUpError } = await supabase.from('StaffMinuteTopUps').insert({
-        staff_id: member.id,
-        staff_name: member.name,
-        minutes_amount: amount,
-        minutes_remaining: amount,
-        expiry_date: staffAdjustmentExpiryDate || null,
-        created_by_staff: getCurrentStaffUser()?.name || 'Manager',
-        notes: staffAdjustmentReason.trim(),
-        expired: false
-      })
-      if (topUpError) {
-        alert('Staff top-up was not saved. Please check the StaffMinuteTopUps table.')
-        showDataLoadWarning('Staff top-up save failed.', topUpError)
-        console.log(topUpError)
-        return
-      }
-    }
-
     const { error } = await supabase.from('Staff').update({ weekly_free_minutes_balance: newBalance }).eq('id', member.id)
     if (error) {
       alert('Staff minutes were not adjusted. Please check the connection and try again.')
@@ -9046,7 +8607,6 @@ function formatMoney(value) {
     await createStaffLog(member, 'Staff minutes adjusted', `Balance ${oldBalance} → ${newBalance}. Adjustment: ${amount}. Reason: ${staffAdjustmentReason.trim()}`)
     setStaffAdjustmentId('')
     setStaffAdjustmentAmount('')
-    setStaffAdjustmentExpiryDate('')
     setStaffAdjustmentReason('')
     getStaff()
   }
@@ -9763,6 +9323,14 @@ function formatMoney(value) {
           <option value="bank_transfer">Bank Transfer</option>
           <option value="other">Other</option>
         </select>
+        {showManagerView && (
+          <select value={commissionStaffId} onChange={(e) => setCommissionStaffId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
+            <option value="">Commission staff: signed-in staff</option>
+            {staff.filter((member) => member.is_active !== false).map((member) => (
+              <option key={member.id} value={member.id}>{member.name}</option>
+            ))}
+          </select>
+        )}
         <input placeholder="Payment notes optional" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
         {paymentMethod === 'cash' && summary.grandTotal > 0 && (
           <div style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginTop: '4px' }}>
@@ -10709,9 +10277,6 @@ function formatMoney(value) {
         ) : (
           selectedReport && renderReportTable(selectedReport.title, selectedReport.rows, selectedReport.columns)
         )}
-        <div style={{ marginTop: '14px' }}>
-          {renderExportsPanel()}
-        </div>
       </div>
     )
   }
@@ -10722,29 +10287,14 @@ function formatMoney(value) {
     const visibleCommissionTargetOptions = commissionRuleMatch && !commissionTargetOptions.some((option) => option.value === commissionRuleMatch)
       ? [{ value: commissionRuleMatch, label: commissionRuleMatch }, ...commissionTargetOptions]
       : commissionTargetOptions
-    const panelStyle = {
-      background: '#0b0b0b',
-      border: '1px solid #333',
-      borderRadius: '14px',
-      padding: '14px',
-      maxWidth: '980px',
-      margin: '0 auto',
-      width: '100%',
-      boxSizing: 'border-box',
-    }
-    const formGridStyle = {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-      gap: '10px',
-      marginBottom: '12px',
-      alignItems: 'center',
-    }
 
-    return (
-      <div style={panelStyle}>
-        <h3 style={{ marginTop: 0, textAlign: 'center' }}>Commission Settings</h3>
+    return renderCollapsibleSection(
+      'Commission Settings',
+      collapseCommissionSettings,
+      setCollapseCommissionSettings,
+      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
         {commissionRulesError && <p style={{ color: '#ffcc66' }}>Commission settings table not loaded: {commissionRulesError}</p>}
-        <div style={formGridStyle}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '10px', marginBottom: '12px' }}>
           <select
             value={commissionRuleScope}
             onChange={(e) => {
@@ -10754,10 +10304,11 @@ function formatMoney(value) {
             style={{ padding: '10px' }}
           >
             <option value="product">Product</option>
-            <option value="reward">Reward</option>
+            <option value="category">Product category</option>
+            <option value="spraytan">Spray tan service</option>
+            <option value="sunbed">Sunbed service</option>
+            <option value="package">Package</option>
             <option value="promo">Promo</option>
-            <option value="spraytan">Spray Tan</option>
-            <option value="sunbed_minutes">Sunbed Minutes</option>
           </select>
           <select
             value={commissionRuleMatch}
@@ -10771,7 +10322,7 @@ function formatMoney(value) {
           </select>
           <select value={commissionRuleType} onChange={(e) => setCommissionRuleType(e.target.value)} style={{ padding: '10px' }}>
             <option value="percentage">% percentage</option>
-            <option value="fixed">&pound; fixed amount</option>
+            <option value="fixed">£ fixed amount</option>
           </select>
           <input type="number" step="0.01" placeholder="Commission value" value={commissionRuleValue} onChange={(e) => setCommissionRuleValue(e.target.value)} style={{ padding: '10px' }} />
           <select value={commissionRuleStaffId} onChange={(e) => setCommissionRuleStaffId(e.target.value)} style={{ padding: '10px' }}>
@@ -10782,7 +10333,7 @@ function formatMoney(value) {
             <input type="checkbox" checked={commissionRuleActive} onChange={(e) => setCommissionRuleActive(e.target.checked)} />
             Active
           </label>
-          <button onClick={saveCommissionRule} style={{ minWidth: '116px', whiteSpace: 'nowrap' }}>{commissionRuleEditingId ? 'Save Rule' : 'Add Rule'}</button>
+          <button onClick={saveCommissionRule} style={{ minWidth: '108px', whiteSpace: 'nowrap' }}>{commissionRuleEditingId ? 'Save Rule' : 'Add Rule'}</button>
           {commissionRuleEditingId && <button onClick={clearCommissionRuleForm}>Cancel Edit</button>}
         </div>
 
@@ -10792,9 +10343,9 @@ function formatMoney(value) {
           ) : commissionRules.map((rule) => (
             <div key={rule.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
               <span>
-                <strong>{formatStatus(rule.rule_scope)}</strong> - {rule.match_value}<br />
+                <strong>{formatStatus(rule.rule_scope)}</strong> · {rule.match_value}<br />
                 <small style={{ color: '#aaa' }}>
-                  {rule.commission_type === 'fixed' ? formatMoney(rule.commission_value) : `${Number(rule.commission_value || 0)}%`} - {rule.staff_name || 'All staff'} - {rule.is_active === false ? 'Inactive' : 'Active'}
+                  {rule.commission_type === 'fixed' ? formatMoney(rule.commission_value) : `${Number(rule.commission_value || 0)}%`} · {rule.staff_name || 'All staff'} · {rule.is_active === false ? 'Inactive' : 'Active'}
                 </small>
               </span>
               <button onClick={() => editCommissionRule(rule)}>Edit</button>
@@ -10810,7 +10361,7 @@ function formatMoney(value) {
     if (!showManagerView) return null
 
     return renderCollapsibleSection(
-      'Rewards / Promos',
+      'Loyalty / Rewards',
       collapseLoyaltyRewards,
       setCollapseLoyaltyRewards,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
@@ -10849,9 +10400,6 @@ function formatMoney(value) {
               <button onClick={() => deleteLoyaltyRule(rule)}>Delete</button>
             </div>
           ))}
-        </div>
-        <div style={{ marginTop: '14px' }}>
-          {renderPromosPanel()}
         </div>
       </div>
     )
@@ -11044,6 +10592,7 @@ function formatMoney(value) {
       collapseCashUp,
       setCollapseCashUp,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
+        <h3 style={{ marginTop: 0 }}>Cash-Up — {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB')}</h3>
         {!signedIn && (
           <p style={{ color: '#ffcc66', fontWeight: 'bold', marginTop: 0 }}>
             Please sign in before entering float or completing cash up.
@@ -11054,34 +10603,35 @@ function formatMoney(value) {
         {locked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Cash-up is locked for this date. Manager access is required to make changes.</p>}
         {cashUpBlockMessage && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>{cashUpBlockMessage}</p>}
 
+        <div className="cash-up-v2-denominations">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0 }}>Cash Denomination Counter</h3>
+            <strong style={{ color: '#d4a853' }}>Counted total: {formatMoney(cashDenominationTotal)}</strong>
+          </div>
+          <p style={{ color: '#aaa', marginTop: 0 }}>Use this for the End of Day Cash Count. The counted total fills the cash count field automatically.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px' }}>
+            {CASH_DENOMINATIONS.map((denomination) => (
+              <label key={denomination.key} style={{ display: 'grid', gap: '4px', color: '#ddd', fontSize: '13px' }}>
+                {denomination.label}
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cashDenominations[denomination.key]}
+                  disabled={!canEditCashUp}
+                  onChange={(e) => updateCashDenomination(denomination.key, e.target.value)}
+                  style={{ padding: '9px' }}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
         <div className="cash-up-v2-columns">
         <section className="cash-up-v2-section cash-up-v2-start">
         <div style={{ border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
           <h3 style={{ marginTop: 0 }}>Start of Day Cash</h3>
           <p style={{ color: '#aaa', marginTop: 0 }}>Start of Day Float before trading begins.</p>
-          <div className="cash-up-v2-denominations cash-up-v2-start-counter">
-            <div className="cash-up-denomination-header">
-              <h4>Start of Day Cash Counter</h4>
-              <strong>Float total: {formatMoney(startCashDenominationTotal)}</strong>
-            </div>
-            <p style={{ color: '#aaa', marginTop: 0 }}>Use this when counting the opening till float. It fills Start of Day Float automatically.</p>
-            <div className="cash-denomination-grid">
-              {CASH_DENOMINATIONS.map((denomination) => (
-                <label key={denomination.key}>
-                  {denomination.label}
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={startCashDenominations[denomination.key]}
-                    disabled={!canEditCashUp}
-                    onChange={(e) => updateStartCashDenomination(denomination.key, e.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
-          </div>
-
           <strong style={{ display: 'block', marginBottom: '6px', color: '#d4a853' }}>Start of Day Float</strong>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 260px) auto', gap: '10px', alignItems: 'center' }}>
             <input
@@ -11183,29 +10733,6 @@ function formatMoney(value) {
           <div style={itemStyle}><span>Balances</span><h2>{formatMoney(summary.sprayTanBalanceRevenue)}</h2></div>
           <div style={itemStyle}><span>Total revenue</span><h2>{formatMoney(summary.totalRevenue)}</h2></div>
           <div style={itemStyle}><span>Expected cash in till</span><h2>{formatMoney(expectedCash)}</h2></div>
-        </div>
-
-        <div className="cash-up-v2-denominations cash-up-v2-end-counter">
-          <div className="cash-up-denomination-header">
-            <h4>End of Day Cash Counter</h4>
-            <strong>Counted total: {formatMoney(cashDenominationTotal)}</strong>
-          </div>
-          <p style={{ color: '#aaa', marginTop: 0 }}>Use this for the closing till count. It fills End of Day Cash Count automatically.</p>
-          <div className="cash-denomination-grid">
-            {CASH_DENOMINATIONS.map((denomination) => (
-              <label key={denomination.key}>
-                {denomination.label}
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={cashDenominations[denomination.key]}
-                  disabled={!canEditCashUp}
-                  onChange={(e) => updateCashDenomination(denomination.key, e.target.value)}
-                />
-              </label>
-            ))}
-          </div>
         </div>
 
         <strong style={{ display: 'block', marginBottom: '6px', color: '#d4a853' }}>End of Day Cash Count</strong>
@@ -11425,29 +10952,53 @@ function formatMoney(value) {
       collapseWixSync,
       setCollapseWixSync,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          {[
-            { label: 'New bookings imported', value: diagnostics.imported?.bookings || 0 },
-            { label: 'Bookings updated', value: diagnostics.updated?.bookings || 0 },
-            { label: 'Bookings cancelled', value: diagnostics.cancelled?.bookings || 0 },
-            { label: 'Bookings rescheduled', value: diagnostics.rescheduled?.bookings || 0 },
-            { label: 'Failed imports', value: wixFailedCount },
-            { label: 'Last successful sync', value: wixSyncHealth.lastSyncAt ? new Date(wixSyncHealth.lastSyncAt).toLocaleString('en-GB') : 'Never' },
-            { label: 'Next auto sync', value: wixNextAutoSyncAt ? new Date(wixNextAutoSyncAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '-' },
-            { label: 'Wix connection status', value: wixSyncRunning ? 'Syncing...' : wixSyncHealth.state === 'connected' ? 'Connected' : wixSyncHealth.state === 'failed' ? 'Failed' : 'Never synced' }
-          ].map((card) => (
-            <div key={card.label} style={{ background: '#111', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '10px', padding: '12px' }}>
-              <span style={{ color: '#aaa' }}>{card.label}</span>
-              <h3 style={{ marginBottom: 0, fontSize: '18px' }}>{card.value}</h3>
-            </div>
-          ))}
+        <p style={{ color: '#aaa', marginTop: 0 }}>
+          Foundation only. Real Wix webhook data should be verified in a Vercel API route before calling the Wix booking helpers.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Last sync status</span>
+            <h3 style={{ marginBottom: 0 }}>{wixSyncStatus}</h3>
+          </div>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Records found from Wix</span>
+            <h3 style={{ marginBottom: 0 }}>{diagnostics.found?.total ?? 0}</h3>
+          </div>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Imported / updated</span>
+            <h3 style={{ marginBottom: 0 }}>{diagnostics.imported?.total || 0} / {diagnostics.updated?.total || 0}</h3>
+          </div>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Skipped / warnings</span>
+            <h3 style={{ marginBottom: 0 }}>{diagnostics.skipped?.total || 0} / {diagnostics.warnings?.total || 0}</h3>
+          </div>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Records failed</span>
+            <h3 style={{ marginBottom: 0 }}>{wixFailedCount}</h3>
+          </div>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Current live services mapped</span>
+            <h3 style={{ marginBottom: 0 }}>{liveServicesMapped} / {activeWixServices.length}</h3>
+          </div>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Old/unmapped services</span>
+            <h3 style={{ marginBottom: 0 }}>{activeUnmappedServices.length + oldMappedServices.length}</h3>
+          </div>
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+            <span>Bookings failed from old names</span>
+            <h3 style={{ marginBottom: 0 }}>{oldServiceMappingFailures.length}</h3>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
-          <button type="button" onClick={exportWixSyncedBookingsCsv}>Export Wix Synced Bookings CSV</button>
-          <button type="button" onClick={exportFailedWixImportsCsv}>Export Failed Wix Imports CSV</button>
-          <button type="button" onClick={exportDuplicateCustomersCsv}>Export Duplicate Customers CSV</button>
-          <button type="button" onClick={() => exportSelectedDateTable('Bookings')}>Export All Bookings Backup CSV</button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+          {['customers', 'bookings', 'forms', 'notes'].map((table) => (
+            <div key={table} style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+              <strong style={{ color: '#d4a853' }}>{formatStatus(table)}</strong>
+              <p style={{ margin: '6px 0 0', color: '#ccc' }}>
+                Found {diagnostics.found?.[table] || 0} / Imported {diagnostics.imported?.[table] || 0} / Updated {diagnostics.updated?.[table] || 0} / Skipped {diagnostics.skipped?.[table] || 0} / Failed {diagnostics.failed?.[table] || 0}
+              </p>
+            </div>
+          ))}
         </div>
 
         <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.28)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
@@ -11699,12 +11250,15 @@ function formatMoney(value) {
       { key: 'staff', label: 'Staff Management', isOpen: !collapseStaffManagement },
       { key: 'maintenance', label: 'Maintenance', isOpen: !collapseMaintenance },
       { key: 'products', label: 'Products', isOpen: !collapseProducts },
+      { key: 'promos', label: 'Offers / Promos', isOpen: !collapsePromos },
       { key: 'corrections', label: 'Booking / Payment Corrections', isOpen: !collapseCorrections },
       { key: 'wix', label: 'Wix Booking Sync', isOpen: !collapseWixSync },
       { key: 'receipts', label: 'Receipt History', isOpen: !collapseReceipts },
+      { key: 'exports', label: 'Exports / Backups', isOpen: !collapseExports },
       { key: 'daily', label: 'Daily Takings', isOpen: !collapseDailyTakings },
       { key: 'reports', label: 'Reports', isOpen: !collapseReports },
-      { key: 'loyalty', label: 'Rewards / Promos', isOpen: !collapseLoyaltyRewards },
+      { key: 'commission', label: 'Commission Settings', isOpen: !collapseCommissionSettings },
+      { key: 'loyalty', label: 'Loyalty / Rewards', isOpen: !collapseLoyaltyRewards },
       { key: 'duplicates', label: 'Duplicate Customers Report', isOpen: !collapseDuplicateCustomers }
     ]
 
@@ -11739,29 +11293,8 @@ function formatMoney(value) {
       setCollapseReceipts,
       <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
-            Date From
-            <input type="date" value={receiptSearchStartDate} onChange={(e) => setReceiptSearchStartDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
-            Date To
-            <input type="date" value={receiptSearchEndDate} onChange={(e) => setReceiptSearchEndDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <input list="receipt-customer-options" placeholder="Customer name" value={receiptSearchCustomer} onChange={(e) => setReceiptSearchCustomer(e.target.value)} style={{ padding: '10px' }} />
-          <datalist id="receipt-customer-options">
-            {customers
-              .filter((customer) => {
-                const query = receiptSearchCustomer.trim().toLowerCase()
-                if (!query) return true
-                return String(customer.name || '').toLowerCase().includes(query)
-                  || String(customer.first_name || '').toLowerCase().includes(query)
-                  || String(customer.last_name || '').toLowerCase().includes(query)
-                  || String(customer.phone || '').toLowerCase().includes(query)
-                  || String(customer.email || '').toLowerCase().includes(query)
-              })
-              .slice(0, 30)
-              .map((customer) => <option key={customer.id} value={customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()} />)}
-          </datalist>
+          <input type="date" value={receiptSearchDate} onChange={(e) => setReceiptSearchDate(e.target.value)} style={{ padding: '10px' }} />
+          <input placeholder="Customer name" value={receiptSearchCustomer} onChange={(e) => setReceiptSearchCustomer(e.target.value)} style={{ padding: '10px' }} />
           <select value={receiptSearchType} onChange={(e) => setReceiptSearchType(e.target.value)} style={{ padding: '10px' }}>
             <option value="">All receipt types</option>
             <option value="minutes_topup">Minutes Top-Up</option>
@@ -11845,27 +11378,25 @@ function formatMoney(value) {
 
   function renderCollapsibleSection(title, isCollapsed, setIsCollapsed, children) {
     if (isCollapsed) return null
-    const showSectionHeader = !['Cash-Up', 'Reports', 'Staff Calendar'].includes(title)
 
     return (
       <div style={{ marginBottom: '18px', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '18px', overflow: 'hidden', background: '#111' }}>
-        {showSectionHeader && (
-          <div
-            style={{
-              width: '100%',
-              borderRadius: 0,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '14px 18px',
-              fontSize: '16px',
-              background: '#0b0b0b',
-              borderBottom: '1px solid rgba(212,168,83,0.2)'
-            }}
-          >
-            <span>{title}</span>
-          </div>
-        )}
+        <div
+          style={{
+            width: '100%',
+            borderRadius: 0,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '14px 18px',
+            fontSize: '16px',
+            background: '#0b0b0b',
+            borderBottom: '1px solid rgba(212,168,83,0.2)'
+          }}
+        >
+          <span>{title}</span>
+          <button onClick={() => setIsCollapsed(true)}>Hide</button>
+        </div>
 
         <div style={{ padding: '16px' }}>
           {children}
@@ -12052,6 +11583,7 @@ function formatMoney(value) {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          <h3 style={{ color: '#1c1710', margin: 0 }}>Weekly View</h3>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button type="button" onClick={() => moveSelectedWeek(-1)}>Previous Week</button>
             <strong style={{ color: '#6b4b17' }}>{new Date(`${weekDates[0]}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} - {new Date(`${weekDates[6]}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
@@ -12101,85 +11633,66 @@ function formatMoney(value) {
 
   function renderStaffManagementPanel() {
     if (!showManagerView) return null
-    const staffPanelStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', width: '100%', boxSizing: 'border-box' }
-    const staffHeadingStyle = { marginTop: 0, textAlign: 'center' }
-    const staffColumnGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: '14px', alignItems: 'start' }
 
     return renderCollapsibleSection(
       'Staff Management',
       collapseStaffManagement,
       setCollapseStaffManagement,
-      <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+      <>
         {staffLoadError && <p style={{ color: '#ff7875' }}>{staffLoadError}</p>}
 
-        <div style={staffColumnGridStyle}>
-          <div style={staffPanelStyle}>
-            <h3 style={staffHeadingStyle}>Add/Edit Staff</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '12px' }}>
-              <input placeholder="Staff name" value={staffName} onChange={(e) => setStaffName(e.target.value)} style={{ padding: '10px' }} />
-              <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)} style={{ padding: '10px' }}>
-                <option value="staff">Staff</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-              </select>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', border: '1px solid #333', padding: '10px', background: '#111' }}>
-                <input type="checkbox" checked={staffCanSprayTan} onChange={(e) => setStaffCanSprayTan(e.target.checked)} />
-                Spray tan artist
-              </label>
-              <button onClick={saveStaffMember}>{staffEditingId ? 'Save Staff' : 'Add Staff'}</button>
-              {staffEditingId && <button onClick={() => { setStaffEditingId(''); setStaffName(''); setStaffRole('staff'); setStaffCanSprayTan(false) }}>Cancel Edit</button>}
-            </div>
-
-            <select
-              value=""
-              onChange={(e) => {
-                const member = staff.find((item) => String(item.id) === e.target.value)
-                if (member) editStaffMember(member)
-              }}
-              style={{ width: '100%', padding: '10px', marginBottom: '12px', boxSizing: 'border-box' }}
-            >
-              <option value="">Select staff to edit...</option>
-              {staff.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} - {formatStatus(member.role)} - {member.weekly_free_minutes_balance || 0} mins - {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} - {member.is_active === false ? 'Inactive' : 'Active'}
-                </option>
-              ))}
-            </select>
-
-            <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px' }}>
-              {staff.map((member) => (
-                <div key={member.id} style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '10px', borderBottom: '1px solid #222' }}>
-                  <span><strong>{member.name}</strong> - {formatStatus(member.role)} - {member.weekly_free_minutes_balance || 0} mins - {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} - {member.is_active === false ? 'Inactive' : 'Active'}</span>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button onClick={() => editStaffMember(member)}>Edit</button>
-                    <button onClick={() => deactivateStaffMember(member)}>Deactivate</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={staffPanelStyle}>
-            <h3 style={staffHeadingStyle}>Adjust Staff Free Minutes</h3>
-            <select value={staffAdjustmentId} onChange={(e) => setStaffAdjustmentId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
-              <option value="">Select staff</option>
-              {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-            </select>
-            <input type="number" placeholder="+/- minutes" value={staffAdjustmentAmount} onChange={(e) => setStaffAdjustmentAmount(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
-            <label style={{ display: 'grid', gap: '5px', color: '#ddd', marginBottom: '8px' }}>
-              Optional expiry date for top-up minutes
-              <input type="date" value={staffAdjustmentExpiryDate} onChange={(e) => setStaffAdjustmentExpiryDate(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }} />
-            </label>
-            <input placeholder="Reason" value={staffAdjustmentReason} onChange={(e) => setStaffAdjustmentReason(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
-            <p style={{ color: '#aaa', marginTop: 0 }}>Weekly staff free minutes reset to 18 every Monday. Active manager top-ups are preserved until their expiry date.</p>
-            <button onClick={adjustStaffMinutes}>Apply Staff Adjustment</button>
-          </div>
-
-          <div>
-            {renderCommissionSettingsPanel()}
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '15px' }}>
+          <input placeholder="Staff name" value={staffName} onChange={(e) => setStaffName(e.target.value)} style={{ padding: '10px' }} />
+          <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)} style={{ padding: '10px' }}>
+            <option value="staff">Staff</option>
+            <option value="manager">Manager</option>
+            <option value="admin">Admin</option>
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', border: '1px solid #333', padding: '10px', background: '#111' }}>
+            <input type="checkbox" checked={staffCanSprayTan} onChange={(e) => setStaffCanSprayTan(e.target.checked)} />
+            Spray tan artist
+          </label>
+          <button onClick={saveStaffMember}>{staffEditingId ? 'Save Staff' : 'Add Staff'}</button>
+          {staffEditingId && <button onClick={() => { setStaffEditingId(''); setStaffName(''); setStaffRole('staff'); setStaffCanSprayTan(false) }}>Cancel Edit</button>}
         </div>
-      </div>
+
+        <select
+          value=""
+          onChange={(e) => {
+            const member = staff.find((item) => String(item.id) === e.target.value)
+            if (member) editStaffMember(member)
+          }}
+          style={{ width: '100%', padding: '10px', marginBottom: '12px', boxSizing: 'border-box' }}
+        >
+          <option value="">Select staff to edit...</option>
+          {staff.map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.name} — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} — {member.is_active === false ? 'Inactive' : 'Active'}
+            </option>
+          ))}
+        </select>
+
+        <div style={{ maxHeight: '170px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px', marginBottom: '15px' }}>
+          {staff.map((member) => (
+            <div key={member.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' }}>
+              <span><strong>{member.name}</strong> — {formatStatus(member.role)} — {member.weekly_free_minutes_balance || 0} mins — {isSprayTanArtist(member) ? 'Spray tan artist' : 'No spray tan'} — {member.is_active === false ? 'Inactive' : 'Active'}</span>
+              <button onClick={() => editStaffMember(member)}>Edit</button>
+              <button onClick={() => deactivateStaffMember(member)}>Deactivate</button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
+          <h3 style={{ marginTop: 0 }}>Adjust Staff Free Minutes</h3>
+          <select value={staffAdjustmentId} onChange={(e) => setStaffAdjustmentId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
+            <option value="">Select staff</option>
+            {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+          </select>
+          <input type="number" placeholder="+/- minutes" value={staffAdjustmentAmount} onChange={(e) => setStaffAdjustmentAmount(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
+          <input placeholder="Reason" value={staffAdjustmentReason} onChange={(e) => setStaffAdjustmentReason(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
+          <button onClick={adjustStaffMinutes}>Apply Staff Adjustment</button>
+        </div>
+      </>
     )
   }
 
@@ -12226,9 +11739,6 @@ function formatMoney(value) {
     const selectedProduct = products.find((product) => String(product.id) === String(selectedProductManagementId))
     const lowStockProducts = getLowStockProducts()
     const outOfStockProducts = getOutOfStockProducts()
-    const productPanelStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', width: '100%', boxSizing: 'border-box' }
-    const productHeadingStyle = { marginTop: 0, textAlign: 'center' }
-    const productColumnGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(285px, 1fr))', gap: '14px', alignItems: 'start' }
     const renderSubcategoryControls = ({ category, selected, setSelected }) => {
       if (!shouldShowProductSubcategories(category)) return null
       return (
@@ -12255,155 +11765,148 @@ function formatMoney(value) {
       <>
         {productLoadError && <p style={{ color: '#ff7875' }}>{productLoadError}</p>}
 
-        <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '15px' }}>
+          <h3 style={{ marginTop: 0 }}>Product Categories</h3>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px' }}>
+            <input
+              placeholder="New category"
+              value={newProductCategoryName}
+              onChange={(e) => setNewProductCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addProductCategory()
+              }}
+              style={{ flex: '1 1 220px', padding: '10px' }}
+            />
+            <button type="button" onClick={addProductCategory}>Add Category</button>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {productCategories.map((category) => {
+              const categoryKey = getProductCategoryKey(category)
+              const assignedCount = products.filter((product) => getProductCategoryKey(product.category) === categoryKey || normalizeProductCategory(product.category) === category.value).length
+              return (
+                <span key={getProductCategoryKey(category)} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', border: '1px solid rgba(212,168,83,0.35)', background: '#111', color: '#f3e6c3', padding: '7px 9px', borderRadius: '8px' }}>
+                  {category.label}
+                  {assignedCount > 0 && <small style={{ color: '#aaa' }}>{assignedCount}</small>}
+                  <button
+                    type="button"
+                    onClick={() => deleteProductCategory(category)}
+                    title={assignedCount > 0 ? 'Reassign products before deleting' : 'Delete category'}
+                    style={{ width: '18px', height: '18px', minWidth: '18px', padding: 0, borderRadius: '50%', border: '1px solid rgba(212,168,83,0.3)', background: '#080808', color: assignedCount > 0 ? '#777' : '#d4a853', boxShadow: 'none', lineHeight: '14px' }}
+                  >
+                    x
+                  </button>
+                </span>
+              )
+            })}
+          </div>
+          <p style={{ color: '#aaa', margin: '10px 0 0', fontSize: '13px' }}>Categories in use cannot be deleted until those products are reassigned.</p>
+        </div>
 
-          <div style={productColumnGridStyle}>
-            <div style={productPanelStyle}>
-              <h3 style={productHeadingStyle}>Product Categories</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '12px' }}>
-                <input
-                  placeholder="New category"
-                  value={newProductCategoryName}
-                  onChange={(e) => setNewProductCategoryName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') addProductCategory()
-                  }}
-                  style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-                />
-                <button type="button" onClick={addProductCategory}>Add Category</button>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {productCategories.map((category) => {
-                  const categoryKey = getProductCategoryKey(category)
-                  const assignedCount = products.filter((product) => getProductCategoryKey(product.category) === categoryKey || normalizeProductCategory(product.category) === category.value).length
-                  return (
-                    <span key={getProductCategoryKey(category)} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', border: '1px solid rgba(212,168,83,0.35)', background: '#111', color: '#f3e6c3', padding: '7px 9px', borderRadius: '8px' }}>
-                      {category.label}
-                      {assignedCount > 0 && <small style={{ color: '#aaa' }}>{assignedCount}</small>}
-                      <button
-                        type="button"
-                        onClick={() => deleteProductCategory(category)}
-                        title={assignedCount > 0 ? 'Reassign products before deleting' : 'Delete category'}
-                        style={{ width: '18px', height: '18px', minWidth: '18px', padding: 0, borderRadius: '50%', border: '1px solid rgba(212,168,83,0.3)', background: '#080808', color: assignedCount > 0 ? '#777' : '#d4a853', boxShadow: 'none', lineHeight: '14px' }}
-                      >
-                        x
-                      </button>
-                    </span>
-                  )
-                })}
-              </div>
-              <p style={{ color: '#aaa', margin: '10px 0 0', fontSize: '13px' }}>Categories in use cannot be deleted until those products are reassigned.</p>
-            </div>
+        <div style={{ background: '#10100f', border: '1px solid rgba(212,168,83,0.45)', borderRadius: '14px', padding: '14px', marginBottom: '15px' }}>
+          <h3 style={{ marginTop: 0, color: '#d4a853' }}>Add New Product</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+            <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
+            <select value={productCategory} onChange={(e) => { setProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setProductSubcategories([]) }} style={{ padding: '10px' }}>
+              {productCategories.map((category) => (
+                <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
+              ))}
+            </select>
+            {renderSubcategoryControls({ category: productCategory, selected: productSubcategories, setSelected: setProductSubcategories })}
+            <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
+            <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
+              <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
+              Active
+            </label>
+            <button onClick={saveProduct}>Add Product</button>
+          </div>
+        </div>
 
-            <div style={{ ...productPanelStyle, background: '#10100f', border: '1px solid rgba(212,168,83,0.45)' }}>
-              <h3 style={{ ...productHeadingStyle, color: '#d4a853' }}>Add New Product</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
-                <input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} style={{ padding: '10px' }} />
-                <select value={productCategory} onChange={(e) => { setProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setProductSubcategories([]) }} style={{ padding: '10px' }}>
+        <button onClick={() => { if (requireStaffSignIn()) setShowStandalonePOS(true) }} style={{ marginBottom: '15px' }}>Products / POS</button>
+
+        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', marginBottom: '15px' }}>
+          <h3 style={{ marginTop: 0 }}>Stock Warnings</h3>
+          {lowStockProducts.length === 0 && outOfStockProducts.length === 0 ? (
+            <p style={{ color: '#aaa', marginBottom: 0 }}>No low or out of stock products.</p>
+          ) : (
+            <>
+              {outOfStockProducts.length > 0 && (
+                <div style={{ marginBottom: '10px' }}>
+                  <strong style={{ color: '#ff7875' }}>Out of stock</strong>
+                  {outOfStockProducts.map((product) => (
+                    <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} — Stock {getProductStockQuantity(product)}</div>
+                  ))}
+                </div>
+              )}
+              {lowStockProducts.length > 0 && (
+                <div>
+                  <strong style={{ color: '#ffcc66' }}>Low stock</strong>
+                  {lowStockProducts.map((product) => (
+                    <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} — Stock {getProductStockQuantity(product)}</div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ background: '#14120f', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '14px', padding: '14px' }}>
+          <h3 style={{ marginTop: 0, color: '#f0d28a' }}>Manage Existing Product</h3>
+          <select
+            value={selectedProductManagementId}
+            onChange={(e) => selectProductForManagement(e.target.value)}
+            style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
+          >
+            <option value="">Select product...</option>
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.name} — {getProductCategoryLabel(product.category)} — £{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — {getProductStockStatus(product)} — {isProductActive(product) ? 'Active' : 'Inactive'}
+              </option>
+            ))}
+          </select>
+
+          {selectedProduct && (
+            <div style={{ marginTop: '12px', padding: '12px', background: '#111', borderRadius: '12px', border: '1px solid #333' }}>
+              <div>
+                <strong>{selectedProduct.name}</strong><br />
+                <span>{getProductCategoryLabel(selectedProduct.category)} — £{Number(selectedProduct.price || 0).toFixed(2)} — Stock {getProductStockQuantity(selectedProduct)}</span><br />
+                <span style={getProductStockStatusStyle(selectedProduct)}>{getProductStockStatus(selectedProduct)}</span><br />
+                <span>Status: {isProductActive(selectedProduct) ? 'Active' : 'Inactive'}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
+                <input placeholder="Product name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} style={{ padding: '10px' }} />
+                <select value={editProductCategory} onChange={(e) => { setEditProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setEditProductSubcategories([]) }} style={{ padding: '10px' }}>
                   {productCategories.map((category) => (
                     <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
                   ))}
                 </select>
-                {renderSubcategoryControls({ category: productCategory, selected: productSubcategories, setSelected: setProductSubcategories })}
-                <input type="number" step="0.01" placeholder="Price" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} style={{ padding: '10px' }} />
-                <input type="number" placeholder="Stock quantity" value={productStockQuantity} onChange={(e) => setProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
+                {renderSubcategoryControls({ category: editProductCategory, selected: editProductSubcategories, setSelected: setEditProductSubcategories })}
+                <input type="number" step="0.01" placeholder="Price" value={editProductPrice} onChange={(e) => setEditProductPrice(e.target.value)} style={{ padding: '10px' }} />
+                <input type="number" placeholder="Stock quantity" value={editProductStockQuantity} onChange={(e) => setEditProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-                  <input type="checkbox" checked={productIsActive} onChange={(e) => setProductIsActive(e.target.checked)} />
+                  <input type="checkbox" checked={editProductIsActive} onChange={(e) => setEditProductIsActive(e.target.checked)} />
                   Active
                 </label>
-                <button onClick={saveProduct}>Add Product</button>
+                <button onClick={saveProductChanges} style={{ minWidth: '190px', fontSize: '13px', whiteSpace: 'normal' }}>Save Product Changes</button>
+                <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
+                <button onClick={() => deleteProduct(selectedProduct)} style={{ borderColor: 'rgba(255,120,117,0.5)', color: '#ffaaa6' }}>Delete Product</button>
+              </div>
+              <div style={{ marginTop: '12px', padding: '12px', background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px' }}>
+                <strong>Stock adjustment</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginTop: '10px' }}>
+                  <select value={stockMovementType} onChange={(e) => setStockMovementType(e.target.value)} style={{ padding: '10px' }}>
+                    <option value="restock">Add stock / delivery</option>
+                    <option value="damaged">Damaged</option>
+                    <option value="lost">Lost</option>
+                    <option value="manual_remove">Manual remove</option>
+                  </select>
+                  <input type="number" placeholder="Quantity" value={stockMovementQuantity} onChange={(e) => setStockMovementQuantity(e.target.value)} style={{ padding: '10px' }} />
+                  <input placeholder="Restock/damage/loss note" value={stockMovementNote} onChange={(e) => setStockMovementNote(e.target.value)} style={{ padding: '10px' }} />
+                  <button onClick={adjustSelectedProductStock}>Save Stock Movement</button>
+                </div>
               </div>
             </div>
-
-            <div style={{ display: 'grid', gap: '14px' }}>
-              <div style={productPanelStyle}>
-                <h3 style={productHeadingStyle}>Stock Warnings</h3>
-                {lowStockProducts.length === 0 && outOfStockProducts.length === 0 ? (
-                  <p style={{ color: '#aaa', marginBottom: 0 }}>No low or out of stock products.</p>
-                ) : (
-                  <>
-                    {outOfStockProducts.length > 0 && (
-                      <div style={{ marginBottom: '10px' }}>
-                        <strong style={{ color: '#ff7875' }}>Out of stock</strong>
-                        {outOfStockProducts.map((product) => (
-                          <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} - Stock {getProductStockQuantity(product)}</div>
-                        ))}
-                      </div>
-                    )}
-                    {lowStockProducts.length > 0 && (
-                      <div>
-                        <strong style={{ color: '#ffcc66' }}>Low stock</strong>
-                        {lowStockProducts.map((product) => (
-                          <div key={product.id} style={{ padding: '6px 0', borderBottom: '1px solid #222' }}>{product.name} - Stock {getProductStockQuantity(product)}</div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div style={{ ...productPanelStyle, background: '#14120f', border: '1px solid rgba(212,168,83,0.25)' }}>
-                <h3 style={{ ...productHeadingStyle, color: '#f0d28a' }}>Manage Existing Product</h3>
-                <select
-                  value={selectedProductManagementId}
-                  onChange={(e) => selectProductForManagement(e.target.value)}
-                  style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-                >
-                  <option value="">Select product...</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name} - {getProductCategoryLabel(product.category)} - &pound;{Number(product.price || 0).toFixed(2)} - Stock {getProductStockQuantity(product)} - {getProductStockStatus(product)} - {isProductActive(product) ? 'Active' : 'Inactive'}
-                    </option>
-                  ))}
-                </select>
-
-                {selectedProduct && (
-                  <div style={{ marginTop: '12px', padding: '12px', background: '#111', borderRadius: '12px', border: '1px solid #333' }}>
-                    <div>
-                      <strong>{selectedProduct.name}</strong><br />
-                      <span>{getProductCategoryLabel(selectedProduct.category)} - &pound;{Number(selectedProduct.price || 0).toFixed(2)} - Stock {getProductStockQuantity(selectedProduct)}</span><br />
-                      <span style={getProductStockStatusStyle(selectedProduct)}>{getProductStockStatus(selectedProduct)}</span><br />
-                      <span>Status: {isProductActive(selectedProduct) ? 'Active' : 'Inactive'}</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
-                      <input placeholder="Product name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} style={{ padding: '10px' }} />
-                      <select value={editProductCategory} onChange={(e) => { setEditProductCategory(e.target.value); if (!shouldShowProductSubcategories(e.target.value)) setEditProductSubcategories([]) }} style={{ padding: '10px' }}>
-                        {productCategories.map((category) => (
-                          <option key={getProductCategoryKey(category)} value={category.value}>{category.label}</option>
-                        ))}
-                      </select>
-                      {renderSubcategoryControls({ category: editProductCategory, selected: editProductSubcategories, setSelected: setEditProductSubcategories })}
-                      <input type="number" step="0.01" placeholder="Price" value={editProductPrice} onChange={(e) => setEditProductPrice(e.target.value)} style={{ padding: '10px' }} />
-                      <input type="number" placeholder="Stock quantity" value={editProductStockQuantity} onChange={(e) => setEditProductStockQuantity(e.target.value)} style={{ padding: '10px' }} />
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd' }}>
-                        <input type="checkbox" checked={editProductIsActive} onChange={(e) => setEditProductIsActive(e.target.checked)} />
-                        Active
-                      </label>
-                      <button onClick={saveProductChanges} style={{ minWidth: '190px', fontSize: '13px', whiteSpace: 'normal' }}>Save Product Changes</button>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button onClick={() => deactivateProduct(selectedProduct)}>Deactivate</button>
-                        <button onClick={() => deleteProduct(selectedProduct)} style={{ borderColor: 'rgba(255,120,117,0.5)', color: '#ffaaa6' }}>Delete Product</button>
-                      </div>
-                    </div>
-                    <div style={{ marginTop: '12px', padding: '12px', background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px' }}>
-                      <strong>Stock adjustment</strong>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '10px' }}>
-                        <select value={stockMovementType} onChange={(e) => setStockMovementType(e.target.value)} style={{ padding: '10px' }}>
-                          <option value="restock">Add stock / delivery</option>
-                          <option value="damaged">Damaged</option>
-                          <option value="lost">Lost</option>
-                          <option value="manual_remove">Manual remove</option>
-                        </select>
-                        <input type="number" placeholder="Quantity" value={stockMovementQuantity} onChange={(e) => setStockMovementQuantity(e.target.value)} style={{ padding: '10px' }} />
-                        <input placeholder="Restock/damage/loss note" value={stockMovementNote} onChange={(e) => setStockMovementNote(e.target.value)} style={{ padding: '10px' }} />
-                        <button onClick={adjustSelectedProductStock}>Save Stock Movement</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
         {showStandalonePOS && (
@@ -12412,7 +11915,7 @@ function formatMoney(value) {
               <h2>Products / POS</h2>
               {getActiveProducts().map((product) => (
                 <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '12px', marginBottom: '8px' }}>
-                  <div><strong>{product.name}</strong><br /><small>&pound;{Number(product.price || 0).toFixed(2)} - Stock {getProductStockQuantity(product)} - <span style={getProductStockStatusStyle(product)}>{getProductStockStatus(product)}</span></small></div>
+                  <div><strong>{product.name}</strong><br /><small>£{Number(product.price || 0).toFixed(2)} — Stock {getProductStockQuantity(product)} — <span style={getProductStockStatusStyle(product)}>{getProductStockStatus(product)}</span></small></div>
                   <button onClick={() => addProductToCart(product)}>Add</button>
                 </div>
               ))}
@@ -12423,6 +11926,14 @@ function formatMoney(value) {
                 <option value="bank_transfer">Bank Transfer</option>
                 <option value="other">Other</option>
               </select>
+              {showManagerView && (
+                <select value={commissionStaffId} onChange={(e) => setCommissionStaffId(e.target.value)} style={{ width: '100%', padding: '10px', margin: '8px 0' }}>
+                  <option value="">Commission staff: signed-in staff</option>
+                  {staff.filter((member) => member.is_active !== false).map((member) => (
+                    <option key={member.id} value={member.id}>{member.name}</option>
+                  ))}
+                </select>
+              )}
               {posPaymentMethod === 'cash' && (
                 <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '12px', padding: '12px', marginBottom: '10px' }}>
                   <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>Cash received</label>
@@ -12438,7 +11949,7 @@ function formatMoney(value) {
                   <p style={{ margin: 0 }}>
                     Change to give:
                     <strong style={{ marginLeft: '6px', color: '#d4a853' }}>
-                      &pound;{Math.max(0, Number(posCashReceived || 0) - getProductCartTotal()).toFixed(2)}
+                      £{Math.max(0, Number(posCashReceived || 0) - getProductCartTotal()).toFixed(2)}
                     </strong>
                   </p>
                 </div>
@@ -12578,13 +12089,14 @@ function formatMoney(value) {
       .slice()
       .sort((a, b) => (getBookingDisplayDateTime(a)?.getTime() || 0) - (getBookingDisplayDateTime(b)?.getTime() || 0))
 
-    const timelineSlots = generateTimeSlots('08:00', '21:00')
+    const timelineSlots = generateTimeSlots('09:00', '20:00')
 
     return (
       <div className="spraytan-view">
         <div className="calendar-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <div>
-
+            <h2 style={{ marginBottom: '6px' }}>Spray Tans</h2>
+            <p style={{ color: '#aaa', margin: 0 }}>Phase 1 calendar foundation. Wix sync, automation and artist availability will be connected later.</p>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
@@ -12677,13 +12189,14 @@ function formatMoney(value) {
     const sprayTanBookings = getSprayTanBookingsForSelectedDate()
       .slice()
       .sort((a, b) => (getBookingDisplayDateTime(a)?.getTime() || 0) - (getBookingDisplayDateTime(b)?.getTime() || 0))
-    const timelineSlots = generateTimeSlots('08:00', '21:00')
+    const timelineSlots = generateTimeSlots('09:00', '20:00')
 
     return (
       <div className="spraytan-view">
         <div className="calendar-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <div>
-
+            <h2 style={{ marginBottom: '6px' }}>Spray Tans</h2>
+            <p style={{ color: '#aaa', margin: 0 }}>Manual spray tan appointments are separate from the sunbed calendar.</p>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
@@ -12707,84 +12220,70 @@ function formatMoney(value) {
         </div>
 
         <div style={{ background: 'linear-gradient(180deg, rgba(205, 154, 143, 0.085), rgba(20, 16, 15, 0.96))', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
-          <table className="spraytan-calendar-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px', tableLayout: 'fixed' }}>
-            <thead>
-              <tr>
-                <th style={{ width: '90px', color: '#d4a853', padding: '8px', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>
-                {SPRAY_TAN_COLUMNS.map((column) => <th key={column.value} style={{ color: '#d4a853', padding: '8px', textAlign: 'left', borderBottom: '1px solid #333' }}>{column.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {timelineSlots.map((time) => {
-                const currentRow = isCurrentTimelineSlot(time, SLOT_MINUTES)
-                return (
-                  <tr key={time} data-spraytan-current-time-row={currentRow ? 'true' : undefined}>
-                    <td style={{ borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '8px', verticalAlign: 'top', color: '#f3e6c3', fontWeight: 'bold', height: '52px' }}>
-                      {time}{currentRow && <><br /><span style={{ fontSize: '12px', color: '#ffcc66' }}>NOW</span></>}
-                    </td>
-                    {SPRAY_TAN_COLUMNS.map((column) => {
-                      const columnBookings = sprayTanBookings.filter((booking) => getSprayTanCalendarColumn(booking) === column.value)
-                      if (isSprayTanSlotCoveredByEarlierBooking(columnBookings, time)) return null
-                      const slotAppointments = columnBookings.filter((booking) => isSprayTanBookingStartingAtSlot(booking, time))
-                      if (slotAppointments.length === 0) {
-                        return (
-                          <td key={column.value} onClick={() => openSprayTanSlot(time, column.value)} style={{ borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '8px', verticalAlign: 'top', cursor: 'pointer', background: '#0b0b0b' }}>
-                            <span style={{ color: '#666' }}>+ Add {column.label}</span>
-                          </td>
-                        )
-                      }
-                      const rowSpan = Math.max(...slotAppointments.map((booking) => getSprayTanDisplaySlotCount(booking)))
-                      return (
-                        <td key={column.value} rowSpan={rowSpan} style={{ borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '8px', verticalAlign: 'top', background: '#0b0b0b' }}>
-                          {slotAppointments.map((booking) => {
-                            const customer = getCustomerForBooking(booking)
-                            const serviceName = booking.spraytan_service || booking.wix_service_name || 'Spray tan service'
-                            const servicePrice = getSprayTanServicePrice(serviceName)
-                            const depositRequired = Number(booking.deposit_required || 0)
-                            const depositPaid = Number(booking.deposit_paid || 0)
-                            const balancePaid = Number(booking.spraytan_balance_paid || 0)
-                            const balanceRequired = Math.max(0, servicePrice - depositRequired)
-                            const statusLabel = getSprayTanStatusLabel(booking)
-                            const lastPatchTestDate = customer?.last_patch_test_date || booking.patch_test_date
-                            const durationMinutes = getSprayTanDisplayDurationMinutes(booking)
+          <div style={{ minWidth: '980px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', padding: '0 0 10px', color: '#d4a853', fontWeight: 'bold' }}>
+              <span>Time</span>
+              {SPRAY_TAN_COLUMNS.map((column) => <span key={column.value}>{column.label}</span>)}
+            </div>
 
-                            return (
-                              <div
-                                key={booking.id}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  openSprayTanBookingForEdit(booking)
-                                }}
-                                style={{ ...getSprayTanBookingCardStyle(booking), minHeight: Math.max(64, getSprayTanDisplaySlotCount(booking) * 52 - 18) }}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                                  <strong style={{ fontSize: '16px', lineHeight: 1.25 }}>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
-                                  <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
-                                </div>
-                                <p style={{ margin: '8px 0 5px', color: '#f2e2bd', fontWeight: 700 }}>
-                                  {serviceName} - {formatMoney(servicePrice)} - {durationMinutes} mins
-                                </p>
-                                <p style={{ margin: '4px 0', color: '#fff', lineHeight: 1.45 }}>
-                                  Deposit: {formatMoney(depositPaid)} / {formatMoney(depositRequired)}<br />
-                                  Balance: {formatMoney(balancePaid)} / {formatMoney(balanceRequired)}
-                                </p>
-                                <p style={{ margin: '4px 0', color: '#aaa' }}>Artist: {booking.spraytan_artist || 'To assign'}</p>
-                                {serviceName !== 'Patch Test' && !booking.patch_test_completed && (
-                                  <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>
-                                    Patch test warning{lastPatchTestDate ? ' - Last ' + new Date(lastPatchTestDate).toLocaleDateString('en-GB') : ''}
-                                  </p>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+            {timelineSlots.map((time) => {
+              const currentRow = isCurrentTimelineSlot(time, 15)
+              return (
+              <div key={time} data-spraytan-current-time-row={currentRow ? 'true' : undefined} style={{ display: 'grid', gridTemplateColumns: '90px repeat(3, minmax(250px, 1fr))', gap: '10px', borderTop: currentRow ? '3px solid #ffcc66' : '1px solid #333', padding: '10px 0', minHeight: '82px' }}>
+                <strong>{time}{currentRow && <><br /><span style={{ fontSize: '12px', color: '#ffcc66' }}>NOW</span></>}</strong>
+                {SPRAY_TAN_COLUMNS.map((column) => {
+                  const slotAppointments = sprayTanBookings.filter((booking) => getBookingStartTimeString(booking) === time && getSprayTanCalendarColumn(booking) === column.value)
+                  return (
+                    <div key={`${time}-${column.value}`} onClick={() => slotAppointments.length === 0 && openSprayTanSlot(time, column.value)} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '8px', cursor: slotAppointments.length === 0 ? 'pointer' : 'default', minHeight: '64px' }}>
+                      {slotAppointments.length === 0 ? (
+                        <span style={{ color: '#666' }}>+ Add {column.label}</span>
+                      ) : slotAppointments.map((booking) => {
+                        const customer = getCustomerForBooking(booking)
+                        const serviceName = booking.spraytan_service || 'Spray tan service'
+                        const servicePrice = getSprayTanServicePrice(serviceName)
+                        const depositRequired = Number(booking.deposit_required || 0)
+                        const depositPaid = Number(booking.deposit_paid || 0)
+                        const balancePaid = Number(booking.spraytan_balance_paid || 0)
+                        const balanceRequired = Math.max(0, servicePrice - depositRequired)
+                        const statusLabel = getSprayTanStatusLabel(booking)
+                        const lastPatchTestDate = customer?.last_patch_test_date || booking.patch_test_date
+
+                        return (
+                          <div
+                            key={booking.id}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              openSprayTanBookingForEdit(booking)
+                            }}
+                            style={getSprayTanBookingCardStyle(booking)}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                              <strong style={{ fontSize: '16px', lineHeight: 1.25 }}>{booking.customer_name || customer?.name || 'Spray tan customer'}</strong>
+                              <span style={getSprayTanStatusStyle(statusLabel)}>{statusLabel}</span>
+                            </div>
+                            <p style={{ margin: '8px 0 5px', color: '#f2e2bd', fontWeight: 700 }}>
+                              {serviceName} - {formatMoney(servicePrice)} - {Number(booking.spraytan_duration_minutes || 0)} mins
+                            </p>
+                            <p style={{ margin: '4px 0', color: '#fff', lineHeight: 1.45 }}>
+                              Deposit: {formatMoney(depositPaid)} / {formatMoney(depositRequired)}<br />
+                              Balance: {formatMoney(balancePaid)} / {formatMoney(balanceRequired)}
+                            </p>
+                            <p style={{ margin: '4px 0', color: '#aaa' }}>Artist: {booking.spraytan_artist || 'To assign'}</p>
+                            {serviceName !== 'Patch Test' && !booking.patch_test_completed && (
+                              <p style={{ color: '#ffcc66', margin: '6px 0 0', fontWeight: 'bold' }}>
+                                Patch test warning{lastPatchTestDate ? ` - Last ${new Date(lastPatchTestDate).toLocaleDateString('en-GB')}` : ''}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+              )
+            })}
+          </div>
         </div>
       </div>
     )
@@ -13117,6 +12616,7 @@ function formatMoney(value) {
 
       <div className="v2-real-topbar">
         <div>
+          <span>Glow V2</span>
           <h1>{v2TabTitle}</h1>
         </div>
         <div className="v2-real-upcoming">
@@ -13154,10 +12654,10 @@ function formatMoney(value) {
         <div className="top-action-panel" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div className="top-action-buttons">
             <button onClick={() => setShowCustomerManagement(!showCustomerManagement)}>{showCustomerManagement ? 'Hide Customers' : 'Customers'}</button>
-            <button onClick={openCashUpPanel}>Cash Up</button>
+            <button onClick={collapseCashUp ? openCashUpPanel : () => setCollapseCashUp(true)}>{collapseCashUp ? 'Cash Up' : 'Hide Cash Up'}</button>
             {currentStaffUser && (
-              <button onClick={() => { setV2ActiveTab('staffcalendar'); setCollapseStaffCalendar(false) }}>
-                Staff Calendar{pendingStaffScheduleCount > 0 ? ` - ${pendingStaffScheduleCount}` : ''}
+              <button onClick={() => setCollapseStaffCalendar(!collapseStaffCalendar)}>
+                {collapseStaffCalendar ? 'Staff Calendar' : 'Hide Staff Calendar'}{pendingStaffScheduleCount > 0 ? ` • ${pendingStaffScheduleCount}` : ''}
               </button>
             )}
             {showManagerView ? (
@@ -13221,16 +12721,21 @@ function formatMoney(value) {
       {v2ActiveTab === 'manager' && showManagerView && renderStaffManagementPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderMaintenancePanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderProductsManagementPanel()}
+      {v2ActiveTab === 'manager' && showManagerView && renderPromosPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderCorrectionsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderWixBookingSyncPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderReceiptHistoryPanel()}
+      {v2ActiveTab === 'manager' && showManagerView && renderExportsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderDailyTakingsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderManagerReportsPanel()}
+      {v2ActiveTab === 'manager' && showManagerView && renderCommissionSettingsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderLoyaltyRewardsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderDuplicateCustomersReportPanel()}
 
       {v2ActiveTab === 'sunbeds' && (
         <>
+      <h2 style={{ textAlign: 'center' }}>Sunbeds</h2>
+
       <div className="sunbeds-grid premium-sunbeds-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
         {beds.map((bed) => {
           const liveSession = getLiveBedSession(bed.id)
@@ -13276,7 +12781,7 @@ function formatMoney(value) {
             </tr>
           </thead>
           <tbody>
-            {generateTimeSlots(getSunbedCalendarTimeRange().start, getSunbedCalendarTimeRange().end).map((time) => {
+            {generateTimeSlots().map((time) => {
               const currentRow = isCurrentTimeSlot(time)
               const isShopPrepTime = time >= '08:00' && time < '08:30'
 
@@ -13411,12 +12916,12 @@ function formatMoney(value) {
                 {modalBooking.customer_started_at && <p><strong>Customer Started</strong></p>}
                 {modalBooking.customer_started_at && <p>Customer started: {new Date(modalBooking.customer_started_at).toLocaleTimeString('en-GB')}</p>}
                 {['Undressing', 'Running', 'Cooldown'].includes(modalPhase) && <h2>Remaining: {getRemainingTime(modalBooking)}</h2>}
-                {modalStartBlocked && !hasSessionStarted(modalBooking) && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
+                {modalStartBlocked && !modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
                   <p style={{ background: '#0b0b0b', border: '1px solid rgba(255,120,117,0.65)', borderRadius: '12px', padding: '10px', color: '#ffcc66', fontWeight: 'bold' }}>
                     This bed is currently in use or cooling down. Please wait until it is available before starting another session.
                   </p>
                 )}
-                {!hasSessionStarted(modalBooking) && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
+                {!modalBooking.booking_start && !['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
                   <button
                     onClick={() => startSession(modalBooking)}
                     disabled={modalStartBlocked}
@@ -13434,7 +12939,7 @@ function formatMoney(value) {
                     <button onClick={() => emailBookingReceipt(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Email Receipt</button>
                   )}
 
-                  {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !hasSessionStarted(modalBooking) && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
+                  {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !modalBooking.booking_start && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
                     <button onClick={() => setEditMode(true)} style={{ padding: '8px 10px', fontSize: '13px' }}>Edit</button>
                   )}
 
@@ -13442,7 +12947,7 @@ function formatMoney(value) {
                     <button onClick={() => forceStop(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Force Stop</button>
                   )}
 
-                  {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !hasSessionStarted(modalBooking) && (
+                  {['booked'].includes(String(modalBooking.status || '').toLowerCase()) && !modalBooking.booking_start && (
                     <button onClick={() => updateBookingStatus(modalBooking.id, 'no_show')} style={{ padding: '8px 10px', fontSize: '13px' }}>No Show</button>
                   )}
 
@@ -13450,7 +12955,7 @@ function formatMoney(value) {
                     <button onClick={() => managerResetBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Manager Reset</button>
                   )}
 
-                  {!hasSessionStarted(modalBooking) && (
+                  {!modalBooking.booking_start && (
                     <button onClick={() => deleteBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Delete</button>
                   )}
 
