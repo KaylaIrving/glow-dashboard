@@ -1,0 +1,15 @@
+﻿{
+  "port": 8787,
+  "comPort": "COM5",
+  "baudRate": 9600,
+  "dataBits": 8,
+  "parity": "none",
+  "stopBits": 1,
+  "flowControl": false,
+  "mockMode": true,
+  "roomMap": {
+    "1": "Tone & Tan Stand Up",
+    "2": "Collagen Lay Down",
+    "3": "Prestige Lay Down"
+  }
+}

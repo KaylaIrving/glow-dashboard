@@ -485,6 +485,19 @@ function App() {
   const [wixServiceMappingSaving, setWixServiceMappingSaving] = useState({})
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
+  const wixAvailabilityEndpoint = import.meta.env.VITE_WIX_AVAILABILITY_ENDPOINT || '/api/wix-availability'
+  const readStoredBoolean = (key, fallback = false) => {
+    if (typeof window === 'undefined') return fallback
+    const stored = window.localStorage.getItem(key)
+    if (stored === null) return fallback
+    return stored === 'true'
+  }
+  const [tmaxEnabled, setTmaxEnabled] = useState(() => readStoredBoolean('glow_tmax_enabled', false))
+  const [tmaxBridgeUrl, setTmaxBridgeUrl] = useState(() => typeof window === 'undefined' ? 'http://127.0.0.1:8787' : window.localStorage.getItem('glow_tmax_bridge_url') || 'http://127.0.0.1:8787')
+  const [tmaxBridgeStatus, setTmaxBridgeStatus] = useState(null)
+  const [wixSyncManualSprayTan, setWixSyncManualSprayTan] = useState(() => readStoredBoolean('glow_wix_sync_manual_spraytan', true))
+  const [wixSyncManualSunbed, setWixSyncManualSunbed] = useState(() => readStoredBoolean('glow_wix_sync_manual_sunbed', false))
+  const [wixSyncStaffHolidays, setWixSyncStaffHolidays] = useState(() => readStoredBoolean('glow_wix_sync_staff_holidays', false))
   const [managerReceipts, setManagerReceipts] = useState([])
   const [receiptSearchStartDate, setReceiptSearchStartDate] = useState(formatLocalDate(new Date()))
   const [receiptSearchEndDate, setReceiptSearchEndDate] = useState(formatLocalDate(new Date()))
@@ -575,6 +588,15 @@ function App() {
       // Category persistence is a browser convenience; product rows remain saved in Supabase.
     }
   }, [productCategories])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('glow_tmax_enabled', String(tmaxEnabled))
+    window.localStorage.setItem('glow_tmax_bridge_url', tmaxBridgeUrl)
+    window.localStorage.setItem('glow_wix_sync_manual_spraytan', String(wixSyncManualSprayTan))
+    window.localStorage.setItem('glow_wix_sync_manual_sunbed', String(wixSyncManualSunbed))
+    window.localStorage.setItem('glow_wix_sync_staff_holidays', String(wixSyncStaffHolidays))
+  }, [tmaxEnabled, tmaxBridgeUrl, wixSyncManualSprayTan, wixSyncManualSunbed, wixSyncStaffHolidays])
 
   useEffect(() => {
     const discoveredCategories = products
@@ -5831,6 +5853,112 @@ function formatMoney(value) {
     return match
   }
 
+  function getTmaxRoomForBed(bedId) {
+    const room = Number(bedId)
+    return [1, 2, 3].includes(room) ? room : null
+  }
+
+  async function refreshTmaxStatus() {
+    const bridgeUrl = String(tmaxBridgeUrl || '').replace(/\/$/, '')
+    if (!bridgeUrl) {
+      alert('Enter the Glow T-Max Bridge URL first.')
+      return null
+    }
+    try {
+      const response = await fetch(bridgeUrl + '/api/tmax/status')
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload.ok === false) throw new Error(payload.error || 'Glow T-Max Bridge did not respond.')
+      setTmaxBridgeStatus(payload)
+      showToast('T-Max bridge status updated.', 'success')
+      return payload
+    } catch (error) {
+      console.error('T-Max bridge status failed:', error)
+      setTmaxBridgeStatus({ ok: false, error: error.message })
+      showToast('T-Max bridge could not be reached.', 'error')
+      return null
+    }
+  }
+
+  async function sendTmaxStartForBooking(booking) {
+    if (!tmaxEnabled) return true
+    const room = getTmaxRoomForBed(booking?.bed_id)
+    const minutes = Number(booking?.minutes || selectedMinutes || 0)
+    if (!room || minutes <= 0) {
+      alert('T-Max start needs a valid room and minutes.')
+      return false
+    }
+    try {
+      const response = await fetch(String(tmaxBridgeUrl || '').replace(/\/$/, '') + '/api/tmax/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room, minutes })
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload.ok === false) throw new Error(payload.error || 'T-Max start failed.')
+      if (payload.status) setTmaxBridgeStatus({ ok: true, rooms: payload.status.rooms, mockMode: payload.mockMode })
+      return true
+    } catch (error) {
+      console.error('T-Max start failed:', { bookingId: booking?.id, room, minutes, error })
+      alert('T-Max did not start. Please check the Glow T-Max Bridge and start locally if needed.')
+      showDataLoadWarning('T-Max bridge start failed.', error)
+      return false
+    }
+  }
+
+  async function sendTmaxStopForBooking(booking) {
+    if (!tmaxEnabled) return true
+    const room = getTmaxRoomForBed(booking?.bed_id)
+    if (!room) return true
+    try {
+      const response = await fetch(String(tmaxBridgeUrl || '').replace(/\/$/, '') + '/api/tmax/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room })
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload.ok === false) throw new Error(payload.error || 'T-Max stop failed.')
+      if (payload.status) setTmaxBridgeStatus({ ok: true, rooms: payload.status.rooms, mockMode: payload.mockMode })
+      return true
+    } catch (error) {
+      console.error('T-Max stop failed:', { bookingId: booking?.id, room, error })
+      alert('T-Max stop failed. Please stop the bed locally and check the Glow T-Max Bridge.')
+      showDataLoadWarning('T-Max bridge stop failed.', error)
+      return false
+    }
+  }
+
+  function shouldPushBookingToWixAvailability(booking) {
+    if (!booking || isExistingWixBookingRecord(booking)) return false
+    if (isSprayTanBooking(booking)) return wixSyncManualSprayTan
+    if (isSunbedBooking(booking) && booking.bed_id) return wixSyncManualSunbed
+    return false
+  }
+
+  async function syncBookingToWixAvailability(bookingOrId, action = 'upsert') {
+    const booking = typeof bookingOrId === 'object' ? bookingOrId : bookings.find((item) => Number(item.id) === Number(bookingOrId))
+    const bookingId = typeof bookingOrId === 'object' ? bookingOrId?.id : bookingOrId
+    if (!bookingId) return false
+    if (booking && !shouldPushBookingToWixAvailability(booking)) return false
+    try {
+      const response = await fetch(wixAvailabilityEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: bookingId, action })
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload.ok === false) throw new Error(payload.error || payload.message || 'Wix availability sync failed.')
+      if (payload.pending) showToast('Wix availability sync is pending setup.', 'info')
+      else if (!payload.skipped) showToast(action === 'delete' ? 'Wix availability block removed.' : 'Wix availability block updated.', 'success')
+      await getBookings()
+      return true
+    } catch (error) {
+      console.error('Wix availability sync failed:', { bookingId, action, error })
+      showToast(error.message || 'Wix availability sync failed.', 'error')
+      await getBookings()
+      return false
+    }
+  }
+
   function getSavedWixMappingForService(service, mappings = wixServiceMappings) {
     return findServiceMapping(service, mappings, { activeOnly: true })
   }
@@ -6580,7 +6708,7 @@ function formatMoney(value) {
 
     if (!confirmed) return
 
-    const { error } = await supabase.from('Bookings').insert({
+    const { error, data: createdBooking } = await supabase.from('Bookings').insert({
       customer_id: shopTestCustomer?.id || null,
       customer_name: 'Shop Test',
       customer_phone: null,
@@ -6593,7 +6721,7 @@ function formatMoney(value) {
       source: 'shop_test',
       booking_source: 'dashboard',
       ...getCreatedByStaffFields()
-    })
+    }).select().single()
 
     if (error) {
       alert('Shop test booking was not saved. Please check the connection and try again.')
@@ -6602,6 +6730,7 @@ function formatMoney(value) {
       return
     }
 
+    if (createdBooking) await syncBookingToWixAvailability(createdBooking, 'upsert')
     closeModal()
     getBookings()
   }
@@ -6672,7 +6801,7 @@ function formatMoney(value) {
     }
 
     setBookingSaving(true)
-    const { error } = await supabase.from('Bookings').insert({
+    const { error, data: createdBooking } = await supabase.from('Bookings').insert({
       customer_id: customer.id,
       customer_name: customer.name,
       customer_phone: customer.phone || null,
@@ -6685,7 +6814,7 @@ function formatMoney(value) {
       source: isInternalShopTest ? 'shop_test' : 'calendar',
       booking_source: 'dashboard',
       ...getCreatedByStaffFields()
-    })
+    }).select().single()
     if (!error) {
       if (!isInternalShopTest) {
         const checkoutSaved = await applySunbedCheckout(customer)
@@ -6695,6 +6824,7 @@ function formatMoney(value) {
         }
       }
       await createAuditLog('booking_created', `Booking created for ${customer.name} on bed ${modalSlot.bedId}.`, { customer_id: customer.id, bed_id: Number(modalSlot.bedId), minutes: Number(selectedMinutes), appointment_time: appointmentDateTime.toISOString() })
+      if (createdBooking) await syncBookingToWixAvailability(createdBooking, 'upsert')
       closeModal()
       getBookings()
       getCustomers()
@@ -6740,7 +6870,7 @@ function formatMoney(value) {
       return
     }
 
-    const { error } = await supabase.from('Bookings').insert({
+    const { error, data: createdBooking } = await supabase.from('Bookings').insert({
       customer_id: null,
       customer_name: `${member.name} - Staff`,
       customer_phone: null,
@@ -6763,6 +6893,7 @@ function formatMoney(value) {
     }
 
     await createStaffLog(member, 'Staff free booking created', `${sessionMinutes} free mins booked on ${getBedName(modalSlot.bedId)} for ${appointmentDateTime.toLocaleString('en-GB')}.`)
+    if (createdBooking) await syncBookingToWixAvailability(createdBooking, 'upsert')
     closeModal()
     getBookings()
   }
@@ -6854,6 +6985,7 @@ function formatMoney(value) {
           return
         }
       }
+      await syncBookingToWixAvailability(modalBooking, 'upsert')
       closeModal()
       getBookings()
       getCustomers()
@@ -6873,6 +7005,7 @@ function formatMoney(value) {
     if (!confirmed) return
     const { error } = await supabase.from('Bookings').delete().eq('id', booking.id)
     if (!error) {
+      await syncBookingToWixAvailability(booking, 'delete')
       closeModal()
       getBookings()
     } else {
@@ -7151,6 +7284,9 @@ function formatMoney(value) {
     const customer = customers.find((c) => c.id === Number(booking.customer_id))
     if (!isShopTestBooking(booking) && customer && !checkCustomerAgeBeforeSunbed(customer)) return
 
+    const tmaxStarted = await sendTmaxStartForBooking(booking)
+    if (!tmaxStarted) return
+
     const now = new Date()
     const tanningStart = new Date(now.getTime() + UNDRESS_SECONDS * 1000)
     const tanningEnd = new Date(tanningStart.getTime() + Number(booking.minutes || 0) * 60000)
@@ -7188,6 +7324,9 @@ function formatMoney(value) {
 
   async function forceStop(booking) {
     if (!requireStaffSignIn()) return
+    if (!requireManagerAccess('Manager access required to force stop a session.')) return
+    const tmaxStopped = await sendTmaxStopForBooking(booking)
+    if (!tmaxStopped) return
 
     const now = new Date()
     const cooldownEnd = new Date(now.getTime() + COOLDOWN_SECONDS * 1000)
@@ -7783,6 +7922,7 @@ function formatMoney(value) {
         notes: `Deposit recorded for spray tan booking ${data?.id || ''}.`
       })
     }
+    if (data) await syncBookingToWixAvailability(data, 'upsert')
     closeSprayTanModal()
     await getBookings()
     await getCustomers()
@@ -7931,6 +8071,7 @@ function formatMoney(value) {
       })
     }
 
+    await syncBookingToWixAvailability(sprayTanEditingBooking, 'upsert')
     closeSprayTanModal()
     await getBookings()
     await getCustomers()
@@ -7956,6 +8097,7 @@ function formatMoney(value) {
       return
     }
 
+    await syncBookingToWixAvailability(sprayTanEditingBooking, 'delete')
     closeSprayTanModal()
     await getBookings()
   }
@@ -8062,6 +8204,7 @@ function formatMoney(value) {
       console.log(error)
       return
     }
+    await syncBookingToWixAvailability(sprayTanEditingBooking, 'delete')
     closeSprayTanModal()
     await getBookings()
   }
@@ -11684,6 +11827,39 @@ function formatMoney(value) {
         </div>
 
         <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.28)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
+          <h3 style={{ margin: '0 0 10px', color: '#d4a853' }}>Manager Settings</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px', alignItems: 'end' }}>
+            <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input type="checkbox" checked={tmaxEnabled} onChange={(e) => setTmaxEnabled(e.target.checked)} />
+              T-Max Enabled
+            </label>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Glow T-Max Bridge URL
+              <input value={tmaxBridgeUrl} onChange={(e) => setTmaxBridgeUrl(e.target.value)} placeholder="http://127.0.0.1:8787" style={{ padding: '10px' }} />
+            </label>
+            <button type="button" onClick={refreshTmaxStatus}>Check T-Max Bridge</button>
+          </div>
+          <p style={{ color: tmaxBridgeStatus?.ok === false ? '#ffb3ad' : '#aaa', margin: '10px 0 0' }}>
+            T-Max: {tmaxEnabled ? 'Enabled' : 'Disabled'}{tmaxBridgeStatus?.mockMode ? ' / test mode' : ''}{tmaxBridgeStatus?.error ? ` / ${tmaxBridgeStatus.error}` : ''}
+          </p>
+          <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
+            <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input type="checkbox" checked={wixSyncManualSprayTan} onChange={(e) => setWixSyncManualSprayTan(e.target.checked)} />
+              Sync Manual Spray Tan Bookings to Wix
+            </label>
+            <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input type="checkbox" checked={wixSyncManualSunbed} onChange={(e) => setWixSyncManualSunbed(e.target.checked)} />
+              Sync Manual Sunbed Bookings to Wix
+            </label>
+            <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input type="checkbox" checked={wixSyncStaffHolidays} onChange={(e) => setWixSyncStaffHolidays(e.target.checked)} />
+              Sync Staff Holidays to Wix Availability
+            </label>
+          </div>
+          <p style={{ color: '#aaa', marginBottom: 0 }}>T-Max live serial commands remain in bridge test mode until verified against the salon T-Max Manager G2.</p>
+        </div>
+
+        <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.28)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
             <div>
               <h3 style={{ margin: '0 0 4px', color: '#d4a853' }}>Service Booking Map</h3>
@@ -13755,3 +13931,4 @@ function formatMoney(value) {
 }
 
 export default App
+

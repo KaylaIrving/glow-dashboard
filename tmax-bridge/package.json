@@ -1,0 +1,15 @@
+﻿{
+  "name": "glow-tmax-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Windows bridge between Glow Dashboard and T-Max Manager G2.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0"
+  }
+}
