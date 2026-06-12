@@ -745,7 +745,9 @@ function App() {
   }
 
   function isBookingOnSelectedDate(booking) {
-    const startSource = booking?.booking_start || booking?.appointment_time || booking?.start_time
+    const startSource = isSunbedBooking(booking)
+      ? booking?.appointment_time || booking?.booking_start
+      : booking?.booking_start || booking?.appointment_time || booking?.start_time
     return getLocalDateStringFromValue(startSource) === selectedDate
   }
 
@@ -3957,83 +3959,81 @@ function formatMoney(value) {
     return { ...nextPayload, [nextColumn]: value }
   }
 
+  function normalizeCashUpPayloadForSave(payload) {
+    const normalized = {
+      cashup_date: payload.cashup_date || payload.date || payload.cash_up_date || selectedDate,
+      card_total: payload.card_total,
+      cash_total: payload.cash_total,
+      bank_transfer_total: payload.bank_transfer_total,
+      other_total: payload.other_total,
+      product_sales_total: payload.product_sales_total,
+      minutes_sales_total: payload.minutes_sales_total,
+      total_revenue: payload.total_revenue,
+      starting_cash_float: payload.starting_cash_float ?? payload.starting_float ?? payload.start_day_float ?? payload.cash_float ?? 0,
+      expected_cash: payload.expected_cash,
+      actual_cash: payload.actual_cash ?? payload.actual_cash_counted ?? payload.actual_cash_in_till ?? 0,
+      variance: payload.variance,
+      variance_notes: payload.variance_notes,
+      float_entered_by_staff: payload.float_entered_by_staff,
+      float_entered_at: payload.float_entered_at,
+      cash_up_completed_by_staff: payload.cash_up_completed_by_staff,
+      cash_up_completed_at: payload.cash_up_completed_at,
+      cash_up_locked: payload.cash_up_locked,
+      cash_up_locked_by_staff: payload.cash_up_locked_by_staff,
+      cash_up_locked_at: payload.cash_up_locked_at,
+      cash_up_reopened_by_staff: payload.cash_up_reopened_by_staff,
+      cash_up_reopened_at: payload.cash_up_reopened_at
+    }
+    return Object.fromEntries(Object.entries(normalized).filter(([, value]) => value !== undefined))
+  }
+
+  async function findCashUpRecordByDate(dateValue = selectedDate) {
+    const { data, error } = await supabase
+      .from('CashUps')
+      .select('*')
+      .eq('cashup_date', dateValue)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) {
+      console.error('CashUps lookup by date failed:', { date: dateValue, error })
+      return { record: null, error }
+    }
+    return { record: data || null, error: null }
+  }
+
   async function writeCashUpRecord(payload) {
-    const optionalColumns = new Set([
-      'variance_notes',
-      'float_entered_by_staff',
-      'float_entered_at',
-      'cash_up_completed_by_staff',
-      'cash_up_completed_at',
-      'cash_up_locked',
-      'cash_up_locked_by_staff',
-      'cash_up_locked_at',
-      'cash_up_reopened_by_staff',
-      'cash_up_reopened_at',
-      'expected_cash',
-      'total_revenue',
-      'card_total',
-      'cash_total',
-      'bank_transfer_total',
-      'other_total',
-      'product_sales_total',
-      'minutes_sales_total',
-      'variance'
-    ])
-    const dateColumns = ['cashup_date', 'date', 'cash_up_date']
-    const startFloatColumns = ['starting_cash_float', 'starting_float', 'start_day_float', 'cash_float']
-    const actualCashColumns = ['actual_cash', 'actual_cash_counted', 'actual_cash_in_till']
-    const dateValue = payload.cashup_date || payload.date || payload.cash_up_date || selectedDate
-    const startFloatValue = payload.starting_cash_float ?? payload.starting_float ?? payload.start_day_float ?? payload.cash_float ?? 0
-    const actualCashValue = payload.actual_cash ?? payload.actual_cash_counted ?? payload.actual_cash_in_till ?? 0
-    let safePayload = { ...payload }
+    const safePayload = normalizeCashUpPayloadForSave(payload)
+    const dateValue = safePayload.cashup_date || selectedDate
 
-    for (let attempt = 0; attempt < 16; attempt += 1) {
-      const request = cashUpExistingRecord?.id
-        ? supabase.from('CashUps').update(safePayload).eq('id', cashUpExistingRecord.id)
-        : supabase.from('CashUps').insert(safePayload)
-      const { error } = await request
-      if (!error) return { error: null, payload: safePayload }
-
-      const missingColumn = getMissingSupabaseColumn(error)
-      if (missingColumn && dateColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
-        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, dateColumns, dateValue)
-        if (nextPayload) {
-          console.warn('CashUps date column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
-          safePayload = nextPayload
-          continue
-        }
-      }
-
-      if (missingColumn && startFloatColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
-        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, startFloatColumns, startFloatValue)
-        if (nextPayload) {
-          console.warn('CashUps start float column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
-          safePayload = nextPayload
-          continue
-        }
-      }
-
-      if (missingColumn && actualCashColumns.includes(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
-        const nextPayload = swapCashUpPayloadColumn(safePayload, missingColumn, actualCashColumns, actualCashValue)
-        if (nextPayload) {
-          console.warn('CashUps actual cash column missing, retrying with fallback:', { missingColumn, nextColumns: Object.keys(nextPayload) })
-          safePayload = nextPayload
-          continue
-        }
-      }
-
-      if (missingColumn && optionalColumns.has(missingColumn) && Object.prototype.hasOwnProperty.call(safePayload, missingColumn)) {
-        console.warn('CashUps optional column missing, retrying without it:', missingColumn)
-        const { [missingColumn]: _removed, ...nextPayload } = safePayload
-        safePayload = nextPayload
-        continue
-      }
-
-      console.error('CashUps save failed with non-retryable error:', { missingColumn, payload: safePayload, error })
-      return { error, payload: safePayload }
+    let targetRecord = cashUpExistingRecord
+    if (!targetRecord?.id) {
+      const lookup = await findCashUpRecordByDate(dateValue)
+      if (lookup.error) return { error: lookup.error, payload: safePayload, record: null }
+      targetRecord = lookup.record
     }
 
-    return { error: new Error('CashUps save failed after retrying column fallbacks.'), payload: safePayload }
+    const runSave = async (record) => {
+      const request = record?.id
+        ? supabase.from('CashUps').update(safePayload).eq('id', record.id).select('*').single()
+        : supabase.from('CashUps').insert(safePayload).select('*').single()
+      return request
+    }
+
+    let { data, error } = await runSave(targetRecord)
+
+    if (error && ['23505', '409'].includes(String(error.code || ''))) {
+      const lookup = await findCashUpRecordByDate(dateValue)
+      if (lookup.record?.id) ({ data, error } = await runSave(lookup.record))
+    }
+
+    if (error) {
+      console.error('CashUps save failed:', { payload: safePayload, existingId: targetRecord?.id || null, error })
+      return { error, payload: safePayload, record: null }
+    }
+
+    setCashUpExistingRecord(data || targetRecord || null)
+    return { error: null, payload: safePayload, record: data || targetRecord || null }
   }
 
   function clearFloatMovementForm() {
@@ -4175,17 +4175,20 @@ function formatMoney(value) {
       const { error, payload: attemptedPayload } = await writeCashUpRecord(payload)
 
       if (error) {
-        alert('Start-of-day cash float was not saved. Please check the connection and try again.')
-        showDataLoadWarning('Start-of-day cash float failed to save. Please check the connection.', error)
+        const message = error.message || 'Start-of-day cash float failed to save.'
+        alert('Start-of-day cash float was not saved: ' + message)
+        showDataLoadWarning('Start-of-day cash float failed to save: ' + message, error)
         console.error('Start day float save failed:', { table: 'CashUps', payload: attemptedPayload, existingId: cashUpExistingRecord?.id, error })
         return
       }
 
       await createAuditLog('cash_up_float_saved', `Start-of-day float saved for ${selectedDate}: ?${Number(startFloat || 0).toFixed(2)}.`, { cashup_date: selectedDate, start_float: Number(startFloat || 0) })
       await getCashUpForSelectedDate()
+      await getDailyTakings()
+      await getFloatMovements()
       alert('Start-of-day cash float saved.')
     } catch (error) {
-      alert('Start-of-day cash float was not saved. Please check the connection and try again.')
+      alert('Start-of-day cash float was not saved: ' + (error.message || 'Please check the connection and try again.'))
       console.error('Start day float save threw:', error)
     } finally {
       setCashFloatSaving(false)
@@ -4261,8 +4264,9 @@ function formatMoney(value) {
       const { error, payload: attemptedPayload } = await writeCashUpRecord(payload)
 
       if (error) {
-        alert('Cash-up was not saved. Please check the connection and try again.')
-        showDataLoadWarning('Cash-up failed to save. Please check the connection.', error)
+        const message = error.message || 'Cash-up failed to save.'
+        alert('Cash-up was not saved: ' + message)
+        showDataLoadWarning('Cash-up failed to save: ' + message, error)
         console.error('Cash-up save failed:', { table: 'CashUps', payload: attemptedPayload, existingId: cashUpExistingRecord?.id, error })
         return
       }
@@ -5060,7 +5064,9 @@ function formatMoney(value) {
   }
 
   function getBookingDisplayDateTime(booking) {
-    const bookingTimeSource = booking?.booking_start || booking?.appointment_time || booking?.start_time
+    const bookingTimeSource = isSunbedBooking(booking)
+      ? booking?.appointment_time || booking?.booking_start || booking?.start_time
+      : booking?.booking_start || booking?.appointment_time || booking?.start_time
     if (!bookingTimeSource) return null
     const bookingTime = new Date(bookingTimeSource)
     return Number.isNaN(bookingTime.getTime()) ? null : bookingTime
@@ -5073,7 +5079,9 @@ function formatMoney(value) {
   }
 
   function getBookingCalendarDisplayInterval(booking) {
-    const startSource = booking?.booking_start || booking?.appointment_time
+    const startSource = isSunbedBooking(booking)
+      ? booking?.appointment_time || booking?.booking_start
+      : booking?.booking_start || booking?.appointment_time
     if (!startSource) return null
     const appointmentStart = new Date(startSource)
     if (Number.isNaN(appointmentStart.getTime())) return null
@@ -7926,6 +7934,8 @@ function formatMoney(value) {
     closeSprayTanModal()
     await getBookings()
     await getCustomers()
+    await getDailyTakings()
+    await getCashUpForSelectedDate()
     if (data) setDashboardView('spraytan')
   }
 
@@ -8075,6 +8085,8 @@ function formatMoney(value) {
     closeSprayTanModal()
     await getBookings()
     await getCustomers()
+    await getDailyTakings()
+    await getCashUpForSelectedDate()
   }
 
   async function cancelSprayTanBooking() {
@@ -9821,9 +9833,10 @@ function formatMoney(value) {
                 <div style={{ background: '#0b0b0b', padding: '15px', borderRadius: '10px', marginTop: '12px', border: '1px solid #333', textAlign: 'center' }}>
                   <p style={{ margin: '5px 0' }}>Standard balance: <strong>{selectedCustomer.standard_minutes_balance || 0} mins</strong></p>
                   <p style={{ margin: '5px 0' }}>Hybrid balance: <strong>{selectedCustomer.hybrid_minutes_balance || 0} mins</strong></p>
-                  <p style={{ marginTop: '12px', fontSize: '18px' }}>Usable for this bed: <strong>{getUsableMinutesForBed(selectedCustomer, activeBedId)} mins</strong></p>
+                  {!isSprayTanContext && <p style={{ marginTop: '12px', fontSize: '18px' }}>Usable for this bed: <strong>{getUsableMinutesForBed(selectedCustomer, activeBedId)} mins</strong></p>}
+                  {isSprayTanContext && <p style={{ marginTop: '12px', fontSize: '14px', color: '#aaa' }}>Sunbed minute balances are not required for spray tan or patch test bookings.</p>}
                 </div>
-                {!customerHasEnoughMinutes(selectedCustomer, selectedMinutes, activeBedId) && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Not enough usable minutes for this bed. Please top up first.</p>}
+                {!isSprayTanContext && !customerHasEnoughMinutes(selectedCustomer, selectedMinutes, activeBedId) && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Not enough usable minutes for this bed. Please top up first.</p>}
               </>
             )}
           </div>
