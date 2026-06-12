@@ -185,6 +185,7 @@ function App() {
   const [modalBooking, setModalBooking] = useState(null)
   const [modalSlot, setModalSlot] = useState(null)
   const [editMode, setEditMode] = useState(false)
+  const [customerLinkCandidates, setCustomerLinkCandidates] = useState([])
 
   const [customerSearch, setCustomerSearch] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
@@ -855,7 +856,8 @@ function formatMoney(value) {
   function checkCustomerAgeBeforeSunbed(customer) {
     if (!customer) return false
     if (!customer.date_of_birth) {
-      return window.confirm(`${customer.name} does not have a date of birth recorded. Continue anyway?`)
+      alert('Date of birth not recorded. Please update customer record.')
+      return true
     }
     if (isCustomerUnder18(customer)) {
       alert(`${customer.name} is under 18 and cannot use the sunbed.`)
@@ -2687,6 +2689,142 @@ function formatMoney(value) {
 
   function getSelectedCustomer() {
     return customers.find((customer) => customer.id === Number(selectedCustomerId))
+  }
+
+  function normalizeCustomerEmail(value) {
+    return String(value || '').trim().toLowerCase()
+  }
+
+  function normalizeCustomerPhone(value) {
+    return String(value || '').replace(/\D/g, '')
+  }
+
+  function normalizeCustomerName(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+  }
+
+  function splitCustomerName(value) {
+    const parts = String(value || '').trim().replace(/\s+/g, ' ').split(' ').filter(Boolean)
+    if (parts.length === 0) return { firstName: '', lastName: '' }
+    return { firstName: parts[0], lastName: parts.slice(1).join(' ') }
+  }
+
+  function getCustomerFullName(customer) {
+    return [customer?.first_name, customer?.last_name].filter(Boolean).join(' ').trim() || customer?.name || ''
+  }
+
+  function getWixCustomerMatchInput(source = {}) {
+    const fallbackName = source.customer_name || source.wix_customer_name || source.name || ''
+    const splitName = splitCustomerName(fallbackName)
+    return {
+      firstName: source.first_name || source.wix_customer_first_name || splitName.firstName || '',
+      lastName: source.last_name || source.wix_customer_last_name || splitName.lastName || '',
+      fullName: fallbackName,
+      email: source.customer_email || source.wix_customer_email || source.email || '',
+      phone: source.customer_phone || source.wix_customer_phone || source.phone || source.mobile || ''
+    }
+  }
+
+  function getCustomerLinkMatches(source = {}) {
+    const input = getWixCustomerMatchInput(source)
+    const email = normalizeCustomerEmail(input.email)
+    const phone = normalizeCustomerPhone(input.phone)
+    const firstName = normalizeCustomerName(input.firstName)
+    const lastName = normalizeCustomerName(input.lastName)
+    const fullName = normalizeCustomerName(input.fullName || [input.firstName, input.lastName].filter(Boolean).join(' '))
+    const exactName = [firstName, lastName].filter(Boolean).join(' ').trim()
+    const addMatches = (reason, matcher) => customers.filter(matcher).map((customer) => ({ customer, reason }))
+
+    const matchGroups = [
+      addMatches('Exact email match', (customer) => email && normalizeCustomerEmail(customer.email) === email),
+      addMatches('Exact mobile number match', (customer) => phone && normalizeCustomerPhone(customer.phone) === phone),
+      addMatches('Exact first and last name match', (customer) => {
+        if (!firstName || !lastName) return false
+        return normalizeCustomerName(customer.first_name) === firstName && normalizeCustomerName(customer.last_name) === lastName
+      }),
+      addMatches('Case-insensitive name match', (customer) => {
+        const customerName = normalizeCustomerName(getCustomerFullName(customer))
+        return Boolean((fullName && customerName === fullName) || (exactName && customerName === exactName))
+      })
+    ]
+
+    const seen = new Set()
+    return matchGroups.flat().filter(({ customer }) => {
+      if (!customer?.id || seen.has(customer.id)) return false
+      seen.add(customer.id)
+      return true
+    })
+  }
+
+  async function linkBookingToCustomer(booking, customer, reason = 'manual') {
+    if (!booking?.id || !customer?.id) return null
+    const updates = {
+      customer_id: customer.id,
+      customer_name: customer.name || getCustomerFullName(customer),
+      customer_phone: customer.phone || booking.customer_phone || booking.wix_customer_phone || null,
+      customer_email: customer.email || booking.customer_email || booking.wix_customer_email || null
+    }
+    const { data, error } = await supabase.from('Bookings').update(updates).eq('id', booking.id).select().single()
+    if (error) {
+      alert('Customer link was not saved. Please check the connection.')
+      console.error('Booking customer link failed:', { booking, customer, reason, error })
+      return null
+    }
+    await createCustomerLog(customer, 'Booking linked', `Booking ${booking.id} linked to customer account (${reason}).`)
+    setBookings((current) => current.map((item) => Number(item.id) === Number(booking.id) ? { ...item, ...data } : item))
+    setModalBooking((current) => current && Number(current.id) === Number(booking.id) ? { ...current, ...data } : current)
+    setSelectedCustomerId(String(customer.id))
+    setCustomerSearch(customer.name || getCustomerFullName(customer))
+    setCustomerLinkCandidates([])
+    await getBookings()
+    return data
+  }
+
+  async function createCustomerFromWixBooking(booking) {
+    if (!requireStaffSignIn()) return null
+    if (!booking) return null
+    const input = getWixCustomerMatchInput(booking)
+    const name = input.fullName || [input.firstName, input.lastName].filter(Boolean).join(' ').trim() || 'Wix Customer'
+    const { data, error } = await supabase.from('Customers').insert({
+      name,
+      first_name: input.firstName || null,
+      last_name: input.lastName || null,
+      phone: input.phone || null,
+      email: input.email || null,
+      wix_contact_id: booking.wix_contact_id || null,
+      customer_source: 'wix',
+      minutes_balance: 0,
+      standard_minutes_balance: 0,
+      hybrid_minutes_balance: 0,
+      is_active: true
+    }).select().single()
+    if (error) {
+      alert('Customer account was not created. Please check the connection.')
+      console.error('Create customer from Wix booking failed:', { booking, error })
+      return null
+    }
+    await getCustomers()
+    const linkedBooking = await linkBookingToCustomer(booking, data, 'created from Wix booking')
+    return linkedBooking ? data : null
+  }
+
+  async function resolveBookingCustomerLink(booking, { promptOnMultiple = true, createIfNone = false } = {}) {
+    if (!booking || isStaffFreeBooking(booking) || isShopTestBooking(booking)) return getCustomerForBooking(booking) || null
+    const existing = getCustomerForBooking(booking)
+    if (existing) return existing
+    const matches = getCustomerLinkMatches(booking)
+    if (matches.length === 1) {
+      const linked = await linkBookingToCustomer(booking, matches[0].customer, matches[0].reason)
+      return linked ? matches[0].customer : null
+    }
+    if (matches.length > 1) {
+      setCustomerLinkCandidates(matches)
+      if (promptOnMultiple) alert('Multiple possible customer matches were found. Please choose the correct customer account.')
+      return null
+    }
+    setCustomerLinkCandidates([])
+    if (createIfNone) return createCustomerFromWixBooking(booking)
+    return null
   }
 
   function getSelectedStaffAsCustomer() {
@@ -6144,6 +6282,38 @@ function formatMoney(value) {
       }
     }
 
+    const localMatches = getCustomerLinkMatches({
+      first_name: wixFirstName,
+      last_name: wixLastName,
+      customer_name: wixCustomerName,
+      customer_email: wixCustomerEmail,
+      customer_phone: wixCustomerPhone
+    })
+    if (localMatches.length === 1) {
+      const existingCustomer = localMatches[0].customer
+      const safeUpdates = {}
+      if (wixContactId && !existingCustomer.wix_contact_id) safeUpdates.wix_contact_id = wixContactId
+      if (wixFirstName && !existingCustomer.first_name) safeUpdates.first_name = wixFirstName
+      if (wixLastName && !existingCustomer.last_name) safeUpdates.last_name = wixLastName
+      if (wixCustomerPhone && !existingCustomer.phone) safeUpdates.phone = wixCustomerPhone
+      if (wixCustomerEmail && !existingCustomer.email) safeUpdates.email = wixCustomerEmail
+      if (!existingCustomer.customer_source) safeUpdates.customer_source = 'dashboard'
+      if (Object.keys(safeUpdates).length > 0) {
+        const { data: updatedCustomer, error: updateError } = await supabase
+          .from('Customers')
+          .update(safeUpdates)
+          .eq('id', existingCustomer.id)
+          .select()
+          .single()
+        if (!updateError && updatedCustomer) return updatedCustomer
+      }
+      return existingCustomer
+    }
+
+    if (localMatches.length > 1) {
+      return null
+    }
+
     const { data: newCustomer, error: createError } = await supabase
       .from('Customers')
       .insert({
@@ -7289,22 +7459,40 @@ function formatMoney(value) {
       return
     }
 
-    const customer = customers.find((c) => c.id === Number(booking.customer_id))
+    let customer = customers.find((c) => c.id === Number(booking.customer_id))
+    if (!isShopTestBooking(booking) && !isStaffFreeBooking(booking) && !customer) {
+      customer = await resolveBookingCustomerLink(booking, { promptOnMultiple: true, createIfNone: false })
+      if (!customer) {
+        alert('Customer is not linked to an account. Please link or create a customer account before starting.')
+        return
+      }
+    }
+
     if (!isShopTestBooking(booking) && customer && !checkCustomerAgeBeforeSunbed(customer)) return
 
-    const tmaxStarted = await sendTmaxStartForBooking(booking)
+    const bookingForSession = customer && !booking.customer_id
+      ? {
+          ...booking,
+          customer_id: customer.id,
+          customer_name: customer.name || getCustomerFullName(customer),
+          customer_phone: customer.phone || booking.customer_phone || booking.wix_customer_phone || '',
+          customer_email: customer.email || booking.customer_email || booking.wix_customer_email || ''
+        }
+      : booking
+
+    const tmaxStarted = await sendTmaxStartForBooking(bookingForSession)
     if (!tmaxStarted) return
 
     const now = new Date()
     const tanningStart = new Date(now.getTime() + UNDRESS_SECONDS * 1000)
-    const tanningEnd = new Date(tanningStart.getTime() + Number(booking.minutes || 0) * 60000)
+    const tanningEnd = new Date(tanningStart.getTime() + Number(bookingForSession.minutes || 0) * 60000)
     const cooldownEnd = new Date(tanningEnd.getTime() + COOLDOWN_SECONDS * 1000)
 
-    const deducted = isShopTestBooking(booking)
+    const deducted = isShopTestBooking(bookingForSession)
       ? true
-      : isStaffFreeBooking(booking)
-        ? await deductStaffFreeMinutesOnce(booking)
-        : await deductCustomerMinutesOnce(booking)
+      : isStaffFreeBooking(bookingForSession)
+        ? await deductStaffFreeMinutesOnce(bookingForSession)
+        : await deductCustomerMinutesOnce(bookingForSession)
     if (!deducted) return
 
     const { error } = await supabase.from('Bookings').update({
@@ -7626,6 +7814,7 @@ function formatMoney(value) {
     setShopTestFreeUse(true)
     setShowBookingTopUp(false)
     setShowBookingProducts(false)
+    setCustomerLinkCandidates([])
     setSelectedRewardRuleId('')
     setBookingSaving(false)
     setBookingProductId('')
@@ -7636,26 +7825,41 @@ function formatMoney(value) {
     setModalOpen(true)
   }
 
-  function openBooking(booking) {
+  async function openBooking(booking) {
+    const linkedCustomer = await resolveBookingCustomerLink(booking, { promptOnMultiple: false, createIfNone: false })
+    const resolvedBooking = linkedCustomer && !booking.customer_id
+      ? {
+          ...booking,
+          customer_id: linkedCustomer.id,
+          customer_name: linkedCustomer.name || getCustomerFullName(linkedCustomer),
+          customer_phone: linkedCustomer.phone || booking.customer_phone || booking.wix_customer_phone || '',
+          customer_email: linkedCustomer.email || booking.customer_email || booking.wix_customer_email || ''
+        }
+      : booking
+
     const bookingTime = new Date(booking.appointment_time)
-    setModalBooking(booking)
+    setModalBooking(resolvedBooking)
     setModalSlot(null)
     setEditMode(false)
-    setSelectedCustomerId(booking.customer_id ? String(booking.customer_id) : '')
-    setSelectedStaffAsCustomerId(isStaffFreeBooking(booking) ? String(getStaffIdFromBooking(booking)) : '')
-    setCustomerSearch(booking.customer_name || '')
+    setSelectedCustomerId(resolvedBooking.customer_id ? String(resolvedBooking.customer_id) : '')
+    setSelectedStaffAsCustomerId(isStaffFreeBooking(resolvedBooking) ? String(getStaffIdFromBooking(resolvedBooking)) : '')
+    setCustomerSearch(resolvedBooking.customer_name || resolvedBooking.wix_customer_name || '')
     setNewCustomerBalance(0)
-    resetPaymentFields(booking.bed_id)
-    setSelectedMinutes(booking.minutes || 12)
-    setShopTestFreeUse(isShopTestBooking(booking))
+    resetPaymentFields(resolvedBooking.bed_id)
+    setSelectedMinutes(resolvedBooking.minutes || 12)
+    setShopTestFreeUse(isShopTestBooking(resolvedBooking))
     setShowBookingTopUp(false)
     setShowBookingProducts(false)
+    setCustomerLinkCandidates([])
     setBookingSaving(false)
     setBookingProductId('')
     setBookingProductQuantity(1)
     setBookingProductCategoryFilter('')
-    setEditBedId(String(booking.bed_id))
+    setEditBedId(String(resolvedBooking.bed_id))
     setEditTime(`${String(bookingTime.getHours()).padStart(2, '0')}:${String(bookingTime.getMinutes()).padStart(2, '0')}`)
+    if (!resolvedBooking.customer_id && isWixBooking(resolvedBooking) && !isStaffFreeBooking(resolvedBooking) && !isShopTestBooking(resolvedBooking)) {
+      setCustomerLinkCandidates(getCustomerLinkMatches(resolvedBooking))
+    }
     clearProductCart()
     setShowProductPicker(false)
     setModalOpen(true)
@@ -7680,6 +7884,7 @@ function formatMoney(value) {
     setShopTestFreeUse(true)
     setShowBookingTopUp(false)
     setShowBookingProducts(false)
+    setCustomerLinkCandidates([])
     setBookingSaving(false)
     setBookingProductId('')
     setBookingProductQuantity(1)
@@ -9789,7 +9994,10 @@ function formatMoney(value) {
 
         {customerSearch && !selectedCustomer && !selectedStaff && filteredOptions.length === 0 && (
           <div style={{ background: '#111', padding: '12px', borderRadius: '10px', marginBottom: '8px' }}>
-            <p>No customer found.</p>
+            <p>{modalBooking && isWixBooking(modalBooking) && !modalBooking.customer_id ? 'Customer not linked to an account.' : 'No customer found.'}</p>
+            {modalBooking && isWixBooking(modalBooking) && !modalBooking.customer_id && (
+              <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Link this Wix booking to an existing customer or create a new customer account.</p>
+            )}
             <label>Starting standard minutes:</label>
             <input type="number" value={newCustomerBalance} onChange={(e) => setNewCustomerBalance(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '6px', marginBottom: '8px' }} />
             {!newCustomerTermsAccepted && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Salon terms not accepted yet.</p>}
@@ -9826,7 +10034,7 @@ function formatMoney(value) {
                   {getCustomerAgeText(selectedCustomer)}
                 </p>
                 {selectedCustomer.date_of_birth && isCustomerUnder18(selectedCustomer) && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>Under 18 — do not book.</p>}
-                {!selectedCustomer.date_of_birth && <p style={{ color: '#faad14', fontWeight: 'bold' }}>DOB not recorded — check ID before use.</p>}
+                {!selectedCustomer.date_of_birth && <p style={{ color: '#faad14', fontWeight: 'bold' }}>Date of birth not recorded. Please update customer record.</p>}
                 {!selectedCustomer.terms_accepted && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Salon terms not accepted yet.</p>}
                 {!selectedCustomer.id_checked && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>ID check not recorded.</p>}
                 {renderCustomerWarning(selectedCustomer)}
@@ -13855,6 +14063,43 @@ function formatMoney(value) {
                 {modalBooking.wix_booking_id && <p>Wix booking ID: <strong>{modalBooking.wix_booking_id}</strong></p>}
                 {modalBooking.wix_status && <p>Wix status: <strong>{formatStatus(modalBooking.wix_status)}</strong></p>}
                 {modalBooking.wix_service_name && <p>Wix service: <strong>{modalBooking.wix_service_name}</strong></p>}
+                {isWixBooking(modalBooking) && !modalCustomer && !isStaffFreeBooking(modalBooking) && !isShopTestBooking(modalBooking) && (
+                  <div style={{ background: '#120f08', border: '1px solid rgba(212,168,83,0.55)', padding: '12px', margin: '12px 0', borderRadius: '8px' }}>
+                    <p style={{ color: '#ffcc66', fontWeight: 'bold', marginTop: 0 }}>Customer not linked to an account.</p>
+                    <p style={{ marginBottom: '10px' }}>Link this Wix booking before starting the session, selling minutes, or adding products.</p>
+                    {customerLinkCandidates.length > 0 && (
+                      <div style={{ display: 'grid', gap: '8px', marginBottom: '10px' }}>
+                        {customerLinkCandidates.slice(0, 6).map(({ customer, reason }) => (
+                          <button
+                            key={customer.id}
+                            onClick={() => linkBookingToCustomer(modalBooking, customer, reason)}
+                            style={{ padding: '8px 10px', textAlign: 'left', fontSize: '13px' }}
+                          >
+                            Link {customer.name || getCustomerFullName(customer)} - {reason}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => {
+                          setEditMode(true)
+                          setCustomerSearch(modalBooking.customer_name || modalBooking.wix_customer_name || '')
+                          setCustomerLinkCandidates(getCustomerLinkMatches(modalBooking))
+                        }}
+                        style={{ padding: '8px 10px', fontSize: '13px' }}
+                      >
+                        Link to existing customer
+                      </button>
+                      <button
+                        onClick={() => createCustomerFromWixBooking(modalBooking)}
+                        style={{ padding: '8px 10px', fontSize: '13px' }}
+                      >
+                        Create new customer
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {isStaffFreeBooking(modalBooking) ? (
                   <p>Staff free booking</p>
                 ) : isShopTestBooking(modalBooking) ? (
@@ -13863,6 +14108,7 @@ function formatMoney(value) {
                   <>
                     <p>Standard balance: <strong>{modalCustomer.standard_minutes_balance || 0} mins</strong></p>
                     <p>Hybrid balance: <strong>{modalCustomer.hybrid_minutes_balance || 0} mins</strong></p>
+                    {!modalCustomer.date_of_birth && <p style={{ color: '#ffcc66', fontWeight: 'bold' }}>Date of birth not recorded. Please update customer record.</p>}
                   </>
                 )}
                 <p>Total blocked time: {getTotalBlockMinutes(modalBooking)} mins</p>

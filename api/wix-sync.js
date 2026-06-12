@@ -200,6 +200,9 @@ function normalizeBooking(booking) {
   const requiredMapping = WIX_REQUIRED_SERVICE_MAPPINGS[normalizeServiceKey(serviceName)] || inferWixServiceMapping(serviceName)
   const bookingType = requiredMapping?.booking_type || (lowerService.includes('spray') || lowerService.includes('patch') ? 'spraytan' : 'sunbed')
   const contact = booking.contactDetails || booking.customer || booking.contact || {}
+  const contactFirstName = firstValue(contact.firstName, contact.first_name, contact.name?.first, contact.name?.firstName)
+  const contactLastName = firstValue(contact.lastName, contact.last_name, contact.name?.last, contact.name?.lastName)
+  const contactDisplayName = typeof contact.name === 'string' ? contact.name : ''
   const startTime = normalizeDate(firstValue(booking.startDate, booking.startTime, booking.start, booking.slot?.startDate, booking.schedule?.start))
   const servicePrice = lowerService.includes('express') ? 35 : lowerService.includes('face') ? 8 : lowerService.includes('legs') ? 18 : lowerService.includes('upper') ? 22 : lowerService.includes('patch') ? 0 : 30
   const isSprayLike = bookingType === 'spraytan' || bookingType === 'patch_test'
@@ -216,7 +219,11 @@ function normalizeBooking(booking) {
     minutes: requiredMapping?.minutes || null,
     service_name: serviceName,
     wix_service_name: serviceName,
-    customer_name: firstValue(contact.name, `${firstValue(contact.firstName, contact.first_name)} ${firstValue(contact.lastName, contact.last_name)}`.trim()),
+    customer_name: firstValue(contactDisplayName, `${contactFirstName} ${contactLastName}`.trim()),
+    first_name: contactFirstName,
+    last_name: contactLastName,
+    wix_customer_first_name: contactFirstName,
+    wix_customer_last_name: contactLastName,
     customer_email: firstValue(contact.email, contact.emailAddress),
     customer_phone: firstValue(contact.phone, contact.mobile, contact.phoneNumber),
     wix_contact_id: firstValue(contact.contactId, contact.id, booking.contactId),
