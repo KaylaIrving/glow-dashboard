@@ -11680,7 +11680,9 @@ function formatMoney(value) {
       'Rewards / Promos',
       collapseLoyaltyRewards,
       setCollapseLoyaltyRewards,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px', alignItems: 'start' }}>
+        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', minWidth: 0 }}>
+        <h3 style={{ marginTop: 0, textAlign: 'center' }}>Rewards</h3>
         {loyaltyRulesError && <p style={{ color: '#ffcc66' }}>Loyalty rewards table not loaded: {loyaltyRulesError}</p>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '10px', marginBottom: '12px' }}>
           <input placeholder="Reward name" value={loyaltyRuleName} onChange={(e) => setLoyaltyRuleName(e.target.value)} style={{ padding: '10px' }} />
@@ -11717,7 +11719,8 @@ function formatMoney(value) {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: '14px' }}>
+        </div>
+        <div style={{ minWidth: 0 }}>
           {renderPromosPanel()}
         </div>
       </div>
@@ -13025,7 +13028,7 @@ function formatMoney(value) {
     if (!showManagerView) return null
     const staffPanelStyle = { background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', width: '100%', boxSizing: 'border-box' }
     const staffHeadingStyle = { marginTop: 0, textAlign: 'center' }
-    const staffColumnGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: '14px', alignItems: 'start' }
+    const staffColumnGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px', alignItems: 'start' }
 
     return renderCollapsibleSection(
       'Staff Management',
@@ -13068,22 +13071,6 @@ function formatMoney(value) {
               ))}
             </select>
 
-            <div style={{ border: '1px solid rgba(212,168,83,0.35)', background: '#10100f', padding: '10px', marginBottom: '12px' }}>
-              <strong style={{ display: 'block', color: '#d4a853', marginBottom: '8px', textAlign: 'center' }}>Staff Login PIN</strong>
-              <select value={staffPinTargetId} onChange={(e) => setStaffPinTargetId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
-                <option value="">Select staff for PIN...</option>
-                {staff.map((member) => <option key={member.id} value={member.id}>{member.name} - {member.pin_hash ? 'PIN set' : 'No PIN'} - {member.login_active === false ? 'Login inactive' : 'Login active'}</option>)}
-              </select>
-              <input type="password" inputMode="numeric" maxLength="4" placeholder="New 4-digit PIN" value={staffPinValue} onChange={(e) => setStaffPinValue(e.target.value.replace(/D/g, '').slice(0, 4))} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button type="button" onClick={saveSelectedStaffPin}>Save / Reset PIN</button>
-                {staffPinTargetId && (() => {
-                  const pinMember = staff.find((member) => String(member.id) === String(staffPinTargetId))
-                  return pinMember ? <button type="button" onClick={() => setStaffLoginActive(pinMember, pinMember.login_active === false)}>{pinMember.login_active === false ? 'Reactivate Login' : 'Deactivate Login'}</button> : null
-                })()}
-              </div>
-            </div>
-
             <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px' }}>
               {staff.map((member) => (
                 <div key={member.id} style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '10px', borderBottom: '1px solid #222' }}>
@@ -13094,6 +13081,23 @@ function formatMoney(value) {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+
+          <div style={{ ...staffPanelStyle, background: '#10100f', border: '1px solid rgba(212,168,83,0.45)' }}>
+            <h3 style={{ ...staffHeadingStyle, color: '#d4a853' }}>Staff Login PIN</h3>
+            <select value={staffPinTargetId} onChange={(e) => setStaffPinTargetId(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }}>
+              <option value="">Select staff for PIN...</option>
+              {staff.map((member) => <option key={member.id} value={member.id}>{member.name} - {member.pin_hash ? 'PIN set' : 'No PIN'} - {member.login_active === false ? 'Login inactive' : 'Login active'}</option>)}
+            </select>
+            <input type="password" inputMode="numeric" maxLength="4" placeholder="New 4-digit PIN" value={staffPinValue} onChange={(e) => setStaffPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))} style={{ width: '100%', padding: '10px', marginBottom: '8px', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button type="button" onClick={saveSelectedStaffPin}>Save / Reset PIN</button>
+              {staffPinTargetId && (() => {
+                const pinMember = staff.find((member) => String(member.id) === String(staffPinTargetId))
+                return pinMember ? <button type="button" onClick={() => setStaffLoginActive(pinMember, pinMember.login_active === false)}>{pinMember.login_active === false ? 'Reactivate Login' : 'Deactivate Login'}</button> : null
+              })()}
             </div>
           </div>
 
