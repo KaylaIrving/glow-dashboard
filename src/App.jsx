@@ -220,6 +220,7 @@ function App() {
   const [sprayTanDepositPaid, setSprayTanDepositPaid] = useState('')
   const [sprayTanDepositPaymentMethod, setSprayTanDepositPaymentMethod] = useState('card')
   const [sprayTanDepositStatus, setSprayTanDepositStatus] = useState('not_paid')
+  const [sprayTanPaymentChoice, setSprayTanPaymentChoice] = useState('none')
   const [sprayTanBalancePaymentAmount, setSprayTanBalancePaymentAmount] = useState('')
   const [sprayTanBalancePaymentMethod, setSprayTanBalancePaymentMethod] = useState('card')
   const [sprayTanPatchCompleted, setSprayTanPatchCompleted] = useState(false)
@@ -5374,6 +5375,32 @@ function formatMoney(value) {
     return SPRAY_TAN_SERVICES.find((service) => service.name === serviceName)?.price || 0
   }
 
+  function getSprayTanServicesForColumn(column) {
+    if (column === 'patch_test') return SPRAY_TAN_SERVICES.filter((service) => service.name === 'Patch Test')
+    if (column === 'express_tan') return SPRAY_TAN_SERVICES.filter((service) => service.name === 'Express Tan')
+    return SPRAY_TAN_SERVICES.filter((service) => !['Express Tan', 'Patch Test'].includes(service.name))
+  }
+
+  function getSprayTanServiceColumn(serviceName) {
+    if (serviceName === 'Patch Test') return 'patch_test'
+    if (serviceName === 'Express Tan') return 'express_tan'
+    return 'spray_tan'
+  }
+
+  function getSprayTanPromoOptions() {
+    return getActivePromos().filter((promo) => {
+      const bedType = String(promo.bed_type || '').toLowerCase()
+      const text = `${promo.promo_name || ''} ${promo.promo_description || ''}`.toLowerCase()
+      return ['any', 'all', 'spraytan', 'spray_tan', 'spray tan'].includes(bedType) || text.includes('spray') || text.includes('tan')
+    })
+  }
+
+  function getSprayTanPayableServicePrice(serviceName = sprayTanService) {
+    const promo = getSelectedPromo()
+    if (promo) return Number(promo.promo_price || 0)
+    return getSprayTanServicePrice(serviceName)
+  }
+
   function getSprayTanColumnLabel(column) {
     return SPRAY_TAN_COLUMNS.find((item) => item.value === column)?.label || 'Spray Tan'
   }
@@ -8046,8 +8073,11 @@ function formatMoney(value) {
 
   function setSprayTanServiceWithDefaults(serviceName) {
     setSprayTanService(serviceName)
-    const defaultDeposit = getDefaultSprayTanDeposit(serviceName)
+    const servicePrice = getSelectedPromo() ? Number(getSelectedPromo().promo_price || 0) : getSprayTanServicePrice(serviceName)
+    const defaultDeposit = serviceName === 'Patch Test' ? 0 : Number((servicePrice * 0.5).toFixed(2))
     setSprayTanDepositRequired(defaultDeposit)
+    setSprayTanDepositPaid('')
+    setSprayTanPaymentChoice('none')
     setSprayTanDepositStatus(defaultDeposit > 0 ? 'not_paid' : 'not_required')
     setSprayTanDuration(serviceName === 'Patch Test' ? 10 : 30)
     if (serviceName === 'Patch Test') {
@@ -8078,6 +8108,7 @@ function formatMoney(value) {
     setSprayTanDepositPaid(column === 'patch_test' ? 0 : '')
     setSprayTanDepositPaymentMethod('card')
     setSprayTanDepositStatus(column === 'patch_test' ? 'not_required' : 'not_paid')
+    setSprayTanPaymentChoice('none')
     setSprayTanBalancePaymentAmount('')
     setSprayTanBalancePaymentMethod('card')
     setSprayTanPatchCompleted(column === 'patch_test')
@@ -8087,6 +8118,9 @@ function formatMoney(value) {
     setShowSprayTanDepositApproval(false)
     setSprayTanApprovalPaymentAmount('')
     setSprayTanApprovalPaymentMethod('card')
+    setSelectedPromoId('')
+    setPromoProductChoices({})
+    setPaymentNotes('')
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')
     setCustomerSearch('')
@@ -8113,6 +8147,7 @@ function formatMoney(value) {
     setSprayTanDepositPaid(Number(booking.deposit_paid || 0))
     setSprayTanDepositPaymentMethod(booking.spraytan_deposit_payment_method || 'card')
     setSprayTanDepositStatus(booking.deposit_status || getSprayTanDepositStatus(booking.spraytan_service, booking.deposit_required, booking.deposit_paid))
+    setSprayTanPaymentChoice('none')
     setSprayTanBalancePaymentAmount('')
     setSprayTanBalancePaymentMethod(booking.spraytan_balance_payment_method || 'card')
     setSprayTanPatchCompleted(Boolean(booking.patch_test_completed))
@@ -8122,6 +8157,9 @@ function formatMoney(value) {
     setShowSprayTanDepositApproval(false)
     setSprayTanApprovalPaymentAmount('')
     setSprayTanApprovalPaymentMethod(booking.spraytan_deposit_payment_method || 'card')
+    setSelectedPromoId('')
+    setPromoProductChoices({})
+    setPaymentNotes('')
     setSelectedCustomerId(booking.customer_id ? String(booking.customer_id) : '')
     setSelectedStaffAsCustomerId('')
     setCustomerSearch(booking.customer_name || '')
@@ -8145,6 +8183,7 @@ function formatMoney(value) {
     setSprayTanDepositPaid('')
     setSprayTanDepositPaymentMethod('card')
     setSprayTanDepositStatus('not_paid')
+    setSprayTanPaymentChoice('none')
     setSprayTanBalancePaymentAmount('')
     setSprayTanBalancePaymentMethod('card')
     setSprayTanPatchCompleted(false)
@@ -8155,6 +8194,9 @@ function formatMoney(value) {
     setShowSprayTanDepositApproval(false)
     setSprayTanApprovalPaymentAmount('')
     setSprayTanApprovalPaymentMethod('card')
+    setSelectedPromoId('')
+    setPromoProductChoices({})
+    setPaymentNotes('')
     setCommissionStaffId('')
     setSelectedCustomerId('')
     setSelectedStaffAsCustomerId('')
@@ -8190,16 +8232,29 @@ function formatMoney(value) {
     }
 
     const servicePrice = getSprayTanServicePrice(sprayTanService)
+    const promo = getSelectedPromo()
+    const payableServicePrice = sprayTanService === 'Patch Test' ? 0 : getSprayTanPayableServicePrice(sprayTanService)
     const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || 0)
-    const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
-    const balanceDue = Math.max(0, servicePrice - depositPaid)
-    const calculatedDepositStatus = getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid)
-    const statusFields = getSprayTanStatusFields(sprayTanStatusControl, calculatedDepositStatus)
+    const depositPaid = sprayTanService === 'Patch Test'
+      ? 0
+      : sprayTanPaymentChoice === 'full'
+        ? payableServicePrice
+        : sprayTanPaymentChoice === 'deposit'
+          ? depositRequired
+          : 0
+    const balanceDue = Math.max(0, payableServicePrice - depositPaid)
+    const calculatedDepositStatus = sprayTanService === 'Patch Test' ? 'not_required' : depositPaid > 0 ? 'paid' : 'not_paid'
+    const statusFields = getSprayTanStatusFields(sprayTanPaymentChoice === 'none' ? 'Pending Approval' : 'Approved', calculatedDepositStatus)
     const patchWarning = sprayTanStaffCustomer ? '' : getPatchTestWarning(customer, appointmentDateTime, sprayTanService)
     const assignedArtist = staff.find((member) => String(member.name || '').trim().toLowerCase() === String(sprayTanArtist || '').trim().toLowerCase())
 
-    if (depositPaid > servicePrice) {
-      alert('Deposit paid cannot be more than the service price.')
+    if (depositPaid > payableServicePrice) {
+      alert('Payment taken cannot be more than the service price.')
+      return
+    }
+
+    if (['approved', 'completed'].includes(String(statusFields.approval_status || '').toLowerCase()) && !sprayTanArtist.trim()) {
+      alert('Please assign an artist before approving or completing this spray tan booking.')
       return
     }
 
@@ -8239,7 +8294,7 @@ function formatMoney(value) {
       approved_at: statusFields.approval_status === 'approved' ? new Date().toISOString() : null,
       spraytan_duration_minutes: Number(sprayTanDuration || 0),
       spraytan_balance_due: balanceDue,
-      notes: sprayTanNotes || null,
+      notes: [sprayTanNotes, promo ? `Promo applied: ${promo.promo_name}` : '', paymentNotes ? `Payment notes: ${paymentNotes}` : ''].filter(Boolean).join('\n') || null,
       ...getCreatedByStaffFields()
     }).select().single()
     setSprayTanSaving(false)
@@ -8263,25 +8318,27 @@ function formatMoney(value) {
       await createCustomerLog(customer, 'Patch test recorded', `Patch test recorded from spray tan booking. Date: ${new Date(patchDate).toLocaleString('en-GB')}.`)
     }
 
-    await createCustomerLog(customer, 'Spray tan booking created', `${sprayTanService} booked for ${appointmentDateTime.toLocaleString('en-GB')}. Deposit required £${depositRequired.toFixed(2)}, paid £${depositPaid.toFixed(2)}.`)
+    await createCustomerLog(customer, 'Spray tan booking created', `${sprayTanService} booked for ${appointmentDateTime.toLocaleString('en-GB')}. Deposit required ${formatMoney(depositRequired)}, paid ${formatMoney(depositPaid)}.${promo ? ` Promo: ${promo.promo_name}.` : ''}`)
     if (depositPaid > 0) {
+      const paymentType = sprayTanPaymentChoice === 'full' ? 'spray_tan_full_payment' : 'spray_tan_deposit'
+      const paymentLabel = sprayTanPaymentChoice === 'full' ? 'Full payment' : 'Deposit'
       const paymentSaved = await recordSprayTanPayment({
         bookingId: data?.id,
         customer,
         amount: depositPaid,
         paymentMethod: sprayTanDepositPaymentMethod,
-        paymentType: 'spray_tan_deposit',
-        notes: `Deposit recorded for spray tan booking ${data?.id || ''}.`
+        paymentType,
+        notes: `${paymentLabel} recorded for spray tan booking ${data?.id || ''}.${promo ? ` Promo: ${promo.promo_name}.` : ''}${paymentNotes ? ` ${paymentNotes}` : ''}`
       })
       if (!paymentSaved) return
       await createReceipt({
         customer,
-        receiptType: 'spray_tan_deposit',
-        items: [{ name: sprayTanService, quantity: 1, total: depositPaid }],
+        receiptType: paymentType,
+        items: [{ name: promo ? `${sprayTanService} - ${promo.promo_name}` : sprayTanService, quantity: 1, total: depositPaid }],
         subtotal: depositPaid,
         total: depositPaid,
         paymentMethod: sprayTanDepositPaymentMethod,
-        notes: `Deposit recorded for spray tan booking ${data?.id || ''}.`
+        notes: `${paymentLabel} recorded for spray tan booking ${data?.id || ''}.${paymentNotes ? ` ${paymentNotes}` : ''}`
       })
     }
     if (data) await syncBookingToWixAvailability(data, 'upsert')
@@ -13677,15 +13734,30 @@ function formatMoney(value) {
     const customer = getSelectedCustomer()
     const selectedStaff = getSelectedStaffAsCustomer()
     const servicePrice = getSprayTanServicePrice(sprayTanService)
+    const sprayTanPromo = getSelectedPromo()
+    const payableServicePrice = sprayTanService === 'Patch Test' ? 0 : getSprayTanPayableServicePrice(sprayTanService)
+    const promoDiscount = Math.max(0, servicePrice - payableServicePrice)
     const depositRequired = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositRequired || 0)
-    const depositPaid = sprayTanService === 'Patch Test' ? 0 : Number(sprayTanDepositPaid || 0)
+    const depositPaid = sprayTanService === 'Patch Test'
+      ? 0
+      : sprayTanPaymentChoice === 'full'
+        ? payableServicePrice
+        : sprayTanPaymentChoice === 'deposit'
+          ? depositRequired
+          : sprayTanEditingBooking ? Number(sprayTanDepositPaid || 0) : 0
     const existingBalancePaid = Number(sprayTanEditingBooking?.spraytan_balance_paid || 0)
     const balancePaymentAmount = Number(sprayTanBalancePaymentAmount || 0)
-    const balanceDue = Math.max(0, servicePrice - depositPaid - existingBalancePaid - balancePaymentAmount)
+    const balanceDue = Math.max(0, payableServicePrice - depositPaid - existingBalancePaid - balancePaymentAmount)
     const appointmentDateTime = new Date(`${sprayTanDate}T${sprayTanTime}`)
+    const fixedSlotLabel = `${getSprayTanColumnLabel(sprayTanColumn)} at ${sprayTanTime} - ${appointmentDateTime.toLocaleDateString('en-GB')}`
     const patchWarning = customer ? getPatchTestWarning(customer, appointmentDateTime, sprayTanService) : ''
     const latestPatchTestDate = customer ? getLatestCustomerPatchTestDate(customer.id) : null
     const patchTestInfo = customer ? getCustomerActivePatchTestInfo(customer) : { active: false, date: null, expiry: null, warning: 'No customer selected.' }
+    const serviceOptions = getSprayTanServicesForColumn(sprayTanColumn)
+    const visibleServiceOptions = serviceOptions.some((service) => service.name === sprayTanService)
+      ? serviceOptions
+      : [{ name: sprayTanService, price: servicePrice }, ...serviceOptions]
+    const sprayTanPromoOptions = getSprayTanPromoOptions()
     const sprayTanArtistOptions = getSprayTanArtistStaff()
     const visibleSprayTanArtistOptions = sprayTanArtist && !sprayTanArtistOptions.some((member) => String(member.name) === String(sprayTanArtist))
       ? [{ id: 'current-artist', name: sprayTanArtist, is_active: true }, ...sprayTanArtistOptions]
@@ -13695,7 +13767,10 @@ function formatMoney(value) {
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
         <div style={{ background: '#1e1e1e', padding: '24px', borderRadius: '16px', width: '620px', maxWidth: '94%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid rgba(212,168,83,0.35)' }}>
           <h2 style={{ marginTop: 0 }}>{sprayTanEditingBooking ? 'Edit Spray Tan Booking' : 'Create Spray Tan Booking'}</h2>
-          <p style={{ color: '#aaa' }}>{getSprayTanColumnLabel(sprayTanSlot?.column || sprayTanColumn)} at {sprayTanSlot?.time || sprayTanTime}</p>
+          <div style={{ background: '#0b0b0b', border: '1px solid rgba(212,168,83,0.35)', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
+            <strong style={{ color: '#d4a853' }}>{fixedSlotLabel}</strong>
+            <p style={{ color: '#aaa', margin: '6px 0 0' }}>Date, time and calendar column are fixed from the selected slot.</p>
+          </div>
 
           {sprayTanEditingBooking ? (
             <div style={{ marginBottom: '12px' }}>
@@ -13755,31 +13830,14 @@ function formatMoney(value) {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px', marginBottom: '12px' }}>
             <div>
-              <label>Service column</label>
-              <select
-                value={sprayTanColumn}
-                onChange={(e) => {
-                  const column = e.target.value
-                  setSprayTanColumn(column)
-                  if (column === 'patch_test') setSprayTanServiceWithDefaults('Patch Test')
-                  if (column === 'express_tan') setSprayTanServiceWithDefaults('Express Tan')
-                }}
-                style={{ width: '100%', padding: '10px', marginTop: '5px' }}
-              >
-                {SPRAY_TAN_COLUMNS.map((column) => <option key={column.value} value={column.value}>{column.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>Specific service / price</label>
+              <label>Specific service</label>
               <select value={sprayTanService} onChange={(e) => setSprayTanServiceWithDefaults(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                {SPRAY_TAN_SERVICES.map((service) => <option key={service.name} value={service.name}>{service.name} - {formatMoney(service.price)}</option>)}
+                {visibleServiceOptions.map((service) => <option key={service.name} value={service.name}>{service.name} - {formatMoney(service.price)}</option>)}
               </select>
+              <small style={{ color: '#aaa' }}>Duration: {sprayTanDuration} mins</small>
             </div>
-            <div><label>Date</label><input type="date" value={sprayTanDate} onChange={(e) => setSprayTanDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Time</label><input type="time" value={sprayTanTime} onChange={(e) => setSprayTanTime(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Duration</label><input type="number" min="5" value={sprayTanDuration} onChange={(e) => setSprayTanDuration(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
             <div><label>Artist</label>
               <select value={sprayTanArtist} onChange={(e) => setSprayTanArtist(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
                 <option value="">Assign artist...</option>
@@ -13787,70 +13845,96 @@ function formatMoney(value) {
                   <option key={member.id} value={member.name}>{member.name}</option>
                 ))}
               </select>
+              <small style={{ color: '#aaa' }}>Required once approved or completed.</small>
             </div>
-            <div><label>Deposit due (£)</label><input type="number" min="0" step="0.01" value={depositRequired} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
-              const nextDepositRequired = e.target.value
-              setSprayTanDepositRequired(nextDepositRequired)
-              setSprayTanDepositStatus(getSprayTanDepositStatus(sprayTanService, Number(nextDepositRequired || 0), depositPaid))
-            }} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /><small style={{ color: '#aaa' }}>{formatMoney(depositRequired)}</small></div>
-            <div><label>Deposit paid</label><input type="number" step="0.01" value={depositPaid} disabled={sprayTanService === 'Patch Test'} onChange={(e) => {
-              setSprayTanDepositPaid(e.target.value)
-              setSprayTanDepositStatus(getSprayTanDepositStatus(sprayTanService, depositRequired, Number(e.target.value || 0)))
-            }} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-            <div><label>Deposit payment method</label>
-              <select value={sprayTanDepositPaymentMethod} onChange={(e) => setSprayTanDepositPaymentMethod(e.target.value)} disabled={sprayTanService === 'Patch Test' || depositPaid <= 0} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="bank_transfer">BACS / Bank Transfer</option>
-                <option value="other">Other</option>
-              </select>
+          </div>
+
+          <div style={{ background: '#0b0b0b', border: '1px solid rgba(212,168,83,0.35)', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Apply Offer / Promo</label>
+            {promoLoadError && <p style={{ color: '#ffcc66' }}>Promos unavailable: {promoLoadError}</p>}
+            <select
+              value={selectedPromoId}
+              onChange={(e) => {
+                const nextId = e.target.value
+                setSelectedPromoId(nextId)
+                setPromoProductChoices({})
+                const nextPromo = promos.find((promo) => String(promo.id) === String(nextId))
+                const nextPrice = nextPromo ? Number(nextPromo.promo_price || 0) : getSprayTanServicePrice(sprayTanService)
+                const nextDeposit = sprayTanService === 'Patch Test' ? 0 : Number((nextPrice * 0.5).toFixed(2))
+                setSprayTanDepositRequired(nextDeposit)
+                setSprayTanDepositStatus(nextDeposit > 0 ? 'not_paid' : 'not_required')
+                setSprayTanPaymentChoice('none')
+              }}
+              style={{ width: '100%', padding: '10px' }}
+            >
+              <option value="">No offer / promo</option>
+              {sprayTanPromoOptions.map((promo) => <option key={promo.id} value={promo.id}>{promo.promo_name} - {formatMoney(promo.promo_price || 0)}</option>)}
+            </select>
+            {sprayTanPromo && <p style={{ color: '#aaa', marginBottom: 0 }}>{sprayTanPromo.promo_description || 'Promo applied to this spray tan payment.'}</p>}
+          </div>
+          {sprayTanEditingBooking && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+              <div><label>Take Balance Payment</label><input type="number" min="0" step="0.01" value={sprayTanBalancePaymentAmount} onChange={(e) => setSprayTanBalancePaymentAmount(e.target.value)} placeholder="Amount paid now" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
+              <div><label>Balance payment method</label>
+                <select value={sprayTanBalancePaymentMethod} onChange={(e) => setSprayTanBalancePaymentMethod(e.target.value)} disabled={Number(sprayTanBalancePaymentAmount || 0) <= 0} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">BACS / Bank Transfer</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div><label>Booking status</label>
+                <select
+                  value={sprayTanStatusControl}
+                  onChange={(e) => {
+                    const nextStatus = e.target.value
+                    setSprayTanStatusControl(nextStatus)
+                    const fields = getSprayTanStatusFields(nextStatus, sprayTanDepositStatus)
+                    setSprayTanApprovalStatus(fields.approval_status)
+                    setSprayTanDepositStatus(fields.deposit_status)
+                  }}
+                  style={{ width: '100%', padding: '10px', marginTop: '5px' }}
+                >
+                  {SPRAY_TAN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                </select>
+              </div>
             </div>
-            <div><label>Deposit status</label>
-              <select value={sprayTanDepositStatus} onChange={(e) => setSprayTanDepositStatus(e.target.value)} disabled={sprayTanService === 'Patch Test'} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
-                <option value="not_paid">Deposit Not Paid</option>
-                <option value="pending">Deposit Pending</option>
-                <option value="paid">Deposit Paid</option>
-                <option value="not_required">Not Required</option>
-              </select>
-            </div>
-            {sprayTanEditingBooking && (
-              <>
-                <div><label>Take Balance Payment</label><input type="number" min="0" step="0.01" value={sprayTanBalancePaymentAmount} onChange={(e) => setSprayTanBalancePaymentAmount(e.target.value)} placeholder="Amount paid now" style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
-                <div><label>Balance payment method</label>
-                  <select value={sprayTanBalancePaymentMethod} onChange={(e) => setSprayTanBalancePaymentMethod(e.target.value)} disabled={Number(sprayTanBalancePaymentAmount || 0) <= 0} style={{ width: '100%', padding: '10px', marginTop: '5px' }}>
+          )}
+
+          <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
+            <h3 style={{ marginTop: 0 }}>Payment Summary</h3>
+            {!sprayTanEditingBooking && sprayTanService !== 'Patch Test' && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                <button type="button" onClick={() => { setSprayTanPaymentChoice('none'); setSprayTanDepositPaid(''); setSprayTanDepositStatus('not_paid') }} style={{ background: sprayTanPaymentChoice === 'none' ? '#d4a853' : '#1e1e1e', color: sprayTanPaymentChoice === 'none' ? '#050505' : '#fff' }}>No payment taken</button>
+                <button type="button" onClick={() => { setSprayTanPaymentChoice('deposit'); setSprayTanDepositPaid(depositRequired); setSprayTanDepositStatus('paid') }} style={{ background: sprayTanPaymentChoice === 'deposit' ? '#d4a853' : '#1e1e1e', color: sprayTanPaymentChoice === 'deposit' ? '#050505' : '#fff' }}>Deposit payment</button>
+                <button type="button" onClick={() => { setSprayTanPaymentChoice('full'); setSprayTanDepositPaid(payableServicePrice); setSprayTanDepositStatus('paid') }} style={{ background: sprayTanPaymentChoice === 'full' ? '#d4a853' : '#1e1e1e', color: sprayTanPaymentChoice === 'full' ? '#050505' : '#fff' }}>Full payment</button>
+              </div>
+            )}
+            {sprayTanService === 'Patch Test' && <p style={{ color: '#aaa' }}>Patch Test is free and does not require a deposit.</p>}
+            <p style={{ margin: '0 0 6px' }}>Service price: <strong>{formatMoney(servicePrice)}</strong></p>
+            {sprayTanPromo && <p style={{ margin: '0 0 6px' }}>Promo applied: <strong>{sprayTanPromo.promo_name}</strong> ({formatMoney(payableServicePrice)})</p>}
+            {promoDiscount > 0 && <p style={{ margin: '0 0 6px' }}>Promo/discount applied: <strong>{formatMoney(promoDiscount)}</strong></p>}
+            <p style={{ margin: '0 0 6px' }}>Deposit due: <strong>{formatMoney(depositRequired)}</strong></p>
+            <p style={{ margin: '0 0 6px' }}>Deposit paid today: <strong>{formatMoney(sprayTanEditingBooking ? Math.max(0, Number(sprayTanDepositPaid || 0) - Number(sprayTanEditingBooking.deposit_paid || 0)) : depositPaid)}</strong></p>
+            <p style={{ margin: '0 0 6px' }}>Balance already paid: <strong>{formatMoney(existingBalancePaid)}</strong></p>
+            <p style={{ margin: '0 0 6px' }}>Balance due: <strong>{formatMoney(balanceDue)}</strong></p>
+            <p style={{ margin: '0 0 10px' }}>Deposit status: <strong>{formatStatus(sprayTanService === 'Patch Test' ? 'not_required' : depositPaid > 0 ? 'paid' : 'not_paid')}</strong></p>
+            {(!sprayTanEditingBooking && sprayTanPaymentChoice !== 'none' && sprayTanService !== 'Patch Test') && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                <label style={{ display: 'grid', gap: '5px' }}>Payment method
+                  <select value={sprayTanDepositPaymentMethod} onChange={(e) => setSprayTanDepositPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px' }}>
                     <option value="cash">Cash</option>
                     <option value="card">Card</option>
                     <option value="bank_transfer">BACS / Bank Transfer</option>
                     <option value="other">Other</option>
                   </select>
-                </div>
-              </>
+                </label>
+                <label style={{ display: 'grid', gap: '5px' }}>Payment notes
+                  <input value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Optional notes" style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }} />
+                </label>
+              </div>
             )}
-            <div><label>Booking status</label>
-              <select
-                value={sprayTanStatusControl}
-                onChange={(e) => {
-                  const nextStatus = e.target.value
-                  setSprayTanStatusControl(nextStatus)
-                  const fields = getSprayTanStatusFields(nextStatus, sprayTanDepositStatus)
-                  setSprayTanApprovalStatus(fields.approval_status)
-                  setSprayTanDepositStatus(fields.deposit_status)
-                }}
-                style={{ width: '100%', padding: '10px', marginTop: '5px' }}
-              >
-                {SPRAY_TAN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-              </select>
-            </div>
-            <div><label>Patch test date due / completed</label><input type="date" value={sprayTanPatchTestDate} onChange={(e) => setSprayTanPatchTestDate(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px' }} /></div>
           </div>
-
-          <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
-            <p style={{ margin: '0 0 6px' }}>Service price: <strong>{formatMoney(servicePrice)}</strong></p>
-            <p style={{ margin: '0 0 6px' }}>Balance already paid: <strong>{formatMoney(existingBalancePaid)}</strong></p>
-            <p style={{ margin: '0 0 6px' }}>Balance due: <strong>{formatMoney(balanceDue)}</strong></p>
-            <p style={{ margin: 0 }}>Deposit status: <strong>{formatStatus(sprayTanDepositStatus || getSprayTanDepositStatus(sprayTanService, depositRequired, depositPaid))}</strong></p>
-          </div>
-
           <label style={{ display: 'block', marginBottom: '8px', color: sprayTanPatchCompleted ? '#9ccfae' : '#ffcc66' }}>
             <input type="checkbox" checked={sprayTanPatchCompleted} disabled={sprayTanService === 'Patch Test'} onChange={(e) => setSprayTanPatchCompleted(e.target.checked)} style={{ marginRight: '8px' }} />
             Patch test completed
@@ -13867,7 +13951,7 @@ function formatMoney(value) {
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
             <button onClick={sprayTanEditingBooking ? saveSprayTanBookingEdits : createSprayTanBookingFromModal} disabled={sprayTanSaving}>
-              {sprayTanSaving ? 'Saving...' : sprayTanEditingBooking ? 'Save Spray Tan Booking' : 'Create Spray Tan Booking'}
+              {sprayTanSaving ? 'Saving...' : sprayTanEditingBooking ? 'Save Spray Tan Booking' : sprayTanPaymentChoice === 'none' || sprayTanService === 'Patch Test' ? 'Create Spray Tan Booking' : 'Create Spray Tan Booking & Payment'}
             </button>
             {sprayTanEditingBooking && <button onClick={cancelSprayTanBooking} disabled={sprayTanSaving}>Cancel Booking</button>}
             {sprayTanEditingBooking && <button onClick={deleteSprayTanBooking} disabled={sprayTanSaving} style={{ borderColor: 'rgba(255,120,117,0.65)', color: '#ffb3ad' }}>Delete Booking</button>}
