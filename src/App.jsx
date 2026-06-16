@@ -248,6 +248,7 @@ function App() {
   const [collapseCommissionSettings, setCollapseCommissionSettings] = useState(true)
   const [collapseDuplicateCustomers, setCollapseDuplicateCustomers] = useState(true)
   const [collapseLoyaltyRewards, setCollapseLoyaltyRewards] = useState(true)
+  const [collapseAuditLogs, setCollapseAuditLogs] = useState(true)
   const [selectedProductManagementId, setSelectedProductManagementId] = useState('')
   const [customerManagerSearch, setCustomerManagerSearch] = useState('')
   const [showAllCustomersList, setShowAllCustomersList] = useState(false)
@@ -519,6 +520,13 @@ function App() {
   const [managerReportsData, setManagerReportsData] = useState(null)
   const [managerReportsLoading, setManagerReportsLoading] = useState(false)
   const [managerReportsError, setManagerReportsError] = useState('')
+  const [auditLogStartDate, setAuditLogStartDate] = useState(formatLocalDate(new Date()))
+  const [auditLogEndDate, setAuditLogEndDate] = useState(formatLocalDate(new Date()))
+  const [auditLogStaffFilter, setAuditLogStaffFilter] = useState('')
+  const [auditLogActionFilter, setAuditLogActionFilter] = useState('')
+  const [auditLogs, setAuditLogs] = useState([])
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false)
+  const [auditLogsError, setAuditLogsError] = useState('')
   const [commissionRules, setCommissionRules] = useState([])
   const [commissionRulesError, setCommissionRulesError] = useState('')
   const [commissionRuleEditingId, setCommissionRuleEditingId] = useState('')
@@ -2586,6 +2594,7 @@ function formatMoney(value) {
     setCollapseCommissionSettings(true)
     setCollapseDuplicateCustomers(true)
     setCollapseLoyaltyRewards(true)
+    setCollapseAuditLogs(true)
   }
 
   function openManagerSection(sectionName, currentlyOpen) {
@@ -2606,6 +2615,7 @@ function formatMoney(value) {
     if (sectionName === 'promos') setCollapsePromos(false)
     if (sectionName === 'commission') setCollapseCommissionSettings(false)
     if (sectionName === 'duplicates') setCollapseDuplicateCustomers(false)
+    if (sectionName === 'audit') setCollapseAuditLogs(false)
     if (sectionName === 'loyalty') {
       setCollapseLoyaltyRewards(false)
       setCollapsePromos(false)
@@ -2935,6 +2945,69 @@ function formatMoney(value) {
     }
     const { error } = await supabase.from('GlowAuditLogs').insert(payload)
     if (error) console.warn('GlowAuditLogs insert failed:', error.message || error)
+  }
+
+  function getBookingAuditMetadata(booking, extra = {}) {
+    return {
+      booking_id: booking?.id || null,
+      customer_id: booking?.customer_id || null,
+      customer_name: booking?.customer_name || null,
+      bed_id: booking?.bed_id || null,
+      bed_name: booking?.bed_id ? getBedName(booking.bed_id) : null,
+      status_before: booking?.status || null,
+      minutes: booking?.minutes || null,
+      appointment_time: booking?.appointment_time || null,
+      ...extra
+    }
+  }
+
+  async function loadAuditLogs() {
+    if (!showManagerView) return
+    const start = new Date(`${auditLogStartDate}T00:00:00`)
+    const end = new Date(`${auditLogEndDate}T23:59:59`)
+    try {
+      setAuditLogsLoading(true)
+      setAuditLogsError('')
+      let query = supabase
+        .from('GlowAuditLogs')
+        .select('*')
+        .gte('created_at', start.toISOString())
+        .lte('created_at', end.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(500)
+
+      if (auditLogStaffFilter) query = query.eq('staff_name', auditLogStaffFilter)
+      if (auditLogActionFilter.trim()) query = query.ilike('action', `%${auditLogActionFilter.trim()}%`)
+
+      const { data, error } = await query
+      if (error) {
+        setAuditLogsError(error.message || 'Audit logs could not be loaded.')
+        console.error('GlowAuditLogs load failed:', error)
+        return
+      }
+      setAuditLogs(data || [])
+    } catch (error) {
+      setAuditLogsError(error.message || 'Audit logs could not be loaded.')
+      console.error('GlowAuditLogs load threw:', error)
+    } finally {
+      setAuditLogsLoading(false)
+    }
+  }
+
+  function exportAuditLogsCsv() {
+    if (!auditLogs.length) {
+      alert('Load audit logs first.')
+      return
+    }
+    downloadCsv(`glow_audit_logs_${auditLogStartDate}_to_${auditLogEndDate}.csv`, auditLogs.map((log) => ({
+      created_at: log.created_at,
+      staff_id: log.staff_id,
+      staff_name: log.staff_name,
+      action: log.action,
+      details: log.details,
+      metadata: typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata || {})
+    })))
+    createAuditLog('audit_logs_exported', `Audit logs exported for ${auditLogStartDate} to ${auditLogEndDate}.`, { from: auditLogStartDate, to: auditLogEndDate, rows: auditLogs.length })
   }
 
   function persistStaffSession(member) {
@@ -3846,6 +3919,14 @@ function formatMoney(value) {
     if (cartItems === productCart) clearProductCart()
     await getProducts()
     await getDailyTakings()
+    await createAuditLog('product_sale_recorded', `Product sale recorded: ${cartItems.map((item) => `${item.product_name} x${item.quantity}`).join(', ')}.`, {
+      customer_id: customer?.id || null,
+      customer_name: customer?.name || null,
+      payment_method: paymentMethodForSale,
+      source_type: sourceType,
+      total_amount: salesRows.reduce((total, row) => total + Number(row.total_amount || 0), 0),
+      items: cartItems.map((item) => ({ product_id: item.product_id, product_name: item.product_name, quantity: Number(item.quantity || 0), price: Number(item.price || 0) }))
+    })
     return true
   }
 
@@ -4247,6 +4328,15 @@ function formatMoney(value) {
         return
       }
 
+      await createAuditLog(floatMovementEditingId ? 'float_movement_edited' : 'float_movement_created', `${floatMovementType} float movement saved for ${selectedDate}: ${formatMoney(amount)}.`, {
+        movement_id: floatMovementEditingId || null,
+        date: selectedDate,
+        type: floatMovementType,
+        amount: Number(amount.toFixed(2)),
+        staff_id_for_movement: staffUser?.id || null,
+        staff_name_for_movement: staffUser?.name || null,
+        note: floatMovementNote.trim()
+      })
       clearFloatMovementForm()
       await getFloatMovements()
       alert('Float movement saved.')
@@ -4274,6 +4364,14 @@ function formatMoney(value) {
       return
     }
 
+    await createAuditLog('float_movement_deleted', `Float movement deleted for ${movement.date || selectedDate}: ${formatMoney(movement.amount)}.`, {
+      movement_id: movement.id,
+      date: movement.date || selectedDate,
+      type: movement.type,
+      amount: Number(movement.amount || 0),
+      staff_name_for_movement: movement.staff_name || null,
+      note: movement.note || null
+    })
     await getFloatMovements()
   }
 
@@ -7163,6 +7261,24 @@ function formatMoney(value) {
           return
         }
       }
+      await createAuditLog('booking_edited', `Booking ${modalBooking.id} edited for ${customer.name}.`, getBookingAuditMetadata(modalBooking, {
+        status_after: modalBooking.status || null,
+        before: {
+          customer_id: modalBooking.customer_id,
+          customer_name: modalBooking.customer_name,
+          bed_id: modalBooking.bed_id,
+          minutes: modalBooking.minutes,
+          appointment_time: modalBooking.appointment_time
+        },
+        after: {
+          customer_id: customer.id,
+          customer_name: customer.name,
+          bed_id: Number(editBedId),
+          minutes: Number(selectedMinutes),
+          appointment_time: appointmentDateTime.toISOString(),
+          source: isInternalShopTest ? 'shop_test' : modalBooking.source || 'calendar'
+        }
+      }))
       await syncBookingToWixAvailability(modalBooking, 'upsert')
       closeModal()
       getBookings()
@@ -7183,6 +7299,7 @@ function formatMoney(value) {
     if (!confirmed) return
     const { error } = await supabase.from('Bookings').delete().eq('id', booking.id)
     if (!error) {
+      await createAuditLog('booking_deleted', `Booking ${booking.id} deleted for ${booking.customer_name || 'customer'}.`, getBookingAuditMetadata(booking, { status_after: 'deleted' }))
       await syncBookingToWixAvailability(booking, 'delete')
       closeModal()
       getBookings()
@@ -7194,6 +7311,7 @@ function formatMoney(value) {
 
   async function updateBookingStatus(id, newStatus) {
     if (!requireStaffSignIn()) return
+    const currentBooking = bookings.find((booking) => Number(booking.id) === Number(id)) || modalBooking || null
 
     const activeStatuses = ['undressing', 'running', 'cooldown', 'active', 'time_sent', 'sent', 'customer_started', 'waiting_to_start', 'in_use']
     if (activeStatuses.includes(String(newStatus || '').toLowerCase())) {
@@ -7213,7 +7331,14 @@ function formatMoney(value) {
     }
 
     const { error } = await supabase.from('Bookings').update({ status: newStatus }).eq('id', id)
-    if (!error) await createAuditLog('booking_status_changed', `Booking ${id} status changed to ${newStatus}.`, { booking_id: id, status: newStatus })
+    if (!error) {
+      const action = String(newStatus || '').toLowerCase() === 'no_show'
+        ? 'booking_marked_no_show'
+        : ['cancelled', 'canceled'].includes(String(newStatus || '').toLowerCase())
+          ? 'booking_cancelled'
+          : 'booking_status_changed'
+      await createAuditLog(action, `Booking ${id} status changed from ${currentBooking?.status || 'unknown'} to ${newStatus}.`, getBookingAuditMetadata(currentBooking, { booking_id: id, status_after: newStatus }))
+    }
     if (error) {
       alert('Booking status was not saved. Please check the connection and try again.')
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
@@ -7299,13 +7424,14 @@ function formatMoney(value) {
     if (!requireStaffSignIn()) return
 
     if (!['completed', 'no_show', 'force_stopped'].includes(booking.status)) {
-      alert('Manager Reset is only available for completed, no show, or force stopped bookings.')
+      alert('Reset Session is only available for completed, no show, or force stopped bookings.')
       return
     }
 
-    const confirmed = window.confirm(`Manager Reset this booking for ${booking.customer_name}? This returns it to Booked. Deducted minutes will NOT change.`)
+    const isForceStoppedReset = String(booking.status || '').toLowerCase() === 'force_stopped'
+    const confirmed = window.confirm(`Reset this booking for ${booking.customer_name}? This returns it to Booked. Deducted minutes will NOT change.`)
     if (!confirmed) return
-    if (!requireManagerAccess('Manager PIN required to reset booking:')) return
+    if (!isForceStoppedReset && !requireManagerAccess('Manager PIN required to reset completed or no-show bookings:')) return
 
     const previousStatus = booking.status
     const { error } = await supabase.from('Bookings').update({
@@ -7326,8 +7452,13 @@ function formatMoney(value) {
 
     const customer = getCustomerForBooking(booking)
     if (customer) {
-      await createCustomerLog(customer, 'Manager booking reset', `Booking ${booking.id || ''} reset from ${formatStatus(previousStatus)} to Booked. Deducted minutes unchanged: ${booking.minutes_deducted ? 'yes' : 'no'}.`)
+      await createCustomerLog(customer, isForceStoppedReset ? 'Session reset' : 'Manager booking reset', `Booking ${booking.id || ''} reset from ${formatStatus(previousStatus)} to Booked. Deducted minutes unchanged: ${booking.minutes_deducted ? 'yes' : 'no'}.`)
     }
+    await createAuditLog(isForceStoppedReset ? 'force_stopped_session_reset' : 'booking_manager_reset', `Booking ${booking.id} reset from ${formatStatus(previousStatus)} to Booked.`, getBookingAuditMetadata(booking, {
+      status_after: 'booked',
+      manager_pin_required: !isForceStoppedReset,
+      minutes_deducted_unchanged: Boolean(booking.minutes_deducted)
+    }))
 
     closeModal()
     getBookings()
@@ -7511,7 +7642,13 @@ function formatMoney(value) {
       return
     }
 
-    await createAuditLog('booking_session_started', `Session started for booking ${booking.id}.`, { booking_id: booking.id, bed_id: booking.bed_id, minutes: booking.minutes })
+    await createAuditLog('booking_session_started', `Session started for booking ${bookingForSession.id}.`, getBookingAuditMetadata(bookingForSession, {
+      status_after: 'undressing',
+      booking_start: now.toISOString(),
+      booking_end: cooldownEnd.toISOString(),
+      tmax_status: 'undressing',
+      minutes_deducted: true
+    }))
     closeModal()
     getBookings()
     getCustomers()
@@ -7538,6 +7675,10 @@ function formatMoney(value) {
       console.log(error)
       return
     }
+    await createAuditLog('force_stop_session', `Force stopped booking ${booking.id} for ${booking.customer_name || 'customer'}.`, getBookingAuditMetadata(booking, {
+      status_after: 'force_stopped',
+      cooldown_until: cooldownEnd.toISOString()
+    }))
     closeModal()
     getBookings()
   }
@@ -7582,6 +7723,11 @@ function formatMoney(value) {
     }
 
     await getBookings()
+    await createAuditLog('emergency_stop_all_beds', `${activeBookings.length} active bed session(s) marked Force Stopped.`, {
+      booking_ids: ids,
+      status_after: 'force_stopped',
+      cooldown_until: cooldownEnd.toISOString()
+    })
     alert('Dashboard sessions marked Force Stopped. Physical T-Max emergency stop requires local integration/control.')
   }
 
@@ -7593,7 +7739,10 @@ function formatMoney(value) {
       if (!liveCompletionStatuses.includes(status)) continue
       if (booking.booking_end && new Date(booking.booking_end) <= currentTime && !['completed', 'force_stopped', 'no_show'].includes(status)) {
         await addRuntimeHoursForBooking(booking)
-        await supabase.from('Bookings').update({ status: 'completed', tmax_status: 'completed' }).eq('id', booking.id)
+        const { error } = await supabase.from('Bookings').update({ status: 'completed', tmax_status: 'completed' }).eq('id', booking.id)
+        if (!error) {
+          await createAuditLog('booking_session_completed', `Booking ${booking.id} completed automatically after session end.`, getBookingAuditMetadata(booking, { status_after: 'completed', tmax_status: 'completed' }))
+        }
         getBookings()
       }
     }
@@ -11313,6 +11462,70 @@ function formatMoney(value) {
     )
   }
 
+  function renderAuditLogsPanel() {
+    if (!showManagerView) return null
+    return renderCollapsibleSection(
+      'Staff Audit Logs',
+      collapseAuditLogs,
+      setCollapseAuditLogs,
+      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+          <label style={{ display: 'grid', gap: '5px' }}>
+            Date from
+            <input type="date" value={auditLogStartDate} onChange={(e) => setAuditLogStartDate(e.target.value)} style={{ padding: '10px' }} />
+          </label>
+          <label style={{ display: 'grid', gap: '5px' }}>
+            Date to
+            <input type="date" value={auditLogEndDate} onChange={(e) => setAuditLogEndDate(e.target.value)} style={{ padding: '10px' }} />
+          </label>
+          <label style={{ display: 'grid', gap: '5px' }}>
+            Staff member
+            <select value={auditLogStaffFilter} onChange={(e) => setAuditLogStaffFilter(e.target.value)} style={{ padding: '10px' }}>
+              <option value="">All staff</option>
+              {staff.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: '5px' }}>
+            Action type
+            <input value={auditLogActionFilter} onChange={(e) => setAuditLogActionFilter(e.target.value)} placeholder="booking, cash_up, product..." style={{ padding: '10px' }} />
+          </label>
+          <button onClick={loadAuditLogs} disabled={auditLogsLoading}>{auditLogsLoading ? 'Loading...' : 'Load Audit Logs'}</button>
+          <button onClick={exportAuditLogsCsv}>Export CSV</button>
+        </div>
+        {auditLogsError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{auditLogsError}</p>}
+        <div style={{ maxHeight: '420px', overflow: 'auto', border: '1px solid #222', borderRadius: '10px' }}>
+          {auditLogs.length === 0 ? (
+            <p style={{ color: '#aaa', padding: '12px', margin: 0 }}>No audit logs loaded for this filter.</p>
+          ) : (
+            <div style={{ minWidth: '820px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '150px 150px 170px 1fr', gap: '10px', color: '#d4a853', fontWeight: 'bold', padding: '10px', borderBottom: '1px solid #333' }}>
+                <span>Date/time</span>
+                <span>Staff</span>
+                <span>Action</span>
+                <span>Details</span>
+              </div>
+              {auditLogs.map((log) => (
+                <div key={log.id || `${log.created_at}-${log.action}`} style={{ display: 'grid', gridTemplateColumns: '150px 150px 170px 1fr', gap: '10px', padding: '10px', borderBottom: '1px solid #1f1f1f', alignItems: 'start' }}>
+                  <span>{log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : '-'}</span>
+                  <span>{log.staff_name || 'Unknown'}</span>
+                  <span>{log.action || '-'}</span>
+                  <span>
+                    {log.details || '-'}
+                    {log.metadata && (
+                      <small style={{ display: 'block', color: '#aaa', marginTop: '4px' }}>
+                        {typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata)}
+                      </small>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   function renderCommissionSettingsPanel() {
     if (!showManagerView) return null
     const commissionTargetOptions = getCommissionRuleTargetOptions()
@@ -12355,6 +12568,7 @@ function formatMoney(value) {
       { key: 'receipts', label: 'Receipt History', isOpen: !collapseReceipts },
       { key: 'daily', label: 'Daily Takings', isOpen: !collapseDailyTakings },
       { key: 'reports', label: 'Reports', isOpen: !collapseReports },
+      { key: 'audit', label: 'Staff Audit Logs', isOpen: !collapseAuditLogs },
       { key: 'loyalty', label: 'Rewards / Promos', isOpen: !collapseLoyaltyRewards },
       { key: 'duplicates', label: 'Duplicate Customers Report', isOpen: !collapseDuplicateCustomers }
     ]
@@ -13895,6 +14109,7 @@ function formatMoney(value) {
       {v2ActiveTab === 'manager' && showManagerView && renderReceiptHistoryPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderDailyTakingsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderManagerReportsPanel()}
+      {v2ActiveTab === 'manager' && showManagerView && renderAuditLogsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderLoyaltyRewardsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderDuplicateCustomersReportPanel()}
 
@@ -14154,7 +14369,7 @@ function formatMoney(value) {
                   )}
 
                   {['completed', 'no_show', 'force_stopped'].includes(String(modalBooking.status || '').toLowerCase()) && (
-                    <button onClick={() => managerResetBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Manager Reset</button>
+                    <button onClick={() => managerResetBooking(modalBooking)} style={{ padding: '8px 10px', fontSize: '13px' }}>Reset Session</button>
                   )}
 
                   {!hasSessionStarted(modalBooking) && (
