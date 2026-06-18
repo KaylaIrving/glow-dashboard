@@ -715,6 +715,53 @@ function App() {
     return base
   }, [dailyTakings, dailyProductSales])
 
+  const cashUpBedTotals = useMemo(() => {
+    const excludedStatuses = new Set(['cancelled', 'canceled', 'deleted', 'no_show'])
+    const bedRows = beds.map((bed) => ({
+      bed_id: Number(bed.id),
+      bed_name: getBedName(bed.id),
+      total_minutes_used: 0,
+      total_sales_value: 0
+    }))
+
+    const bookingRows = bookings.filter((booking) => {
+      if (!isSunbedBooking(booking)) return false
+      if (!isBookingOnSelectedDate(booking)) return false
+      return !excludedStatuses.has(getBookingStatusKey(booking))
+    })
+
+    for (const booking of bookingRows) {
+      const row = bedRows.find((item) => Number(item.bed_id) === Number(booking.bed_id))
+      if (!row) continue
+      row.total_minutes_used += Number(booking.minutes || booking.minutes_used || 0)
+      row.total_sales_value += Number(booking.total_amount || booking.total_paid || booking.price_paid || booking.sale_total || 0)
+    }
+
+    for (const payment of dailyTakings) {
+      const amount = Number(payment.total_amount || 0)
+      if (!amount) continue
+      const paymentType = String(payment.package_type || payment.package_name || payment.bed_type || '').toLowerCase()
+      if (paymentType.includes('spray_tan') || paymentType.includes('spray tan') || paymentType.includes('promo')) continue
+
+      let targetBedId = Number(payment.bed_id || 0)
+      if (!targetBedId && payment.booking_id) {
+        const linkedBooking = bookingRows.find((booking) => String(booking.id) === String(payment.booking_id))
+        targetBedId = Number(linkedBooking?.bed_id || 0)
+      }
+      if (!targetBedId) {
+        const text = `${payment.bed_type || ''} ${payment.package_name || ''}`.toLowerCase()
+        if (text.includes('tone') || text.includes('stand up') || text.includes('bed 1') || text.includes('room 1')) targetBedId = 1
+        if (text.includes('collagen') || text.includes('bed 2') || text.includes('room 2')) targetBedId = 2
+        if (text.includes('prestige') || text.includes('bed 3') || text.includes('room 3')) targetBedId = 3
+      }
+
+      const row = bedRows.find((item) => Number(item.bed_id) === Number(targetBedId))
+      if (row) row.total_sales_value += amount
+    }
+
+    return bedRows
+  }, [beds, bookings, dailyTakings, selectedDate])
+
   const startCashDenominationTotal = useMemo(() => {
     return CASH_DENOMINATIONS.reduce((total, denomination) => {
       return total + (Number(startCashDenominations[denomination.key] || 0) * denomination.value)
@@ -774,6 +821,28 @@ function App() {
     const parsed = value instanceof Date ? value : new Date(value)
     if (Number.isNaN(parsed.getTime())) return ''
     return formatLocalDate(parsed)
+  }
+
+  function formatDisplayDate(value) {
+    if (!value) return ''
+    const parsed = value instanceof Date
+      ? value
+      : /^\d{4}-\d{2}-\d{2}$/.test(String(value))
+        ? new Date(`${value}T00:00:00`)
+        : new Date(value)
+    if (Number.isNaN(parsed.getTime())) return ''
+    return parsed.toLocaleDateString('en-GB')
+  }
+
+  function formatDisplayDateTime(value) {
+    if (!value) return ''
+    const parsed = value instanceof Date
+      ? value
+      : /^\d{4}-\d{2}-\d{2}$/.test(String(value))
+        ? new Date(`${value}T00:00:00`)
+        : new Date(value)
+    if (Number.isNaN(parsed.getTime())) return ''
+    return parsed.toLocaleString('en-GB')
   }
 
   function isBookingOnSelectedDate(booking) {
@@ -1719,7 +1788,7 @@ function formatMoney(value) {
   function copyDailyTakingsReport() {
     const summary = getDailyTakingsSummary()
     const lines = [
-      `Glow Daily Takings - ${dailyReportDate}`,
+      `Glow Daily Takings - ${formatDisplayDate(dailyReportDate)}`,
       `Total revenue: ${formatMoney(summary.totalRevenue)}`,
       `Cash: ${formatMoney(summary.cashTotal)}`,
       `Card: ${formatMoney(summary.cardTotal)}`,
@@ -2161,8 +2230,8 @@ function formatMoney(value) {
       return type === 'promo' || type.includes('promo')
     })
     const dailyTakingsRows = [{
-      date_from: reportsStartDate,
-      date_to: reportsEndDate,
+      date_from: formatDisplayDate(reportsStartDate),
+      date_to: formatDisplayDate(reportsEndDate),
       total_revenue: paymentsTotal + productSalesTotal,
       cash_total: paymentMethodTotal('cash'),
       card_total: paymentMethodTotal('card'),
@@ -2228,8 +2297,8 @@ function formatMoney(value) {
         return {
           customer_name: customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Unnamed',
           phone: customer.phone || '',
-          last_patch_test_date: customer.last_patch_test_date || '',
-          patch_test_expiry_date: customer.patch_test_expiry_date,
+          last_patch_test_date: formatDisplayDate(customer.last_patch_test_date),
+          patch_test_expiry_date: formatDisplayDate(customer.patch_test_expiry_date),
           days_remaining,
           status: days_remaining < 0 ? 'Expired' : days_remaining <= 31 ? 'Expiring soon' : 'Active'
         }
@@ -2249,7 +2318,7 @@ function formatMoney(value) {
         staff_name: booking.created_by_staff_name || booking.staff_name || 'Unknown staff'
       }))
     const cashUpSummaryRows = cashUps.map((cashUp) => ({
-      date: cashUp.date || cashUp.cashup_date || cashUp.created_at?.slice(0, 10) || '',
+      date: formatDisplayDate(cashUp.date || cashUp.cashup_date || cashUp.cash_up_date || cashUp.created_at?.slice(0, 10) || ''),
       starting_float: Number(cashUp.starting_float || cashUp.start_day_float || cashUp.cash_float || 0),
       actual_cash_counted: Number(cashUp.actual_cash_counted || cashUp.actual_cash || 0),
       variance: Number(cashUp.variance || 0),
@@ -2282,7 +2351,7 @@ function formatMoney(value) {
       minute_type: formatStatus(entry.minute_type),
       minutes_amount: Number(entry.minutes_amount || 0),
       minutes_remaining: Number(entry.minutes_remaining || 0),
-      expiry_date: entry.expiry_date || '',
+      expiry_date: formatDisplayDate(entry.expiry_date),
       expired: entry.expired ? 'Yes' : 'No',
       notes: entry.notes || ''
     }))
@@ -2305,7 +2374,7 @@ function formatMoney(value) {
           standard_minutes_balance: standardMinutes,
           hybrid_minutes_balance: hybridMinutes,
           total_remaining_minutes: totalRemaining,
-          last_visit_or_booking: lastBookingDate ? new Date(lastBookingDate).toLocaleString('en-GB') : '',
+          last_visit_or_booking: formatDisplayDateTime(lastBookingDate),
           customer_status: customer.is_active === false || customer.active === false ? 'Inactive' : 'Active'
         }
       })
@@ -4464,7 +4533,7 @@ function formatMoney(value) {
         return
       }
 
-      await createAuditLog(floatMovementEditingId ? 'float_movement_edited' : 'float_movement_created', `${floatMovementType} float movement saved for ${selectedDate}: ${formatMoney(amount)}.`, {
+      await createAuditLog(floatMovementEditingId ? 'float_movement_edited' : 'float_movement_created', `${floatMovementType} float movement saved for ${formatDisplayDate(selectedDate)}: ${formatMoney(amount)}.`, {
         movement_id: floatMovementEditingId || null,
         date: selectedDate,
         type: floatMovementType,
@@ -4500,7 +4569,7 @@ function formatMoney(value) {
       return
     }
 
-    await createAuditLog('float_movement_deleted', `Float movement deleted for ${movement.date || selectedDate}: ${formatMoney(movement.amount)}.`, {
+    await createAuditLog('float_movement_deleted', `Float movement deleted for ${formatDisplayDate(movement.date || selectedDate)}: ${formatMoney(movement.amount)}.`, {
       movement_id: movement.id,
       date: movement.date || selectedDate,
       type: movement.type,
@@ -4554,7 +4623,7 @@ function formatMoney(value) {
         return
       }
 
-      await createAuditLog('cash_up_float_saved', `Start-of-day float saved for ${selectedDate}: ?${Number(startFloat || 0).toFixed(2)}.`, { cashup_date: selectedDate, start_float: Number(startFloat || 0) })
+      await createAuditLog('cash_up_float_saved', `Start-of-day float saved for ${formatDisplayDate(selectedDate)}: ?${Number(startFloat || 0).toFixed(2)}.`, { cashup_date: selectedDate, start_float: Number(startFloat || 0) })
       await getCashUpForSelectedDate()
       await getDailyTakings()
       await getFloatMovements()
@@ -4643,7 +4712,7 @@ function formatMoney(value) {
         return
       }
 
-      await createAuditLog('cash_up_completed_locked', `Cash-up completed and locked for ${selectedDate}. Variance ?${Number(variance || 0).toFixed(2)}.`, { cashup_date: selectedDate, variance: Number(variance || 0), completed_by: signOffName })
+      await createAuditLog('cash_up_completed_locked', `Cash-up completed and locked for ${formatDisplayDate(selectedDate)}. Variance ?${Number(variance || 0).toFixed(2)}.`, { cashup_date: selectedDate, variance: Number(variance || 0), completed_by: signOffName })
       setShowCashUpLockConfirm(false)
       await getCashUpForSelectedDate()
       alert('End-of-day cash-up completed and locked.')
@@ -10919,7 +10988,7 @@ function formatMoney(value) {
               <p><strong>Last Top Up Date:</strong> {customerPayments[0]?.created_at ? new Date(customerPayments[0].created_at).toLocaleString('en-GB') : 'None recorded'}</p>
               <p><strong>Lifetime Minutes Purchased:</strong> {lifetimeMinutesPurchased}</p>
               <p><strong>Lifetime Minutes Used:</strong> {lifetimeMinutesUsed}</p>
-              {(customerMinuteExpiries || []).map((entry) => <p key={entry.id}>{formatStatus(entry.source_type || 'Promo')} - {entry.minutes_remaining || 0} mins remaining / expires {entry.expiry_date || 'never'}{entry.expired ? ' / expired' : ''}</p>)}
+              {(customerMinuteExpiries || []).map((entry) => <p key={entry.id}>{formatStatus(entry.source_type || 'Promo')} - {entry.minutes_remaining || 0} mins remaining / expires {entry.expiry_date ? formatDisplayDate(entry.expiry_date) : 'never'}{entry.expired ? ' / expired' : ''}</p>)}
             </div>
           </div>
         )}
@@ -10974,7 +11043,7 @@ function formatMoney(value) {
             <div style={panelStyle}>
               <p><strong>Patch Test Status:</strong> {patchWarning || (customer.patch_test_expiry_date ? 'Valid' : 'Not recorded')}</p>
               <p><strong>Last Patch Test Date:</strong> {customer.last_patch_test_date ? new Date(customer.last_patch_test_date).toLocaleDateString('en-GB') : '-'}</p>
-              <p><strong>Patch Test Expiry Date:</strong> {customer.patch_test_expiry_date || '-'}</p>
+              <p><strong>Patch Test Expiry Date:</strong> {customer.patch_test_expiry_date ? formatDisplayDate(customer.patch_test_expiry_date) : '-'}</p>
               <p><strong>Artist History:</strong> {[...new Set(sprayBookings.map((booking) => booking.assigned_artist_name || booking.spraytan_artist).filter(Boolean))].join(', ') || '-'}</p>
               <p><strong>Lifetime Spray Tan Spend:</strong> £{sprayTanRevenue.toFixed(2)} / <strong>Total Spray Tan Visits:</strong> {sprayBookings.length}</p>
             </div>
@@ -12109,7 +12178,7 @@ function formatMoney(value) {
           {cashUpExistingRecord?.float_entered_by_staff && (
             <p style={{ color: '#aaa', marginBottom: 0 }}>
               Entered by {cashUpExistingRecord.float_entered_by_staff}
-              {cashUpExistingRecord.float_entered_at ? ` on ${new Date(cashUpExistingRecord.float_entered_at).toLocaleString('en-GB')}` : ''}
+              {cashUpExistingRecord.float_entered_at ? ` on ${formatDisplayDateTime(cashUpExistingRecord.float_entered_at)}` : ''}
             </p>
           )}
         </div>
@@ -12192,6 +12261,19 @@ function formatMoney(value) {
           <div style={itemStyle}><span>Balances</span><h2>{formatMoney(summary.sprayTanBalanceRevenue)}</h2></div>
           <div style={itemStyle}><span>Total revenue</span><h2>{formatMoney(summary.totalRevenue)}</h2></div>
           <div style={itemStyle}><span>Expected cash in till</span><h2>{formatMoney(expectedCash)}</h2></div>
+        </div>
+
+        <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.28)', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
+          <h4 style={{ margin: '0 0 10px', color: '#d4a853' }}>Sunbed totals by bed</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+            {cashUpBedTotals.map((bedTotal) => (
+              <div key={bedTotal.bed_id} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '10px', padding: '10px' }}>
+                <strong>{bedTotal.bed_name}</strong>
+                <p style={{ margin: '8px 0 4px', color: '#ddd' }}>Minutes used: <strong>{Number(bedTotal.total_minutes_used || 0)}</strong></p>
+                <p style={{ margin: 0, color: '#ddd' }}>Sales value: <strong>{formatMoney(bedTotal.total_sales_value || 0)}</strong></p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="cash-up-v2-denominations cash-up-v2-end-counter">
@@ -12765,7 +12847,6 @@ function formatMoney(value) {
       { key: 'corrections', label: 'Booking / Payment Corrections', isOpen: !collapseCorrections },
       { key: 'wix', label: 'Wix Booking Sync', isOpen: !collapseWixSync },
       { key: 'receipts', label: 'Receipt History', isOpen: !collapseReceipts },
-      { key: 'daily', label: 'Daily Takings', isOpen: !collapseDailyTakings },
       { key: 'reports', label: 'Reports', isOpen: !collapseReports },
       { key: 'audit', label: 'Staff Audit Logs', isOpen: !collapseAuditLogs },
       { key: 'loyalty', label: 'Rewards / Promos', isOpen: !collapseLoyaltyRewards }
@@ -13265,6 +13346,14 @@ function formatMoney(value) {
 
   function renderMaintenancePanel() {
     if (!showManagerView) return null
+    const getMaintenanceCardStyle = (bedId) => {
+      const styles = {
+        1: { background: 'linear-gradient(135deg, #261b11, #15100b)', border: '1px solid rgba(179,119,54,0.45)' },
+        2: { background: 'linear-gradient(135deg, #10241f, #0c1513)', border: '1px solid rgba(82,156,132,0.38)' },
+        3: { background: 'linear-gradient(135deg, #29240f, #151306)', border: '1px solid rgba(214,184,104,0.42)' }
+      }
+      return { ...(styles[Number(bedId)] || { background: '#0b0b0b', border: '1px solid #333' }), borderRadius: '14px', padding: '14px', color: '#f7f0df' }
+    }
 
     return renderCollapsibleSection(
       'Maintenance',
@@ -13272,13 +13361,13 @@ function formatMoney(value) {
       setCollapseMaintenance,
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
         {beds.map((bed) => (
-          <div key={bed.id} style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
+          <div key={bed.id} style={getMaintenanceCardStyle(bed.id)}>
             <h3>{getBedName(bed.id)}</h3>
             {bed.is_out_of_service && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>OUT OF SERVICE</p>}
             <p>Runtime: <strong>{getBedRuntimeHours(bed).toFixed(2)} hours</strong></p>
             <p>Tube target: <strong>{getBedTargetHours(bed)} hours</strong></p>
             <p>Hours remaining: <strong>{getBedHoursRemaining(bed).toFixed(2)}</strong></p>
-            <p>Last tube change: {bed.last_tube_change_date ? new Date(bed.last_tube_change_date).toLocaleDateString('en-GB') : 'Not recorded'}</p>
+            <p>Last tube change: {bed.last_tube_change_date ? formatDisplayDate(bed.last_tube_change_date) : 'Not recorded'}</p>
             <label style={{ display: 'grid', gap: '5px', color: '#ddd', marginBottom: '8px' }}>
               Last tube change date
               <input
@@ -13333,11 +13422,12 @@ function formatMoney(value) {
       collapseProducts,
       setCollapseProducts,
       <>
-        {productLoadError && <p style={{ color: '#ff7875' }}>{productLoadError}</p>}
+        <div style={{ background: 'linear-gradient(135deg, #f3e7c9, #dcc492)', border: '1px solid rgba(212,168,83,0.55)', borderRadius: '16px', padding: '16px', color: '#120f08' }}>
+          {productLoadError && <p style={{ color: '#7a1512', fontWeight: 'bold' }}>{productLoadError}</p>}
 
-        <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
 
-          <div style={productColumnGridStyle}>
+            <div style={productColumnGridStyle}>
             <div style={productPanelStyle}>
               <h3 style={productHeadingStyle}>Product Categories</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '12px' }}>
@@ -13484,6 +13574,7 @@ function formatMoney(value) {
               </div>
             </div>
           </div>
+        </div>
         </div>
 
         {showStandalonePOS && (
