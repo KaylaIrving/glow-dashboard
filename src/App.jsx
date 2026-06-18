@@ -54,6 +54,22 @@ const AUDIT_LOG_ACTION_FILTERS = [
   { value: 'wix_sync', label: 'Wix sync', matches: ['wix'] }
 ]
 
+const MANAGER_LIGHT_PANEL_STYLE = {
+  background: 'linear-gradient(135deg, #f3e7c9, #dcc492)',
+  border: '1px solid rgba(212,168,83,0.55)',
+  borderRadius: '16px',
+  padding: '16px',
+  color: '#120f08'
+}
+
+const MANAGER_DARK_PANEL_STYLE = {
+  background: '#0b0b0b',
+  border: '1px solid #333',
+  borderRadius: '14px',
+  padding: '14px',
+  color: '#f5f0e8'
+}
+
 // TODO Wix integration: fill this once the final Wix service names and bed rules are confirmed.
 // Example shape:
 // '10 minute sunbed bed 1': { bedId: 1, minutes: 10 }
@@ -11554,10 +11570,11 @@ function formatMoney(value) {
       'Booking / Payment Corrections',
       collapseCorrections,
       setCollapseCorrections,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <p style={{ color: '#aaa', marginTop: 0 }}>
-          Use this when staff sell the wrong minutes, need to reverse a top-up, move minutes, or record a refund/correction. Original payment records are not deleted.
-        </p>
+      <div style={MANAGER_LIGHT_PANEL_STYLE}>
+        <div style={MANAGER_DARK_PANEL_STYLE}>
+          <p style={{ color: '#aaa', marginTop: 0 }}>
+            Use this when staff sell the wrong minutes, need to reverse a top-up, move minutes, or record a refund/correction. Original payment records are not deleted.
+          </p>
 
         <div style={{ display: 'none' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
@@ -11649,9 +11666,10 @@ function formatMoney(value) {
           style={{ width: '100%', minHeight: '80px', padding: '10px', marginTop: '10px', background: '#111', color: 'white', border: '1px solid #333', borderRadius: '10px', boxSizing: 'border-box' }}
         />
 
-        <button onClick={applyManagerCorrection} style={{ marginTop: '10px' }}>
-          Apply Manager Correction
-        </button>
+          <button onClick={applyManagerCorrection} style={{ marginTop: '10px' }}>
+            Apply Manager Correction
+          </button>
+        </div>
       </div>
     )
   }
@@ -11684,40 +11702,42 @@ function formatMoney(value) {
       'Reports',
       collapseReports,
       setCollapseReports,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Date from
-            <input type="date" value={reportsStartDate} onChange={(e) => setReportsStartDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Date to
-            <input type="date" value={reportsEndDate} onChange={(e) => setReportsEndDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Staff member
-            <select value={reportsStaffFilter} onChange={(e) => setReportsStaffFilter(e.target.value)} style={{ padding: '10px' }}>
-              <option value="">All staff</option>
-              {staff.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Report type
-            <select value={reportsType} onChange={(e) => setReportsType(e.target.value)} style={{ padding: '10px' }}>
-              {MANAGER_REPORT_TYPES.map((report) => <option key={report.value} value={report.value}>{report.label}</option>)}
-            </select>
-          </label>
-          <button onClick={generateManagerReports} disabled={managerReportsLoading}>{managerReportsLoading ? 'Generating...' : 'Generate Report'}</button>
-          <button onClick={exportManagerReports}>Export Report CSV</button>
-        </div>
-        {managerReportsError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{managerReportsError}</p>}
-        {!managerReportsData ? (
-          <p style={{ color: '#aaa' }}>Choose a date range, staff filter and report type, then generate the report. Older rows with missing staff fields will show as Unknown staff.</p>
-        ) : (
-          selectedReport && renderReportTable(selectedReport.title, selectedReport.rows, selectedReport.columns)
-        )}
-        <div style={{ marginTop: '14px' }}>
-          {renderExportsPanel()}
+      <div style={MANAGER_LIGHT_PANEL_STYLE}>
+        <div style={MANAGER_DARK_PANEL_STYLE}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Date from
+              <input type="date" value={reportsStartDate} onChange={(e) => setReportsStartDate(e.target.value)} style={{ padding: '10px' }} />
+            </label>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Date to
+              <input type="date" value={reportsEndDate} onChange={(e) => setReportsEndDate(e.target.value)} style={{ padding: '10px' }} />
+            </label>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Staff member
+              <select value={reportsStaffFilter} onChange={(e) => setReportsStaffFilter(e.target.value)} style={{ padding: '10px' }}>
+                <option value="">All staff</option>
+                {staff.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Report type
+              <select value={reportsType} onChange={(e) => setReportsType(e.target.value)} style={{ padding: '10px' }}>
+                {MANAGER_REPORT_TYPES.map((report) => <option key={report.value} value={report.value}>{report.label}</option>)}
+              </select>
+            </label>
+            <button onClick={generateManagerReports} disabled={managerReportsLoading}>{managerReportsLoading ? 'Generating...' : 'Generate Report'}</button>
+            <button onClick={exportManagerReports}>Export Report CSV</button>
+          </div>
+          {managerReportsError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{managerReportsError}</p>}
+          {!managerReportsData ? (
+            <p style={{ color: '#aaa' }}>Choose a date range, staff filter and report type, then generate the report. Older rows with missing staff fields will show as Unknown staff.</p>
+          ) : (
+            selectedReport && renderReportTable(selectedReport.title, selectedReport.rows, selectedReport.columns)
+          )}
+          <div style={{ marginTop: '14px' }}>
+            {renderExportsPanel()}
+          </div>
         </div>
       </div>
     )
@@ -11729,63 +11749,65 @@ function formatMoney(value) {
       'Staff Audit Logs',
       collapseAuditLogs,
       setCollapseAuditLogs,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Date from
-            <input type="date" value={auditLogStartDate} onChange={(e) => setAuditLogStartDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Date to
-            <input type="date" value={auditLogEndDate} onChange={(e) => setAuditLogEndDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Staff member
-            <select value={auditLogStaffFilter} onChange={(e) => setAuditLogStaffFilter(e.target.value)} style={{ padding: '10px' }}>
-              <option value="">All staff</option>
-              {staff.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: '5px' }}>
-            Action type
-            <select value={auditLogActionFilter} onChange={(e) => setAuditLogActionFilter(e.target.value)} style={{ padding: '10px' }}>
-              {AUDIT_LOG_ACTION_FILTERS.map((option) => (
-                <option key={option.value || 'all'} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          <button onClick={loadAuditLogs} disabled={auditLogsLoading}>{auditLogsLoading ? 'Loading...' : 'Load Audit Logs'}</button>
-          <button onClick={exportAuditLogsCsv}>Export CSV</button>
-        </div>
-        {auditLogsError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{auditLogsError}</p>}
-        <div style={{ maxHeight: '420px', overflow: 'auto', border: '1px solid #222', borderRadius: '10px' }}>
-          {auditLogs.length === 0 ? (
-            <p style={{ color: '#aaa', padding: '12px', margin: 0 }}>No audit logs loaded for this filter.</p>
-          ) : (
-            <div style={{ minWidth: '820px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '150px 150px 170px 1fr', gap: '10px', color: '#d4a853', fontWeight: 'bold', padding: '10px', borderBottom: '1px solid #333' }}>
-                <span>Date/time</span>
-                <span>Staff</span>
-                <span>Action</span>
-                <span>Details</span>
-              </div>
-              {auditLogs.map((log) => (
-                <div key={log.id || `${log.created_at}-${log.action}`} style={{ display: 'grid', gridTemplateColumns: '150px 150px 170px 1fr', gap: '10px', padding: '10px', borderBottom: '1px solid #1f1f1f', alignItems: 'start' }}>
-                  <span>{log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : '-'}</span>
-                  <span>{log.staff_name || 'Unknown'}</span>
-                  <span>{log.action || '-'}</span>
-                  <span>
-                    {log.details || '-'}
-                    {log.metadata && (
-                      <small style={{ display: 'block', color: '#aaa', marginTop: '4px' }}>
-                        {typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata)}
-                      </small>
-                    )}
-                  </span>
+      <div style={MANAGER_LIGHT_PANEL_STYLE}>
+        <div style={MANAGER_DARK_PANEL_STYLE}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Date from
+              <input type="date" value={auditLogStartDate} onChange={(e) => setAuditLogStartDate(e.target.value)} style={{ padding: '10px' }} />
+            </label>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Date to
+              <input type="date" value={auditLogEndDate} onChange={(e) => setAuditLogEndDate(e.target.value)} style={{ padding: '10px' }} />
+            </label>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Staff member
+              <select value={auditLogStaffFilter} onChange={(e) => setAuditLogStaffFilter(e.target.value)} style={{ padding: '10px' }}>
+                <option value="">All staff</option>
+                {staff.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: '5px' }}>
+              Action type
+              <select value={auditLogActionFilter} onChange={(e) => setAuditLogActionFilter(e.target.value)} style={{ padding: '10px' }}>
+                {AUDIT_LOG_ACTION_FILTERS.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <button onClick={loadAuditLogs} disabled={auditLogsLoading}>{auditLogsLoading ? 'Loading...' : 'Load Audit Logs'}</button>
+            <button onClick={exportAuditLogsCsv}>Export CSV</button>
+          </div>
+          {auditLogsError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{auditLogsError}</p>}
+          <div style={{ maxHeight: '420px', overflow: 'auto', border: '1px solid #222', borderRadius: '10px' }}>
+            {auditLogs.length === 0 ? (
+              <p style={{ color: '#aaa', padding: '12px', margin: 0 }}>No audit logs loaded for this filter.</p>
+            ) : (
+              <div style={{ minWidth: '820px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '150px 150px 170px 1fr', gap: '10px', color: '#d4a853', fontWeight: 'bold', padding: '10px', borderBottom: '1px solid #333' }}>
+                  <span>Date/time</span>
+                  <span>Staff</span>
+                  <span>Action</span>
+                  <span>Details</span>
                 </div>
-              ))}
-            </div>
-          )}
+                {auditLogs.map((log) => (
+                  <div key={log.id || `${log.created_at}-${log.action}`} style={{ display: 'grid', gridTemplateColumns: '150px 150px 170px 1fr', gap: '10px', padding: '10px', borderBottom: '1px solid #1f1f1f', alignItems: 'start' }}>
+                    <span>{log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : '-'}</span>
+                    <span>{log.staff_name || 'Unknown'}</span>
+                    <span>{log.action || '-'}</span>
+                    <span>
+                      {log.details || '-'}
+                      {log.metadata && (
+                        <small style={{ display: 'block', color: '#aaa', marginTop: '4px' }}>
+                          {typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata)}
+                        </small>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     )
@@ -11888,8 +11910,9 @@ function formatMoney(value) {
       'Rewards / Promos',
       collapseLoyaltyRewards,
       setCollapseLoyaltyRewards,
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px', alignItems: 'start' }}>
-        <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', minWidth: 0 }}>
+      <div style={MANAGER_LIGHT_PANEL_STYLE}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px', alignItems: 'start' }}>
+          <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px', minWidth: 0 }}>
         <h3 style={{ marginTop: 0, textAlign: 'center' }}>Rewards</h3>
         {loyaltyRulesError && <p style={{ color: '#ffcc66' }}>Loyalty rewards table not loaded: {loyaltyRulesError}</p>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '10px', marginBottom: '12px' }}>
@@ -11928,8 +11951,9 @@ function formatMoney(value) {
           ))}
         </div>
         </div>
-        <div style={{ minWidth: 0 }}>
-          {renderPromosPanel()}
+          <div style={{ minWidth: 0 }}>
+            {renderPromosPanel()}
+          </div>
         </div>
       </div>
     )
@@ -12515,8 +12539,9 @@ function formatMoney(value) {
       'Wix Booking Sync',
       collapseWixSync,
       setCollapseWixSync,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+      <div style={MANAGER_LIGHT_PANEL_STYLE}>
+        <div style={MANAGER_DARK_PANEL_STYLE}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '14px' }}>
           {[
             { label: 'New bookings imported', value: diagnostics.imported?.bookings || 0 },
             { label: 'Bookings updated', value: diagnostics.updated?.bookings || 0 },
@@ -12721,9 +12746,10 @@ function formatMoney(value) {
             {wixSyncRunning ? 'Testing Import...' : 'Test Import'}
           </button>
         </div>
-        <p style={{ color: '#aaa', marginBottom: 0 }}>
-          Live sync is pending the Vercel Wix API route and Wix credentials. Test Import creates or updates one sample pending spray tan booking for the selected date using a fixed Wix booking ID.
-        </p>
+          <p style={{ color: '#aaa', marginBottom: 0 }}>
+            Live sync is pending the Vercel Wix API route and Wix credentials. Test Import creates or updates one sample pending spray tan booking for the selected date using a fixed Wix booking ID.
+          </p>
+        </div>
       </div>
     )
   }
@@ -12881,53 +12907,55 @@ function formatMoney(value) {
       'Receipt History',
       collapseReceipts,
       setCollapseReceipts,
-      <div style={{ background: '#0b0b0b', border: '1px solid #333', borderRadius: '14px', padding: '14px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
-            Date From
-            <input type="date" value={receiptSearchStartDate} onChange={(e) => setReceiptSearchStartDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
-            Date To
-            <input type="date" value={receiptSearchEndDate} onChange={(e) => setReceiptSearchEndDate(e.target.value)} style={{ padding: '10px' }} />
-          </label>
-          <input list="receipt-customer-options" placeholder="Customer name" value={receiptSearchCustomer} onChange={(e) => setReceiptSearchCustomer(e.target.value)} style={{ padding: '10px' }} />
-          <datalist id="receipt-customer-options">
-            {customers
-              .filter((customer) => {
-                const query = receiptSearchCustomer.trim().toLowerCase()
-                if (!query) return true
-                return String(customer.name || '').toLowerCase().includes(query)
-                  || String(customer.first_name || '').toLowerCase().includes(query)
-                  || String(customer.last_name || '').toLowerCase().includes(query)
-                  || String(customer.phone || '').toLowerCase().includes(query)
-                  || String(customer.email || '').toLowerCase().includes(query)
-              })
-              .slice(0, 30)
-              .map((customer) => <option key={customer.id} value={customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()} />)}
-          </datalist>
-          <select value={receiptSearchType} onChange={(e) => setReceiptSearchType(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All receipt types</option>
-            <option value="minutes_topup">Minutes Top-Up</option>
-            <option value="minutes_topup_with_products">Minutes + Products</option>
-            <option value="product_sale">Product Sale</option>
-            <option value="spray_tan_deposit">Spray Tan Deposit</option>
-            <option value="spray_tan_balance_payment">Spray Tan Balance</option>
-            <option value="correction">Correction</option>
-          </select>
-          <select value={receiptSearchPaymentMethod} onChange={(e) => setReceiptSearchPaymentMethod(e.target.value)} style={{ padding: '10px' }}>
-            <option value="">All payment methods</option>
-            <option value="card">Card</option>
-            <option value="cash">Cash</option>
-            <option value="bank_transfer">Bank Transfer</option>
-            <option value="other">Other</option>
-            <option value="not_recorded">Not Recorded</option>
-          </select>
-          <button onClick={searchReceipts} disabled={receiptSearchLoading}>{receiptSearchLoading ? 'Searching...' : 'Search Receipts'}</button>
-        </div>
-        {receiptSearchError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{receiptSearchError}</p>}
-        <div style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px', padding: '10px', background: '#111' }}>
-          {managerReceipts.length === 0 ? <p style={{ color: '#aaa' }}>No receipts loaded.</p> : managerReceipts.map((receipt) => renderReceiptSummary(receipt))}
+      <div style={MANAGER_LIGHT_PANEL_STYLE}>
+        <div style={MANAGER_DARK_PANEL_STYLE}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+            <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
+              Date From
+              <input type="date" value={receiptSearchStartDate} onChange={(e) => setReceiptSearchStartDate(e.target.value)} style={{ padding: '10px' }} />
+            </label>
+            <label style={{ display: 'grid', gap: '5px', color: '#ddd' }}>
+              Date To
+              <input type="date" value={receiptSearchEndDate} onChange={(e) => setReceiptSearchEndDate(e.target.value)} style={{ padding: '10px' }} />
+            </label>
+            <input list="receipt-customer-options" placeholder="Customer name" value={receiptSearchCustomer} onChange={(e) => setReceiptSearchCustomer(e.target.value)} style={{ padding: '10px' }} />
+            <datalist id="receipt-customer-options">
+              {customers
+                .filter((customer) => {
+                  const query = receiptSearchCustomer.trim().toLowerCase()
+                  if (!query) return true
+                  return String(customer.name || '').toLowerCase().includes(query)
+                    || String(customer.first_name || '').toLowerCase().includes(query)
+                    || String(customer.last_name || '').toLowerCase().includes(query)
+                    || String(customer.phone || '').toLowerCase().includes(query)
+                    || String(customer.email || '').toLowerCase().includes(query)
+                })
+                .slice(0, 30)
+                .map((customer) => <option key={customer.id} value={customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()} />)}
+            </datalist>
+            <select value={receiptSearchType} onChange={(e) => setReceiptSearchType(e.target.value)} style={{ padding: '10px' }}>
+              <option value="">All receipt types</option>
+              <option value="minutes_topup">Minutes Top-Up</option>
+              <option value="minutes_topup_with_products">Minutes + Products</option>
+              <option value="product_sale">Product Sale</option>
+              <option value="spray_tan_deposit">Spray Tan Deposit</option>
+              <option value="spray_tan_balance_payment">Spray Tan Balance</option>
+              <option value="correction">Correction</option>
+            </select>
+            <select value={receiptSearchPaymentMethod} onChange={(e) => setReceiptSearchPaymentMethod(e.target.value)} style={{ padding: '10px' }}>
+              <option value="">All payment methods</option>
+              <option value="card">Card</option>
+              <option value="cash">Cash</option>
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="other">Other</option>
+              <option value="not_recorded">Not Recorded</option>
+            </select>
+            <button onClick={searchReceipts} disabled={receiptSearchLoading}>{receiptSearchLoading ? 'Searching...' : 'Search Receipts'}</button>
+          </div>
+          {receiptSearchError && <p style={{ color: '#ff7875', fontWeight: 'bold' }}>{receiptSearchError}</p>}
+          <div style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid #333', borderRadius: '12px', padding: '10px', background: '#111' }}>
+            {managerReceipts.length === 0 ? <p style={{ color: '#aaa' }}>No receipts loaded.</p> : managerReceipts.map((receipt) => renderReceiptSummary(receipt))}
+          </div>
         </div>
       </div>
     )
@@ -14218,7 +14246,6 @@ function formatMoney(value) {
     spraytan: 'Spray Tans',
     products: 'Products',
     cashup: 'Till / Cash Up',
-    reports: 'Reports',
     staffcalendar: 'Staff Calendar',
     manager: 'Manager'
   }[v2ActiveTab] || 'Sunbeds'
@@ -14263,7 +14290,6 @@ function formatMoney(value) {
           {renderV2SidebarButton('spraytan', 'Spray Tans')}
           {renderV2SidebarButton('products', 'Products')}
           {renderV2SidebarButton('cashup', 'Till / Cash Up')}
-          {renderV2SidebarButton('reports', 'Reports')}
           {currentStaffUser && renderV2SidebarButton('staffcalendar', 'Staff Calendar', pendingStaffScheduleCount > 0 ? ` • ${pendingStaffScheduleCount}` : '')}
           {renderV2SidebarButton('manager', 'Manager')}
         </nav>
