@@ -13100,7 +13100,7 @@ function formatMoney(value) {
       'Staff Management',
       collapseStaffManagement,
       setCollapseStaffManagement,
-      <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%', boxSizing: 'border-box', background: '#efe3c2', border: '1px solid rgba(212,168,83,0.38)', borderRadius: '14px', padding: '16px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.38)' }}>
         {staffLoadError && <p style={{ color: '#ff7875' }}>{staffLoadError}</p>}
 
         <div style={staffColumnGridStyle}>
