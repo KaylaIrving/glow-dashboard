@@ -21,6 +21,7 @@ const MANAGER_REPORT_TYPES = [
   { value: 'staff_performance', label: 'Staff performance' },
   { value: 'promo_sales', label: 'Promo sales' },
   { value: 'expired_minutes', label: 'Expired minutes' },
+  { value: 'customer_remaining_minutes', label: 'Customer remaining minutes' },
   { value: 'duplicate_customers', label: 'Duplicate customers' },
   { value: 'customer_registrations', label: 'Customer registrations' },
   { value: 'patch_test_expiry', label: 'Patch test expiry' },
@@ -30,6 +31,27 @@ const MANAGER_REPORT_TYPES = [
   { value: 'rewards_redeemed', label: 'Rewards redeemed' },
   { value: 'referral_rewards', label: 'Referral rewards' },
   { value: 'birthday_rewards', label: 'Birthday rewards' }
+]
+
+const AUDIT_LOG_ACTION_FILTERS = [
+  { value: '', label: 'All actions', matches: [] },
+  { value: 'booking_created', label: 'Booking created', matches: ['booking_created'] },
+  { value: 'booking_edited', label: 'Booking edited', matches: ['booking_edited'] },
+  { value: 'booking_deleted', label: 'Booking deleted', matches: ['booking_deleted'] },
+  { value: 'booking_cancelled', label: 'Booking cancelled', matches: ['booking_cancelled'] },
+  { value: 'booking_no_show', label: 'Booking no-show', matches: ['booking_marked_no_show'] },
+  { value: 'session_started', label: 'Session started', matches: ['booking_session_started'] },
+  { value: 'session_force_stopped', label: 'Session force stopped', matches: ['force_stop_session', 'emergency_stop_all_beds'] },
+  { value: 'session_reset', label: 'Session reset', matches: ['force_stopped_session_reset', 'booking_manager_reset'] },
+  { value: 'cash_up', label: 'Cash up', matches: ['cash_up'] },
+  { value: 'float_movement', label: 'Float movement', matches: ['float_movement'] },
+  { value: 'product_sale', label: 'Product sale', matches: ['product_sale_recorded'] },
+  { value: 'product_edit', label: 'Product edit', matches: ['product_created', 'product_edited'] },
+  { value: 'customer_edit', label: 'Customer edit', matches: ['customer'] },
+  { value: 'staff_change', label: 'Staff change', matches: ['staff_', 'staff_login_', 'staff_pin_'] },
+  { value: 'manager_pin_access', label: 'Manager PIN access', matches: ['manager_pin_access', 'manager_pin_created'] },
+  { value: 'report_export', label: 'Report export', matches: ['report_export', 'audit_logs_exported'] },
+  { value: 'wix_sync', label: 'Wix sync', matches: ['wix'] }
 ]
 
 // TODO Wix integration: fill this once the final Wix service names and bed rules are confirmed.
@@ -2264,6 +2286,31 @@ function formatMoney(value) {
       expired: entry.expired ? 'Yes' : 'No',
       notes: entry.notes || ''
     }))
+    const customerRemainingMinutesRows = customers
+      .map((customer) => {
+        const customerName = customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Unnamed'
+        const standardMinutes = Number(customer.standard_minutes_balance ?? customer.minutes_balance ?? 0)
+        const hybridMinutes = Number(customer.hybrid_minutes_balance ?? 0)
+        const totalRemaining = standardMinutes + hybridMinutes
+        const matchedBookings = reportBookings
+          .filter((booking) => String(booking.customer_id || '') === String(customer.id || '') || String(booking.customer_name || '').trim().toLowerCase() === customerName.trim().toLowerCase())
+          .filter((booking) => booking.appointment_time || booking.booking_start)
+          .sort((a, b) => new Date(b.appointment_time || b.booking_start) - new Date(a.appointment_time || a.booking_start))
+        const lastBookingDate = customer.last_visit_date || customer.last_visit || customer.last_tan_date || customer.last_booking_date || matchedBookings[0]?.appointment_time || matchedBookings[0]?.booking_start || ''
+
+        return {
+          customer_name: customerName,
+          email: customer.email || '',
+          mobile: customer.phone || customer.mobile || customer.mobile_number || '',
+          standard_minutes_balance: standardMinutes,
+          hybrid_minutes_balance: hybridMinutes,
+          total_remaining_minutes: totalRemaining,
+          last_visit_or_booking: lastBookingDate ? new Date(lastBookingDate).toLocaleString('en-GB') : '',
+          customer_status: customer.is_active === false || customer.active === false ? 'Inactive' : 'Active'
+        }
+      })
+      .filter((row) => row.total_remaining_minutes > 0)
+      .sort((a, b) => b.total_remaining_minutes - a.total_remaining_minutes)
 
     setManagerReportsData({
       dailyTakings: dailyTakingsRows,
@@ -2298,6 +2345,7 @@ function formatMoney(value) {
           }
         }),
       expiredMinutes: expiredMinutesRows,
+      customerRemainingMinutes: customerRemainingMinutesRows,
       duplicateCustomers: duplicateCustomerRows,
       customerRegistrations: customerRegistrationRows,
       patchTestExpiry: patchTestExpiryRows,
@@ -2434,6 +2482,20 @@ function formatMoney(value) {
           { key: 'expiry_date', label: 'Expiry date' },
           { key: 'expired', label: 'Expired' },
           { key: 'notes', label: 'Notes' }
+        ]
+      },
+      customer_remaining_minutes: {
+        title: 'Customer Remaining Minutes',
+        rows: data.customerRemainingMinutes || [],
+        columns: [
+          { key: 'customer_name', label: 'Customer name' },
+          { key: 'email', label: 'Email' },
+          { key: 'mobile', label: 'Mobile' },
+          { key: 'standard_minutes_balance', label: 'Standard minutes' },
+          { key: 'hybrid_minutes_balance', label: 'Hybrid/Collagen minutes' },
+          { key: 'total_remaining_minutes', label: 'Total remaining minutes' },
+          { key: 'last_visit_or_booking', label: 'Last visit / booking' },
+          { key: 'customer_status', label: 'Status' }
         ]
       },
       duplicate_customers: {
@@ -3043,7 +3105,6 @@ function formatMoney(value) {
         .limit(500)
 
       if (auditLogStaffFilter) query = query.eq('staff_name', auditLogStaffFilter)
-      if (auditLogActionFilter.trim()) query = query.ilike('action', `%${auditLogActionFilter.trim()}%`)
 
       const { data, error } = await query
       if (error) {
@@ -3051,7 +3112,15 @@ function formatMoney(value) {
         console.error('GlowAuditLogs load failed:', error)
         return
       }
-      setAuditLogs(data || [])
+      const selectedActionFilter = AUDIT_LOG_ACTION_FILTERS.find((option) => option.value === auditLogActionFilter)
+      const actionMatches = selectedActionFilter?.matches || []
+      const filteredLogs = actionMatches.length
+        ? (data || []).filter((log) => {
+          const action = String(log.action || '').toLowerCase()
+          return actionMatches.some((match) => action.includes(match))
+        })
+        : data || []
+      setAuditLogs(filteredLogs)
     } catch (error) {
       setAuditLogsError(error.message || 'Audit logs could not be loaded.')
       console.error('GlowAuditLogs load threw:', error)
@@ -11610,7 +11679,11 @@ function formatMoney(value) {
           </label>
           <label style={{ display: 'grid', gap: '5px' }}>
             Action type
-            <input value={auditLogActionFilter} onChange={(e) => setAuditLogActionFilter(e.target.value)} placeholder="booking, cash_up, product..." style={{ padding: '10px' }} />
+            <select value={auditLogActionFilter} onChange={(e) => setAuditLogActionFilter(e.target.value)} style={{ padding: '10px' }}>
+              {AUDIT_LOG_ACTION_FILTERS.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </label>
           <button onClick={loadAuditLogs} disabled={auditLogsLoading}>{auditLogsLoading ? 'Loading...' : 'Load Audit Logs'}</button>
           <button onClick={exportAuditLogsCsv}>Export CSV</button>
@@ -12695,8 +12768,7 @@ function formatMoney(value) {
       { key: 'daily', label: 'Daily Takings', isOpen: !collapseDailyTakings },
       { key: 'reports', label: 'Reports', isOpen: !collapseReports },
       { key: 'audit', label: 'Staff Audit Logs', isOpen: !collapseAuditLogs },
-      { key: 'loyalty', label: 'Rewards / Promos', isOpen: !collapseLoyaltyRewards },
-      { key: 'duplicates', label: 'Duplicate Customers Report', isOpen: !collapseDuplicateCustomers }
+      { key: 'loyalty', label: 'Rewards / Promos', isOpen: !collapseLoyaltyRewards }
     ]
 
     return (
