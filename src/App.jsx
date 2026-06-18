@@ -2570,9 +2570,14 @@ function formatMoney(value) {
     createAuditLog('report_export', `Exported ${report.title} for ${reportsStartDate} to ${reportsEndDate}.`, { report_type: reportsType, from: reportsStartDate, to: reportsEndDate })
   }
 
-  function openManagerView() {
+  async function openManagerView() {
     if (!requireStaffSignIn()) return
-    if (!requireManagerAccess('Manager access required. Managers only.')) return
+    if (!isManagerStaff(getCurrentStaffUser()) && !managerUnlocked) {
+      const granted = await requestManagerPinAccess('Manager PIN required to access Manager View:')
+      if (!granted) return
+    } else if (!requireManagerAccess('Manager access required.')) {
+      return
+    }
     setShowManagerView(true)
   }
 
@@ -2934,6 +2939,66 @@ function formatMoney(value) {
     return hash === member.pin_hash
   }
 
+  async function verifyAnyManagerPin(pin) {
+    const activeManagers = staff.filter((member) => (
+      isManagerStaff(member)
+      && member.is_active !== false
+      && member.login_active !== false
+      && member.pin_hash
+      && member.pin_salt
+    ))
+
+    for (const manager of activeManagers) {
+      if (await verifyStaffPin(manager, pin)) return manager
+    }
+    return null
+  }
+
+  async function requestManagerPinAccess(promptText = 'Manager PIN required:') {
+    const currentStaff = getCurrentStaffUser()
+    if (!currentStaff) {
+      alert('Please sign in as staff first.')
+      setStaffSelectorOpen(true)
+      return false
+    }
+    if (isManagerStaff(currentStaff)) {
+      setManagerUnlocked(true)
+      return true
+    }
+    if (managerUnlocked) return true
+
+    const pin = window.prompt(promptText)
+    if (pin === null) return false
+    if (!isValidFourDigitPin(pin)) {
+      alert('Enter a valid 4-digit manager PIN.')
+      return false
+    }
+
+    try {
+      const manager = await verifyAnyManagerPin(pin)
+      if (!manager) {
+        alert('Incorrect manager PIN.')
+        await createAuditLog('manager_pin_access_denied', 'Manager PIN access denied.', {
+          attempted_by_staff_id: currentStaff.id,
+          attempted_by_staff_name: currentStaff.name
+        })
+        return false
+      }
+      setManagerUnlocked(true)
+      await createAuditLog('manager_pin_access_granted', 'manager PIN access granted', {
+        accessed_by_staff_id: currentStaff.id,
+        accessed_by_staff_name: currentStaff.name,
+        approving_manager_id: manager.id,
+        approving_manager_name: manager.name
+      })
+      return true
+    } catch (error) {
+      alert('Manager PIN check failed. Please check the connection and try again.')
+      console.error('Manager PIN access check failed:', error)
+      return false
+    }
+  }
+
   async function createAuditLog(action, details = '', metadata = {}) {
     const currentStaff = getCurrentStaffUser()
     const payload = {
@@ -3166,11 +3231,12 @@ function formatMoney(value) {
 
   function requireManagerAccess(promptText = 'Manager access required:') {
     const currentStaff = getCurrentStaffUser()
+    if (managerUnlocked) return true
     if (currentStaff && isManagerStaff(currentStaff)) {
       setManagerUnlocked(true)
       return true
     }
-    alert(currentStaff ? 'Manager access required. Please log in as a manager.' : (promptText || 'Manager access required.'))
+    alert(currentStaff ? 'Manager access required. Open Manager View and enter the manager PIN.' : (promptText || 'Manager access required.'))
     return false
   }
 
