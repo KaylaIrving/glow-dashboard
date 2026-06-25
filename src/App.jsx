@@ -12,6 +12,43 @@ const LOW_STOCK_THRESHOLD = 5
 const COMMON_BOOKING_MINUTES = Array.from({ length: 19 }, (_, index) => index + 2)
 const MANAGER_REPORT_TYPES = [
   { value: 'daily_takings', label: 'Daily takings' },
+  { value: 'action_log', label: 'Action Log' },
+  { value: 'booking_sales_by_bookable_item', label: 'Booking Sales By Bookable Item' },
+  { value: 'booking_sales_by_staff', label: 'Booking Sales By Staff' },
+  { value: 'bookings_by_day_chart', label: 'Bookings By Day Chart' },
+  { value: 'bookings_by_hour_chart', label: 'Bookings By Hour Chart' },
+  { value: 'cashing_up_receipt', label: 'Cashing Up Receipt' },
+  { value: 'cashing_up', label: 'Cashing Up' },
+  { value: 'cashing_up_today_receipt', label: 'Cashing Up Today Receipt' },
+  { value: 'commission_by_staff', label: 'Commission By Staff' },
+  { value: 'commission_summary_by_staff', label: 'Commission Summary By Staff' },
+  { value: 'customer_insight_report', label: 'Customer Insight Report' },
+  { value: 'customers_by_spend', label: 'Customers By Spend' },
+  { value: 'day_end_receipt', label: 'Day End Receipt' },
+  { value: 'deleted_bookings', label: 'Deleted Bookings' },
+  { value: 'equipment_timers_report', label: 'Equipment Timers Report' },
+  { value: 'free_minutes_used', label: 'Free Minutes Used' },
+  { value: 'goods_in_and_out_report', label: 'Goods In And Out Report' },
+  { value: 'minutes_used_by_day_chart', label: 'Minutes Used By Day Chart' },
+  { value: 'minutes_used_by_hour_chart', label: 'Minutes Used By Hour Chart' },
+  { value: 'no_show_bookings', label: 'No Show Bookings' },
+  { value: 'retail_sales_by_item', label: 'Retail Sales By Item' },
+  { value: 'retail_sales_by_staff', label: 'Retail Sales By Staff' },
+  { value: 'sales_by_day_chart', label: 'Sales By Day Chart' },
+  { value: 'sales_by_hour_chart', label: 'Sales By Hour Chart' },
+  { value: 'sales_payment_report', label: 'Sales Payment Report' },
+  { value: 'sales_summary_by_staff', label: 'Sales Summary By Staff' },
+  { value: 'sales_summary_by_category', label: 'Sales Summary By Category' },
+  { value: 'sales_summary_detail_report', label: 'Sales Summary Detail Report' },
+  { value: 'service_minutes_remaining_by_category', label: 'Service Minutes Remaining By Category' },
+  { value: 'service_minutes_remaining_by_customer', label: 'Service Minutes Remaining By Customer' },
+  { value: 'service_minutes_used_summary', label: 'Service Minutes Used Summary' },
+  { value: 'service_minutes_used_by_bookable_item', label: 'Service Minutes Used By Bookable Item' },
+  { value: 'shift_hours_by_site_receipt', label: 'Shift Hours By Site Receipt' },
+  { value: 'stock_check_receipt', label: 'Stock Check Receipt' },
+  { value: 'stock_level_receipt', label: 'Stock Level Receipt' },
+  { value: 'stock_low_levels_receipt', label: 'Stock Low Levels Receipt' },
+  { value: 'system_metrics', label: 'System Metrics' },
   { value: 'sunbed_sales', label: 'Sunbed sales' },
   { value: 'spray_tan_sales', label: 'Spray tan sales' },
   { value: 'product_sales', label: 'Product sales' },
@@ -2054,7 +2091,7 @@ function formatMoney(value) {
     setManagerReportsLoading(true)
     setManagerReportsError('')
 
-    const [productSalesResult, paymentsResult, receiptsResult, cashUpsResult, bookingsResult, correctionsResult, minuteExpiriesResult, rewardLogsResult] = await Promise.all([
+    const [productSalesResult, paymentsResult, receiptsResult, cashUpsResult, bookingsResult, correctionsResult, minuteExpiriesResult, rewardLogsResult, auditLogsResult, stockMovementsResult, minuteTransactionsResult, staffScheduleResult] = await Promise.all([
       supabase.from('ProductSales').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('Payments').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('Receipts').select('*').gte('created_at', start).lte('created_at', end),
@@ -2062,7 +2099,11 @@ function formatMoney(value) {
       supabase.from('Bookings').select('*').gte('appointment_time', start).lte('appointment_time', end),
       supabase.from('CorrectionLogs').select('*').gte('created_at', start).lte('created_at', end),
       supabase.from('CustomerMinuteExpiries').select('*').gte('created_at', start).lte('created_at', end),
-      supabase.from('CustomerRewardLogs').select('*').gte('created_at', start).lte('created_at', end)
+      supabase.from('CustomerRewardLogs').select('*').gte('created_at', start).lte('created_at', end),
+      supabase.from('GlowAuditLogs').select('*').gte('created_at', start).lte('created_at', end),
+      supabase.from('StockMovements').select('*').gte('created_at', start).lte('created_at', end),
+      supabase.from('CustomerMinuteTransactions').select('*').gte('created_at', start).lte('created_at', end),
+      supabase.from('StaffSchedule').select('*').gte('schedule_date', reportsStartDate).lte('schedule_date', reportsEndDate)
     ])
 
     setManagerReportsLoading(false)
@@ -2081,6 +2122,10 @@ function formatMoney(value) {
     const corrections = correctionsResult.error ? [] : correctionsResult.data || []
     const minuteExpiries = minuteExpiriesResult.error ? [] : minuteExpiriesResult.data || []
     const rewardLogs = rewardLogsResult.error ? [] : rewardLogsResult.data || []
+    const auditLogsForReports = auditLogsResult.error ? [] : auditLogsResult.data || []
+    const stockMovementsForReports = stockMovementsResult.error ? [] : stockMovementsResult.data || []
+    const minuteTransactionsForReports = minuteTransactionsResult.error ? [] : minuteTransactionsResult.data || []
+    const staffSchedulesForReports = staffScheduleResult.error ? [] : staffScheduleResult.data || []
 
     const productSalesByStaffMap = new Map()
     const productSummaryMap = new Map()
@@ -2397,8 +2442,269 @@ function formatMoney(value) {
       .filter((row) => row.total_remaining_minutes > 0)
       .sort((a, b) => b.total_remaining_minutes - a.total_remaining_minutes)
 
+
+    const missingReportRows = (reportName, message) => [{
+      report_name: reportName,
+      status: 'Data unavailable',
+      message
+    }]
+    const getReportBookingDate = (booking) => booking.appointment_time || booking.booking_start || booking.start_time || booking.created_at || ''
+    const getReportBookingItem = (booking) => isSprayTanBooking(booking)
+      ? booking.spraytan_service || booking.wix_service_name || formatStatus(booking.booking_type || 'Spray tan')
+      : getBedName(booking.bed_id) || booking.wix_service_name || 'Sunbed'
+    const getReportBookingStaff = (booking) => booking.created_by_staff_name || booking.staff_name || booking.assigned_artist_name || booking.spraytan_artist || 'Unknown staff'
+    const getReportBookingSalesValue = (booking) => Number(booking.total_amount || booking.total_paid || booking.price_paid || booking.sale_total || booking.deposit_paid || booking.spraytan_balance_paid || 0)
+    const isDeletedBooking = (booking) => {
+      const status = String(booking.status || booking.approval_status || '').toLowerCase()
+      return ['deleted', 'delete'].includes(status) || booking.deleted === true || booking.is_deleted === true
+    }
+    const isNoShowBooking = (booking) => String(booking.status || booking.approval_status || '').toLowerCase() === 'no_show'
+    const isUsedMinutesBooking = (booking) => {
+      const status = String(booking.status || booking.approval_status || '').toLowerCase()
+      return ['completed', 'force_stopped', 'running', 'customer_started', 'in_use'].includes(status) && isSunbedBooking(booking)
+    }
+    const bookingDateKey = (booking) => formatDisplayDate(getReportBookingDate(booking)) || 'Unknown date'
+    const bookingHourKey = (booking) => {
+      const dateValue = getReportBookingDate(booking)
+      const parsed = dateValue ? new Date(dateValue) : null
+      return parsed && !Number.isNaN(parsed.getTime()) ? String(parsed.getHours()).padStart(2, '0') + ':00' : 'Unknown hour'
+    }
+    const sortByLabel = (a, b) => String(a.label || a.date || a.hour || '').localeCompare(String(b.label || b.date || b.hour || ''))
+    const bookingSalesByBookableItemMap = new Map()
+    const bookingSalesByStaffMap = new Map()
+    const bookingsByDayMap = new Map()
+    const bookingsByHourMap = new Map()
+    const minutesUsedByDayMap = new Map()
+    const minutesUsedByHourMap = new Map()
+    const serviceMinutesUsedByBookableItemMap = new Map()
+
+    const addBookingReportRow = (map, key, base, increments = {}) => {
+      if (!map.has(key)) map.set(key, { ...base })
+      const row = map.get(key)
+      Object.entries(increments).forEach(([field, value]) => {
+        row[field] = Number(row[field] || 0) + Number(value || 0)
+      })
+      map.set(key, row)
+    }
+
+    for (const booking of reportBookings) {
+      const item = getReportBookingItem(booking)
+      const staffName = getReportBookingStaff(booking)
+      const minutes = Number(booking.minutes || booking.session_minutes || booking.spraytan_duration_minutes || 0)
+      const salesValue = getReportBookingSalesValue(booking)
+      const day = bookingDateKey(booking)
+      const hour = bookingHourKey(booking)
+      addBookingReportRow(bookingSalesByBookableItemMap, item, { bookable_item: item, bookings: 0, minutes: 0, total: 0 }, { bookings: 1, minutes, total: salesValue })
+      addBookingReportRow(bookingSalesByStaffMap, staffName, { staff_name: staffName, bookings: 0, minutes: 0, total: 0 }, { bookings: 1, minutes, total: salesValue })
+      addBookingReportRow(bookingsByDayMap, day, { date: day, bookings: 0 }, { bookings: 1 })
+      addBookingReportRow(bookingsByHourMap, hour, { hour, bookings: 0 }, { bookings: 1 })
+      if (isUsedMinutesBooking(booking)) {
+        addBookingReportRow(minutesUsedByDayMap, day, { date: day, minutes_used: 0, sessions: 0 }, { minutes_used: minutes, sessions: 1 })
+        addBookingReportRow(minutesUsedByHourMap, hour, { hour, minutes_used: 0, sessions: 0 }, { minutes_used: minutes, sessions: 1 })
+        addBookingReportRow(serviceMinutesUsedByBookableItemMap, item, { bookable_item: item, minutes_used: 0, sessions: 0 }, { minutes_used: minutes, sessions: 1 })
+      }
+    }
+
+    const actionLogRows = auditLogsForReports.length > 0
+      ? auditLogsForReports.map((log) => ({
+          date: formatDisplayDateTime(log.created_at),
+          staff_name: log.staff_name || log.signed_in_staff_name || log.user_name || 'Unknown staff',
+          action_type: formatStatus(log.action_type || log.action || log.event_type),
+          details: log.notes || log.reason || log.description || '',
+          metadata: typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata || log.before_after || log.after || {})
+        }))
+      : missingReportRows('Action Log', 'GlowAuditLogs has no records for this date range, or the audit log table is not available.')
+    const bookingSalesByBookableItemRows = Array.from(bookingSalesByBookableItemMap.values()).sort((a, b) => b.total - a.total)
+    const bookingSalesByStaffRows = Array.from(bookingSalesByStaffMap.values()).sort((a, b) => b.total - a.total)
+    const bookingsByDayRows = Array.from(bookingsByDayMap.values()).sort(sortByLabel)
+    const bookingsByHourRows = Array.from(bookingsByHourMap.values()).sort(sortByLabel)
+    const deletedBookingRows = reportBookings.filter(isDeletedBooking).map((booking) => ({
+      date: formatDisplayDateTime(getReportBookingDate(booking)),
+      customer_name: booking.customer_name || 'Customer',
+      booking_type: formatStatus(booking.booking_type || 'sunbed'),
+      bookable_item: getReportBookingItem(booking),
+      status: formatStatus(booking.status || booking.approval_status),
+      staff_name: getReportBookingStaff(booking)
+    }))
+    const noShowBookingRows = reportBookings.filter(isNoShowBooking).map((booking) => ({
+      date: formatDisplayDateTime(getReportBookingDate(booking)),
+      customer_name: booking.customer_name || 'Customer',
+      bookable_item: getReportBookingItem(booking),
+      minutes: Number(booking.minutes || booking.session_minutes || 0),
+      staff_name: getReportBookingStaff(booking)
+    }))
+    const equipmentTimersRows = beds.map((bed) => ({
+      bed_name: bed.name || getBedName(bed.id),
+      room: bed.room || 'Room ' + bed.id,
+      runtime_hours: getBedRuntimeHours(bed).toFixed(2),
+      target_hours: getBedTargetHours(bed).toFixed(2),
+      hours_remaining: getBedHoursRemaining(bed).toFixed(2),
+      last_tube_change_date: formatDisplayDate(bed.last_tube_change_date),
+      out_of_service: bed.out_of_service ? 'Yes' : 'No'
+    }))
+    const freeMinutesUsedRows = reportBookings
+      .filter((booking) => {
+        const source = String(booking.source || booking.booking_source || booking.payment_status || booking.package_type || '').toLowerCase()
+        return isSunbedBooking(booking) && (source.includes('free') || source.includes('staff') || source.includes('internal'))
+      })
+      .map((booking) => ({
+        date: formatDisplayDateTime(getReportBookingDate(booking)),
+        customer_name: booking.customer_name || 'Customer',
+        bed: getReportBookingItem(booking),
+        minutes: Number(booking.minutes || booking.session_minutes || 0),
+        staff_name: getReportBookingStaff(booking),
+        status: formatStatus(booking.status)
+      }))
+    const goodsInOutRows = stockMovementsForReports.length > 0
+      ? stockMovementsForReports.map((movement) => ({
+          date: formatDisplayDateTime(movement.created_at),
+          product_name: movement.product_name || 'Product',
+          movement_type: formatStatus(movement.movement_type || movement.source_type),
+          quantity_change: Number(movement.quantity_change || 0),
+          stock_before: Number(movement.stock_before || 0),
+          stock_after: Number(movement.stock_after || 0),
+          staff_name: movement.staff_name || 'Unknown staff',
+          notes: movement.notes || ''
+        }))
+      : missingReportRows('Goods In And Out Report', 'StockMovements data is not available for this date range.')
+    const minutesUsedByDayRows = Array.from(minutesUsedByDayMap.values()).sort(sortByLabel)
+    const minutesUsedByHourRows = Array.from(minutesUsedByHourMap.values()).sort(sortByLabel)
+    const allSalesRows = [
+      ...payments.map((payment) => ({
+        date: payment.created_at,
+        customer_name: payment.customer_name || 'Customer',
+        description: payment.package_name || payment.package_type || 'Payment',
+        category: String(payment.package_type || payment.package_name || '').toLowerCase().includes('promo') ? 'Promo' : String(payment.package_type || payment.package_name || '').toLowerCase().includes('spray') ? 'Spray tan' : 'Sunbed minutes',
+        payment_method: formatStatus(payment.payment_method),
+        staff_name: payment.commission_staff_name || payment.taken_by_staff_name || payment.staff_name || 'Unknown staff',
+        amount: Number(payment.total_amount || 0)
+      })),
+      ...productSales.map((sale) => ({
+        date: sale.created_at,
+        customer_name: sale.customer_name || 'Customer',
+        description: sale.product_name || 'Product',
+        category: sale.category || 'Retail',
+        payment_method: formatStatus(sale.payment_method || 'Unknown'),
+        staff_name: sale.commission_staff_name || sale.sold_by_staff_name || sale.staff_name || 'Unknown staff',
+        amount: Number(sale.total_amount || 0)
+      }))
+    ]
+    const salesByDayMap = new Map()
+    const salesByHourMap = new Map()
+    const salesPaymentMap = new Map()
+    const salesStaffMap = new Map()
+    const salesCategoryMap = new Map()
+    for (const sale of allSalesRows) {
+      const parsed = sale.date ? new Date(sale.date) : null
+      const day = parsed && !Number.isNaN(parsed.getTime()) ? formatDisplayDate(sale.date) : 'Unknown date'
+      const hour = parsed && !Number.isNaN(parsed.getTime()) ? String(parsed.getHours()).padStart(2, '0') + ':00' : 'Unknown hour'
+      addBookingReportRow(salesByDayMap, day, { date: day, transactions: 0, total: 0 }, { transactions: 1, total: sale.amount })
+      addBookingReportRow(salesByHourMap, hour, { hour, transactions: 0, total: 0 }, { transactions: 1, total: sale.amount })
+      addBookingReportRow(salesPaymentMap, sale.payment_method || 'Unknown', { payment_method: sale.payment_method || 'Unknown', transactions: 0, total: 0 }, { transactions: 1, total: sale.amount })
+      addBookingReportRow(salesStaffMap, sale.staff_name || 'Unknown staff', { staff_name: sale.staff_name || 'Unknown staff', transactions: 0, total: 0 }, { transactions: 1, total: sale.amount })
+      addBookingReportRow(salesCategoryMap, sale.category || 'Uncategorised', { category: sale.category || 'Uncategorised', transactions: 0, total: 0 }, { transactions: 1, total: sale.amount })
+    }
+    const salesByDayRows = Array.from(salesByDayMap.values()).sort(sortByLabel)
+    const salesByHourRows = Array.from(salesByHourMap.values()).sort(sortByLabel)
+    const salesPaymentRows = Array.from(salesPaymentMap.values()).sort((a, b) => b.total - a.total)
+    const salesSummaryByStaffRows = Array.from(salesStaffMap.values()).sort((a, b) => b.total - a.total)
+    const salesSummaryByCategoryRows = Array.from(salesCategoryMap.values()).sort((a, b) => b.total - a.total)
+    const salesSummaryDetailRows = allSalesRows
+      .map((sale) => ({ ...sale, date: formatDisplayDateTime(sale.date) }))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    const standardRemainingTotal = customerRemainingMinutesRows.reduce((sum, row) => sum + Number(row.standard_minutes_balance || 0), 0)
+    const hybridRemainingTotal = customerRemainingMinutesRows.reduce((sum, row) => sum + Number(row.hybrid_minutes_balance || 0), 0)
+    const serviceMinutesRemainingByCategoryRows = [
+      { category: 'Standard minutes', customers: customerRemainingMinutesRows.filter((row) => Number(row.standard_minutes_balance || 0) > 0).length, minutes_remaining: standardRemainingTotal },
+      { category: 'Hybrid/Collagen minutes', customers: customerRemainingMinutesRows.filter((row) => Number(row.hybrid_minutes_balance || 0) > 0).length, minutes_remaining: hybridRemainingTotal }
+    ]
+    const minuteTransactionUsedRows = minuteTransactionsForReports
+      .filter((transaction) => String(transaction.transaction_type || '').toLowerCase().includes('used'))
+      .map((transaction) => ({
+        date: formatDisplayDateTime(transaction.created_at),
+        customer_name: transaction.customer_name || 'Customer',
+        minute_type: formatStatus(transaction.minute_type),
+        minutes_used: Math.abs(Number(transaction.minutes_changed || 0)),
+        balance_before: Number(transaction.balance_before || 0),
+        balance_after: Number(transaction.balance_after || 0),
+        staff_name: transaction.staff_name || 'Unknown staff',
+        notes: transaction.notes || ''
+      }))
+    const serviceMinutesUsedSummaryRows = minuteTransactionUsedRows.length > 0
+      ? Object.values(minuteTransactionUsedRows.reduce((acc, row) => {
+          const key = row.minute_type || 'Unknown'
+          if (!acc[key]) acc[key] = { minute_type: key, transactions: 0, minutes_used: 0 }
+          acc[key].transactions += 1
+          acc[key].minutes_used += Number(row.minutes_used || 0)
+          return acc
+        }, {}))
+      : minutesUsedByDayRows.length > 0
+        ? [{ minute_type: 'Sunbed sessions', transactions: minutesUsedByDayRows.reduce((sum, row) => sum + Number(row.sessions || 0), 0), minutes_used: minutesUsedByDayRows.reduce((sum, row) => sum + Number(row.minutes_used || 0), 0) }]
+        : missingReportRows('Service Minutes Used Summary', 'CustomerMinuteTransactions has no used-minute records for this date range.')
+    const serviceMinutesUsedByBookableItemRows = Array.from(serviceMinutesUsedByBookableItemMap.values()).sort((a, b) => b.minutes_used - a.minutes_used)
+    const shiftHoursRows = staffSchedulesForReports.length > 0
+      ? staffSchedulesForReports.map((entry) => {
+          const startDate = new Date((entry.schedule_date || reportsStartDate) + 'T' + (entry.start_time || '00:00'))
+          const endDate = new Date((entry.schedule_date || reportsStartDate) + 'T' + (entry.end_time || entry.start_time || '00:00'))
+          const hours = startDate && endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) ? Math.max(0, (endDate - startDate) / (1000 * 60 * 60)) : 0
+          return {
+            date: formatDisplayDate(entry.schedule_date),
+            staff_name: entry.staff_name || 'Unknown staff',
+            schedule_type: formatStatus(entry.schedule_type),
+            start_time: formatStaffScheduleTime(entry.start_time),
+            end_time: formatStaffScheduleTime(entry.end_time),
+            hours: Number(hours.toFixed(2)),
+            status: formatStatus(entry.approval_status || (entry.is_available === false ? 'unavailable' : 'approved'))
+          }
+        })
+      : missingReportRows('Shift Hours By Site Receipt', 'StaffSchedule data is not available for this date range.')
+    const customerInsightRows = [{
+      total_customers: customers.length,
+      active_customers: customers.filter((customer) => customer.is_active !== false && customer.active !== false).length,
+      inactive_customers: customers.filter((customer) => customer.is_active === false || customer.active === false).length,
+      customers_with_minutes: customerRemainingMinutesRows.length,
+      duplicate_matches: duplicateCustomerRows.length,
+      missing_terms_or_id: customers.filter((customer) => !(customer.terms_accepted || customer.salon_terms_accepted) || !customer.id_checked).length
+    }]
+    const systemMetricsRows = [{
+      bookings: reportBookings.length,
+      payments: payments.length,
+      product_sales: productSales.length,
+      receipts: receipts.length,
+      cash_ups: cashUps.length,
+      corrections: corrections.length,
+      customers: customers.length,
+      products: products.length,
+      staff: staff.length
+    }]
+
     setManagerReportsData({
       dailyTakings: dailyTakingsRows,
+      actionLog: actionLogRows,
+      bookingSalesByBookableItem: bookingSalesByBookableItemRows,
+      bookingSalesByStaff: bookingSalesByStaffRows,
+      bookingsByDay: bookingsByDayRows,
+      bookingsByHour: bookingsByHourRows,
+      customerInsight: customerInsightRows,
+      customersBySpend: Array.from(customerSpendMap.values()).sort((a, b) => b.total - a.total),
+      deletedBookings: deletedBookingRows,
+      equipmentTimers: equipmentTimersRows,
+      freeMinutesUsed: freeMinutesUsedRows,
+      goodsInOut: goodsInOutRows,
+      minutesUsedByDay: minutesUsedByDayRows,
+      minutesUsedByHour: minutesUsedByHourRows,
+      noShowBookings: noShowBookingRows,
+      salesByDay: salesByDayRows,
+      salesByHour: salesByHourRows,
+      salesPayment: salesPaymentRows,
+      salesSummaryByStaff: salesSummaryByStaffRows,
+      salesSummaryByCategory: salesSummaryByCategoryRows,
+      salesSummaryDetail: salesSummaryDetailRows,
+      serviceMinutesRemainingByCategory: serviceMinutesRemainingByCategoryRows,
+      serviceMinutesUsedSummary: serviceMinutesUsedSummaryRows,
+      serviceMinutesUsedByBookableItem: serviceMinutesUsedByBookableItemRows,
+      shiftHoursBySite: shiftHoursRows,
+      systemMetrics: systemMetricsRows,
       sunbedSales: sunbedSalesRows,
       sprayTanSales: sprayTanSalesRows,
       productSales: productSalesRows,
@@ -2446,6 +2752,26 @@ function formatMoney(value) {
   function getManagerReportDefinition(reportType, data) {
     if (!data) return null
     const money = formatMoney
+    const noticeColumns = [
+      { key: 'report_name', label: 'Report' },
+      { key: 'status', label: 'Status' },
+      { key: 'message', label: 'Message' }
+    ]
+    const bookingAggregateColumns = [
+      { key: 'bookable_item', label: 'Bookable item' },
+      { key: 'bookings', label: 'Bookings' },
+      { key: 'minutes', label: 'Minutes' },
+      { key: 'total', label: 'Sales value', format: money },
+      ...noticeColumns
+    ]
+    const salesSummaryColumns = [
+      { key: 'staff_name', label: 'Staff' },
+      { key: 'category', label: 'Category' },
+      { key: 'payment_method', label: 'Payment method' },
+      { key: 'transactions', label: 'Transactions' },
+      { key: 'total', label: 'Total', format: money },
+      ...noticeColumns
+    ]
     const definitions = {
       daily_takings: {
         title: 'Daily Takings',
@@ -2459,6 +2785,420 @@ function formatMoney(value) {
           { key: 'bank_transfer_total', label: 'Bank transfer', format: money },
           { key: 'other_total', label: 'Other', format: money },
           { key: 'transactions', label: 'Transactions' }
+        ]
+      },
+      action_log: {
+        title: 'Action Log',
+        rows: data.actionLog || [],
+        columns: [
+          { key: 'date', label: 'Date/time' },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'action_type', label: 'Action' },
+          { key: 'details', label: 'Details' },
+          { key: 'metadata', label: 'Metadata' },
+          ...noticeColumns
+        ]
+      },
+      booking_sales_by_bookable_item: {
+        title: 'Booking Sales By Bookable Item',
+        rows: data.bookingSalesByBookableItem || [],
+        columns: bookingAggregateColumns
+      },
+      booking_sales_by_staff: {
+        title: 'Booking Sales By Staff',
+        rows: data.bookingSalesByStaff || [],
+        columns: [
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'bookings', label: 'Bookings' },
+          { key: 'minutes', label: 'Minutes' },
+          { key: 'total', label: 'Sales value', format: money },
+          ...noticeColumns
+        ]
+      },
+      bookings_by_day_chart: {
+        title: 'Bookings By Day Chart',
+        rows: data.bookingsByDay || [],
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'bookings', label: 'Bookings' },
+          ...noticeColumns
+        ]
+      },
+      bookings_by_hour_chart: {
+        title: 'Bookings By Hour Chart',
+        rows: data.bookingsByHour || [],
+        columns: [
+          { key: 'hour', label: 'Hour' },
+          { key: 'bookings', label: 'Bookings' },
+          ...noticeColumns
+        ]
+      },
+      cashing_up_receipt: {
+        title: 'Cashing Up Receipt',
+        rows: data.cashUpSummary || [],
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'starting_float', label: 'Starting float', format: money },
+          { key: 'actual_cash_counted', label: 'Actual cash', format: money },
+          { key: 'variance', label: 'Variance', format: money },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'locked', label: 'Locked' },
+          ...noticeColumns
+        ]
+      },
+      cashing_up: {
+        title: 'Cashing Up',
+        rows: data.cashUpSummary || [],
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'starting_float', label: 'Starting float', format: money },
+          { key: 'actual_cash_counted', label: 'Actual cash', format: money },
+          { key: 'variance', label: 'Variance', format: money },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'locked', label: 'Locked' },
+          ...noticeColumns
+        ]
+      },
+      cashing_up_today_receipt: {
+        title: 'Cashing Up Today Receipt',
+        rows: data.cashUpSummary || [],
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'starting_float', label: 'Starting float', format: money },
+          { key: 'actual_cash_counted', label: 'Actual cash', format: money },
+          { key: 'variance', label: 'Variance', format: money },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'locked', label: 'Locked' },
+          ...noticeColumns
+        ]
+      },
+      commission_by_staff: {
+        title: 'Commission By Staff',
+        rows: data.staffCommission || [],
+        columns: [
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'sunbed_packages_total', label: 'Sunbeds', format: money },
+          { key: 'product_sales_total', label: 'Products', format: money },
+          { key: 'promo_sales_total', label: 'Promos', format: money },
+          { key: 'spray_tan_sales_total', label: 'Spray tans', format: money },
+          { key: 'total_revenue', label: 'Revenue', format: money },
+          { key: 'estimated_commission', label: 'Est. commission', format: money }
+        ]
+      },
+      commission_summary_by_staff: {
+        title: 'Commission Summary By Staff',
+        rows: data.staffCommission || [],
+        columns: [
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'total_revenue', label: 'Revenue', format: money },
+          { key: 'estimated_commission', label: 'Est. commission', format: money }
+        ]
+      },
+      customer_insight_report: {
+        title: 'Customer Insight Report',
+        rows: data.customerInsight || [],
+        columns: [
+          { key: 'total_customers', label: 'Total customers' },
+          { key: 'active_customers', label: 'Active' },
+          { key: 'inactive_customers', label: 'Inactive' },
+          { key: 'customers_with_minutes', label: 'Customers with minutes' },
+          { key: 'duplicate_matches', label: 'Duplicate matches' },
+          { key: 'missing_terms_or_id', label: 'Missing terms / ID' }
+        ]
+      },
+      customers_by_spend: {
+        title: 'Customers By Spend',
+        rows: data.customersBySpend || data.customerSpend || [],
+        columns: [
+          { key: 'customer_name', label: 'Customer' },
+          { key: 'minutes_topups', label: 'Minutes top-ups', format: money },
+          { key: 'product_purchases', label: 'Product purchases', format: money },
+          { key: 'spray_tan_payments', label: 'Spray tan payments', format: money },
+          { key: 'total', label: 'Total spend', format: money }
+        ]
+      },
+      day_end_receipt: {
+        title: 'Day End Receipt',
+        rows: data.cashUpSummary || [],
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'starting_float', label: 'Starting float', format: money },
+          { key: 'actual_cash_counted', label: 'Actual cash', format: money },
+          { key: 'variance', label: 'Variance', format: money },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'locked', label: 'Locked' },
+          ...noticeColumns
+        ]
+      },
+      deleted_bookings: {
+        title: 'Deleted Bookings',
+        rows: data.deletedBookings || [],
+        columns: [
+          { key: 'date', label: 'Date/time' },
+          { key: 'customer_name', label: 'Customer' },
+          { key: 'booking_type', label: 'Type' },
+          { key: 'bookable_item', label: 'Bookable item' },
+          { key: 'status', label: 'Status' },
+          { key: 'staff_name', label: 'Staff' },
+          ...noticeColumns
+        ]
+      },
+      equipment_timers_report: {
+        title: 'Equipment Timers Report',
+        rows: data.equipmentTimers || [],
+        columns: [
+          { key: 'bed_name', label: 'Bed' },
+          { key: 'room', label: 'Room' },
+          { key: 'runtime_hours', label: 'Runtime hours' },
+          { key: 'target_hours', label: 'Target hours' },
+          { key: 'hours_remaining', label: 'Hours remaining' },
+          { key: 'last_tube_change_date', label: 'Last tube change' },
+          { key: 'out_of_service', label: 'Out of service' }
+        ]
+      },
+      free_minutes_used: {
+        title: 'Free Minutes Used',
+        rows: data.freeMinutesUsed || [],
+        columns: [
+          { key: 'date', label: 'Date/time' },
+          { key: 'customer_name', label: 'Customer' },
+          { key: 'bed', label: 'Bed' },
+          { key: 'minutes', label: 'Minutes' },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'status', label: 'Status' },
+          ...noticeColumns
+        ]
+      },
+      goods_in_and_out_report: {
+        title: 'Goods In And Out Report',
+        rows: data.goodsInOut || [],
+        columns: [
+          { key: 'date', label: 'Date/time' },
+          { key: 'product_name', label: 'Product' },
+          { key: 'movement_type', label: 'Movement' },
+          { key: 'quantity_change', label: 'Qty change' },
+          { key: 'stock_before', label: 'Stock before' },
+          { key: 'stock_after', label: 'Stock after' },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'notes', label: 'Notes' },
+          ...noticeColumns
+        ]
+      },
+      minutes_used_by_day_chart: {
+        title: 'Minutes Used By Day Chart',
+        rows: data.minutesUsedByDay || [],
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'sessions', label: 'Sessions' },
+          { key: 'minutes_used', label: 'Minutes used' },
+          ...noticeColumns
+        ]
+      },
+      minutes_used_by_hour_chart: {
+        title: 'Minutes Used By Hour Chart',
+        rows: data.minutesUsedByHour || [],
+        columns: [
+          { key: 'hour', label: 'Hour' },
+          { key: 'sessions', label: 'Sessions' },
+          { key: 'minutes_used', label: 'Minutes used' },
+          ...noticeColumns
+        ]
+      },
+      no_show_bookings: {
+        title: 'No Show Bookings',
+        rows: data.noShowBookings || [],
+        columns: [
+          { key: 'date', label: 'Date/time' },
+          { key: 'customer_name', label: 'Customer' },
+          { key: 'bookable_item', label: 'Bookable item' },
+          { key: 'minutes', label: 'Minutes' },
+          { key: 'staff_name', label: 'Staff' },
+          ...noticeColumns
+        ]
+      },
+      retail_sales_by_item: {
+        title: 'Retail Sales By Item',
+        rows: data.productSummary || [],
+        columns: [
+          { key: 'product_name', label: 'Product' },
+          { key: 'category', label: 'Category' },
+          { key: 'quantity', label: 'Qty' },
+          { key: 'total', label: 'Sales', format: money }
+        ]
+      },
+      retail_sales_by_staff: {
+        title: 'Retail Sales By Staff',
+        rows: data.productSalesByStaff || [],
+        columns: [
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'product_name', label: 'Product' },
+          { key: 'category', label: 'Category' },
+          { key: 'quantity', label: 'Qty' },
+          { key: 'total', label: 'Sales', format: money }
+        ]
+      },
+      sales_by_day_chart: {
+        title: 'Sales By Day Chart',
+        rows: data.salesByDay || [],
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'transactions', label: 'Transactions' },
+          { key: 'total', label: 'Total', format: money },
+          ...noticeColumns
+        ]
+      },
+      sales_by_hour_chart: {
+        title: 'Sales By Hour Chart',
+        rows: data.salesByHour || [],
+        columns: [
+          { key: 'hour', label: 'Hour' },
+          { key: 'transactions', label: 'Transactions' },
+          { key: 'total', label: 'Total', format: money },
+          ...noticeColumns
+        ]
+      },
+      sales_payment_report: {
+        title: 'Sales Payment Report',
+        rows: data.salesPayment || [],
+        columns: [
+          { key: 'payment_method', label: 'Payment method' },
+          { key: 'transactions', label: 'Transactions' },
+          { key: 'total', label: 'Total', format: money },
+          ...noticeColumns
+        ]
+      },
+      sales_summary_by_staff: {
+        title: 'Sales Summary By Staff',
+        rows: data.salesSummaryByStaff || [],
+        columns: salesSummaryColumns
+      },
+      sales_summary_by_category: {
+        title: 'Sales Summary By Category',
+        rows: data.salesSummaryByCategory || [],
+        columns: [
+          { key: 'category', label: 'Category' },
+          { key: 'transactions', label: 'Transactions' },
+          { key: 'total', label: 'Total', format: money },
+          ...noticeColumns
+        ]
+      },
+      sales_summary_detail_report: {
+        title: 'Sales Summary Detail Report',
+        rows: data.salesSummaryDetail || [],
+        columns: [
+          { key: 'date', label: 'Date/time' },
+          { key: 'customer_name', label: 'Customer' },
+          { key: 'description', label: 'Description' },
+          { key: 'category', label: 'Category' },
+          { key: 'payment_method', label: 'Payment method' },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'amount', label: 'Amount', format: money }
+        ]
+      },
+      service_minutes_remaining_by_category: {
+        title: 'Service Minutes Remaining By Category',
+        rows: data.serviceMinutesRemainingByCategory || [],
+        columns: [
+          { key: 'category', label: 'Category' },
+          { key: 'customers', label: 'Customers' },
+          { key: 'minutes_remaining', label: 'Minutes remaining' }
+        ]
+      },
+      service_minutes_remaining_by_customer: {
+        title: 'Service Minutes Remaining By Customer',
+        rows: data.customerRemainingMinutes || [],
+        columns: [
+          { key: 'customer_name', label: 'Customer name' },
+          { key: 'email', label: 'Email' },
+          { key: 'mobile', label: 'Mobile' },
+          { key: 'standard_minutes_balance', label: 'Standard minutes' },
+          { key: 'hybrid_minutes_balance', label: 'Hybrid/Collagen minutes' },
+          { key: 'total_remaining_minutes', label: 'Total remaining minutes' },
+          { key: 'last_visit_or_booking', label: 'Last visit / booking' },
+          { key: 'customer_status', label: 'Status' }
+        ]
+      },
+      service_minutes_used_summary: {
+        title: 'Service Minutes Used Summary',
+        rows: data.serviceMinutesUsedSummary || [],
+        columns: [
+          { key: 'minute_type', label: 'Minute type' },
+          { key: 'transactions', label: 'Transactions' },
+          { key: 'minutes_used', label: 'Minutes used' },
+          ...noticeColumns
+        ]
+      },
+      service_minutes_used_by_bookable_item: {
+        title: 'Service Minutes Used By Bookable Item',
+        rows: data.serviceMinutesUsedByBookableItem || [],
+        columns: [
+          { key: 'bookable_item', label: 'Bookable item' },
+          { key: 'sessions', label: 'Sessions' },
+          { key: 'minutes_used', label: 'Minutes used' },
+          ...noticeColumns
+        ]
+      },
+      shift_hours_by_site_receipt: {
+        title: 'Shift Hours By Site Receipt',
+        rows: data.shiftHoursBySite || [],
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'staff_name', label: 'Staff' },
+          { key: 'schedule_type', label: 'Type' },
+          { key: 'start_time', label: 'Start' },
+          { key: 'end_time', label: 'End' },
+          { key: 'hours', label: 'Hours' },
+          { key: 'status', label: 'Status' },
+          ...noticeColumns
+        ]
+      },
+      stock_check_receipt: {
+        title: 'Stock Check Receipt',
+        rows: data.currentStock || [],
+        columns: [
+          { key: 'product_name', label: 'Product name' },
+          { key: 'category', label: 'Category' },
+          { key: 'current_stock', label: 'Current stock' },
+          { key: 'low_stock_warning', label: 'Warning' },
+          { key: 'active', label: 'Status' }
+        ]
+      },
+      stock_level_receipt: {
+        title: 'Stock Level Receipt',
+        rows: data.currentStock || [],
+        columns: [
+          { key: 'product_name', label: 'Product name' },
+          { key: 'category', label: 'Category' },
+          { key: 'current_stock', label: 'Current stock' },
+          { key: 'low_stock_threshold', label: 'Low stock at' },
+          { key: 'active', label: 'Status' }
+        ]
+      },
+      stock_low_levels_receipt: {
+        title: 'Stock Low Levels Receipt',
+        rows: (data.currentStock || []).filter((row) => row.low_stock_warning),
+        columns: [
+          { key: 'product_name', label: 'Product name' },
+          { key: 'category', label: 'Category' },
+          { key: 'current_stock', label: 'Current stock' },
+          { key: 'low_stock_threshold', label: 'Low stock at' },
+          { key: 'low_stock_warning', label: 'Warning' },
+          { key: 'active', label: 'Status' }
+        ]
+      },
+      system_metrics: {
+        title: 'System Metrics',
+        rows: data.systemMetrics || [],
+        columns: [
+          { key: 'bookings', label: 'Bookings' },
+          { key: 'payments', label: 'Payments' },
+          { key: 'product_sales', label: 'Product sales' },
+          { key: 'receipts', label: 'Receipts' },
+          { key: 'cash_ups', label: 'Cash-ups' },
+          { key: 'corrections', label: 'Corrections' },
+          { key: 'customers', label: 'Customers' },
+          { key: 'products', label: 'Products' },
+          { key: 'staff', label: 'Staff' }
         ]
       },
       sunbed_sales: {
