@@ -107,6 +107,47 @@ const MANAGER_DARK_PANEL_STYLE = {
   color: '#f5f0e8'
 }
 
+const CRITICAL_BACKUP_TABLES = [
+  'Customers',
+  'Bookings',
+  'Payments',
+  'Receipts',
+  'Products',
+  'ProductSales',
+  'CashUps',
+  'FloatMovements',
+  'CustomerMinuteTransactions',
+  'CustomerLogs',
+  'CorrectionLogs',
+  'Staff',
+  'StaffLogs',
+  'StaffSchedule',
+  'StaffMinuteTopUps',
+  'GlowAuditLogs',
+  'Beds',
+  'Promos',
+  'LoyaltyRewardRules',
+  'CustomerRewardLogs',
+  'CommissionSettings',
+  'DashboardSettings',
+  'StockMovements',
+  'wix_service_booking_map'
+]
+
+const OFFLINE_QUEUE_DB_NAME = 'glow_offline_queue_v1'
+const OFFLINE_QUEUE_STORE = 'OfflineSyncQueue'
+const OFFLINE_SAFE_SYNC_TABLES = ['GlowAuditLogs', 'OfflineSyncEvents']
+
+function createSimpleChecksum(value) {
+  const input = typeof value === 'string' ? value : JSON.stringify(value || {})
+  let hash = 0
+  for (let index = 0; index < input.length; index += 1) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(index)
+    hash |= 0
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0')
+}
+
 // TODO Wix integration: fill this once the final Wix service names and bed rules are confirmed.
 // Example shape:
 // '10 minute sunbed bed 1': { bedId: 1, minutes: 10 }
@@ -325,6 +366,22 @@ function App() {
   const [collapseDuplicateCustomers, setCollapseDuplicateCustomers] = useState(true)
   const [collapseLoyaltyRewards, setCollapseLoyaltyRewards] = useState(true)
   const [collapseAuditLogs, setCollapseAuditLogs] = useState(true)
+  const [collapseBackupRecovery, setCollapseBackupRecovery] = useState(true)
+  const [collapseOfflineQueue, setCollapseOfflineQueue] = useState(true)
+  const [backupWorking, setBackupWorking] = useState(false)
+  const [backupStatus, setBackupStatus] = useState('No backup created in this browser session yet.')
+  const [lastBackupPayload, setLastBackupPayload] = useState(null)
+  const [backupHistory, setBackupHistory] = useState([])
+  const [backupHistoryLoading, setBackupHistoryLoading] = useState(false)
+  const [backupVerifyMessage, setBackupVerifyMessage] = useState('')
+  const [restoreMessage, setRestoreMessage] = useState('Restore is disabled until a verified restore test is completed.')
+  const [internetOnline, setInternetOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine)
+  const [cloudStatus, setCloudStatus] = useState('checking')
+  const [localStorageStatus, setLocalStorageStatus] = useState('checking')
+  const [offlineQueue, setOfflineQueue] = useState([])
+  const [offlineQueueLoading, setOfflineQueueLoading] = useState(false)
+  const [offlineQueueMessage, setOfflineQueueMessage] = useState('')
+  const [offlineLastSyncTime, setOfflineLastSyncTime] = useState(() => typeof window === 'undefined' ? '' : window.localStorage.getItem('glow_offline_last_sync_at') || '')
   const [selectedProductManagementId, setSelectedProductManagementId] = useState('')
   const [customerManagerSearch, setCustomerManagerSearch] = useState('')
   const [showAllCustomersList, setShowAllCustomersList] = useState(false)
@@ -639,6 +696,30 @@ function App() {
     ensureDefaultWixServiceMappings().then((mappings) => backfillExistingWixBookings(mappings))
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const updateOnlineState = () => {
+      const online = navigator.onLine
+      setInternetOnline(online)
+      if (online) {
+        testCloudConnection()
+        syncOfflineQueue({ automatic: true })
+      } else {
+        setCloudStatus('disconnected')
+      }
+    }
+    window.addEventListener('online', updateOnlineState)
+    window.addEventListener('offline', updateOnlineState)
+    updateOnlineState()
+    initialiseOfflineStorage()
+    loadOfflineQueue()
+    loadLastBackupSummary()
+    return () => {
+      window.removeEventListener('online', updateOnlineState)
+      window.removeEventListener('offline', updateOnlineState)
+    }
   }, [])
 
   useEffect(() => {
@@ -3488,6 +3569,8 @@ function formatMoney(value) {
     setCollapseDuplicateCustomers(true)
     setCollapseLoyaltyRewards(true)
     setCollapseAuditLogs(true)
+    setCollapseBackupRecovery(true)
+    setCollapseOfflineQueue(true)
   }
 
   function openManagerSection(sectionName, currentlyOpen) {
@@ -3509,6 +3592,14 @@ function formatMoney(value) {
     if (sectionName === 'commission') setCollapseCommissionSettings(false)
     if (sectionName === 'duplicates') setCollapseDuplicateCustomers(false)
     if (sectionName === 'audit') setCollapseAuditLogs(false)
+    if (sectionName === 'backup') {
+      setCollapseBackupRecovery(false)
+      loadBackupHistory()
+    }
+    if (sectionName === 'offline') {
+      setCollapseOfflineQueue(false)
+      loadOfflineQueue()
+    }
     if (sectionName === 'loyalty') {
       setCollapseLoyaltyRewards(false)
       setCollapsePromos(false)
@@ -3896,8 +3987,28 @@ function formatMoney(value) {
       metadata,
       created_at: new Date().toISOString()
     }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await queueOfflineAction({
+        action_type: 'audit_log',
+        table_name: 'GlowAuditLogs',
+        operation: 'insert',
+        payload
+      })
+      return
+    }
+
     const { error } = await supabase.from('GlowAuditLogs').insert(payload)
-    if (error) console.warn('GlowAuditLogs insert failed:', error.message || error)
+    if (error) {
+      console.warn('GlowAuditLogs insert failed:', error.message || error)
+      await queueOfflineAction({
+        action_type: 'audit_log',
+        table_name: 'GlowAuditLogs',
+        operation: 'insert',
+        payload,
+        error: error.message || String(error)
+      })
+    }
   }
 
   function getBookingAuditMetadata(booking, extra = {}) {
@@ -5549,6 +5660,349 @@ function formatMoney(value) {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+  }
+
+  function downloadJson(filename, payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  function getOfflineDb() {
+    return new Promise((resolve, reject) => {
+      if (typeof indexedDB === 'undefined') {
+        reject(new Error('IndexedDB is not available in this browser.'))
+        return
+      }
+      const request = indexedDB.open(OFFLINE_QUEUE_DB_NAME, 1)
+      request.onupgradeneeded = () => {
+        const db = request.result
+        if (!db.objectStoreNames.contains(OFFLINE_QUEUE_STORE)) {
+          db.createObjectStore(OFFLINE_QUEUE_STORE, { keyPath: 'local_id' })
+        }
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error || new Error('IndexedDB failed to open.'))
+    })
+  }
+
+  async function initialiseOfflineStorage() {
+    try {
+      const db = await getOfflineDb()
+      db.close()
+      setLocalStorageStatus('active')
+    } catch (error) {
+      console.warn('Offline storage unavailable:', error.message || error)
+      setLocalStorageStatus('error')
+    }
+  }
+
+  async function readOfflineQueueEntries() {
+    const db = await getOfflineDb()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(OFFLINE_QUEUE_STORE, 'readonly')
+      const store = transaction.objectStore(OFFLINE_QUEUE_STORE)
+      const request = store.getAll()
+      request.onsuccess = () => resolve((request.result || []).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))))
+      request.onerror = () => reject(request.error || new Error('Offline queue read failed.'))
+      transaction.oncomplete = () => db.close()
+      transaction.onerror = () => reject(transaction.error || new Error('Offline queue transaction failed.'))
+    })
+  }
+
+  async function writeOfflineQueueEntry(entry) {
+    const db = await getOfflineDb()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(OFFLINE_QUEUE_STORE, 'readwrite')
+      const store = transaction.objectStore(OFFLINE_QUEUE_STORE)
+      const request = store.put(entry)
+      request.onsuccess = () => resolve(entry)
+      request.onerror = () => reject(request.error || new Error('Offline queue write failed.'))
+      transaction.oncomplete = () => db.close()
+      transaction.onerror = () => reject(transaction.error || new Error('Offline queue transaction failed.'))
+    })
+  }
+
+  async function deleteOfflineQueueEntry(localId) {
+    const db = await getOfflineDb()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(OFFLINE_QUEUE_STORE, 'readwrite')
+      const store = transaction.objectStore(OFFLINE_QUEUE_STORE)
+      const request = store.delete(localId)
+      request.onsuccess = () => resolve(true)
+      request.onerror = () => reject(request.error || new Error('Offline queue delete failed.'))
+      transaction.oncomplete = () => db.close()
+      transaction.onerror = () => reject(transaction.error || new Error('Offline queue transaction failed.'))
+    })
+  }
+
+  async function loadOfflineQueue() {
+    try {
+      const entries = await readOfflineQueueEntries()
+      setOfflineQueue(entries)
+      setLocalStorageStatus('active')
+    } catch (error) {
+      console.warn('Offline queue load failed:', error.message || error)
+      setLocalStorageStatus('error')
+    }
+  }
+
+  async function queueOfflineAction({ action_type, table_name, operation = 'insert', payload = {}, error = '' }) {
+    const staffUser = getCurrentStaffUser()
+    const entry = {
+      local_id: String(Date.now()) + '_' + Math.random().toString(36).slice(2),
+      created_at: new Date().toISOString(),
+      staff_id: staffUser?.id || null,
+      staff_name: staffUser?.name || 'Unknown',
+      action_type,
+      table_name,
+      operation,
+      payload,
+      status: 'pending',
+      error,
+      retry_count: 0,
+      last_attempt_at: null
+    }
+    try {
+      await writeOfflineQueueEntry(entry)
+      await loadOfflineQueue()
+      setOfflineQueueMessage('Action queued locally. It will sync when the connection is available.')
+    } catch (queueError) {
+      console.warn('Offline queue write failed:', queueError.message || queueError)
+      setOfflineQueueMessage('Offline queue could not save this action locally. Please keep the screen open and reconnect.')
+    }
+  }
+
+  async function testCloudConnection() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setCloudStatus('disconnected')
+      return false
+    }
+    const { error } = await supabase.from('Bookings').select('id').limit(1)
+    setCloudStatus(error ? 'disconnected' : 'connected')
+    return !error
+  }
+
+  async function syncOfflineQueue({ automatic = false } = {}) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setOfflineQueueMessage('Offline mode active. Queue will sync when internet returns.')
+      return
+    }
+    let entries = []
+    try {
+      entries = await readOfflineQueueEntries()
+    } catch (error) {
+      setOfflineQueueMessage('Offline queue could not be read.')
+      return
+    }
+    const pending = entries.filter((entry) => ['pending', 'failed'].includes(entry.status))
+    if (pending.length === 0) {
+      if (!automatic) setOfflineQueueMessage('No pending offline actions to sync.')
+      return
+    }
+
+    setOfflineQueueLoading(true)
+    let synced = 0
+    let failed = 0
+    for (const entry of pending) {
+      const attempt = { ...entry, status: 'syncing', retry_count: Number(entry.retry_count || 0) + 1, last_attempt_at: new Date().toISOString() }
+      await writeOfflineQueueEntry(attempt)
+      if (!OFFLINE_SAFE_SYNC_TABLES.includes(entry.table_name) || entry.operation !== 'insert') {
+        failed += 1
+        await writeOfflineQueueEntry({ ...attempt, status: 'conflict', error: 'Manager review required before syncing this action type.' })
+        continue
+      }
+      const safePayload = { ...entry.payload }
+      const { error } = await supabase.from(entry.table_name).insert(safePayload)
+      if (error) {
+        failed += 1
+        const missingColumn = String(error.message || '').match(/column\s+"?([^"\s]+)"?\s+of relation/i)?.[1]
+        const errorMessage = missingColumn ? 'Missing column: ' + missingColumn + '. ' + error.message : error.message || String(error)
+        await writeOfflineQueueEntry({ ...attempt, status: 'failed', error: errorMessage })
+      } else {
+        synced += 1
+        await writeOfflineQueueEntry({ ...attempt, status: 'synced', error: '' })
+      }
+    }
+    const syncTime = new Date().toISOString()
+    window.localStorage.setItem('glow_offline_last_sync_at', syncTime)
+    setOfflineLastSyncTime(syncTime)
+    await loadOfflineQueue()
+    setOfflineQueueLoading(false)
+    setOfflineQueueMessage('Offline sync complete: ' + synced + ' synced, ' + failed + ' need review.')
+    if (synced > 0) {
+      await supabase.from('OfflineSyncEvents').insert({
+        created_at: syncTime,
+        staff_id: getCurrentStaffUser()?.id || null,
+        staff_name: getCurrentStaffUser()?.name || 'Unknown',
+        synced_count: synced,
+        failed_count: failed,
+        status: failed > 0 ? 'partial' : 'synced'
+      }).then(({ error }) => {
+        if (error) console.warn('OfflineSyncEvents insert failed:', error.message || error)
+      })
+    }
+  }
+
+  async function clearSyncedOfflineQueue() {
+    const entries = await readOfflineQueueEntries()
+    const synced = entries.filter((entry) => entry.status === 'synced')
+    for (const entry of synced) await deleteOfflineQueueEntry(entry.local_id)
+    await loadOfflineQueue()
+    setOfflineQueueMessage(String(synced.length) + ' synced queue ' + (synced.length === 1 ? 'entry' : 'entries') + ' cleared.')
+  }
+
+  function loadLastBackupSummary() {
+    try {
+      const summary = JSON.parse(window.localStorage.getItem('glow_last_backup_summary') || 'null')
+      if (summary) {
+        setBackupStatus(summary.status || 'Last backup summary loaded from this browser.')
+        setBackupHistory((current) => current.length ? current : [summary])
+      }
+    } catch {
+      // Ignore damaged local backup summary; the next backup will replace it.
+    }
+  }
+
+  async function loadBackupHistory() {
+    if (!showManagerView) return
+    setBackupHistoryLoading(true)
+    const { data, error } = await supabase
+      .from('GlowBackups')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10)
+    setBackupHistoryLoading(false)
+    if (error) {
+      console.warn('GlowBackups history unavailable:', error.message || error)
+      setBackupStatus('Backup metadata table unavailable. Browser downloads still work.')
+      return
+    }
+    setBackupHistory(data || [])
+  }
+
+  async function createBackupNow() {
+    if (!requireStaffSignIn()) return
+    if (!requireManagerAccess('Manager PIN required for backups:')) return
+    setBackupWorking(true)
+    setBackupVerifyMessage('')
+    const staffUser = getCurrentStaffUser()
+    const createdAt = new Date().toISOString()
+    const backupId = 'glow_backup_' + createdAt.replace(/[:.]/g, '-')
+    const tableData = {}
+    const tableCounts = {}
+    const skippedTables = []
+
+    for (const tableName of CRITICAL_BACKUP_TABLES) {
+      const { data, error } = await supabase.from(tableName).select('*')
+      if (error) {
+        skippedTables.push({ table: tableName, error: error.message || String(error) })
+        continue
+      }
+      tableData[tableName] = data || []
+      tableCounts[tableName] = (data || []).length
+    }
+
+    const backupPayload = {
+      backup_id: backupId,
+      created_at: createdAt,
+      created_by_staff_id: staffUser?.id || null,
+      created_by_staff_name: staffUser?.name || 'Unknown',
+      app_version: 'V2 compact dashboard',
+      branch: 'v2-compact-layout',
+      table_counts: tableCounts,
+      skipped_tables: skippedTables,
+      data: tableData,
+      metadata: {
+        destination: 'Browser download with optional GlowBackups metadata',
+        restore_enabled: false,
+        notes: 'Restore is intentionally disabled until a verified restore test is completed.'
+      }
+    }
+    backupPayload.checksum = createSimpleChecksum({ table_counts: tableCounts, skipped_tables: skippedTables, data: tableData })
+
+    let backupRecord = null
+    const metadataPayload = {
+      created_at: createdAt,
+      created_by_staff_id: staffUser?.id || null,
+      created_by_staff_name: staffUser?.name || 'Unknown',
+      backup_name: backupId,
+      status: skippedTables.length ? 'completed_with_skips' : 'completed',
+      destination: 'browser_download',
+      table_counts: tableCounts,
+      skipped_tables: skippedTables,
+      checksum: backupPayload.checksum,
+      file_path: backupId + '.json',
+      error: skippedTables.length ? String(skippedTables.length) + ' table(s) skipped.' : null,
+      metadata: backupPayload.metadata
+    }
+    const { data: savedBackup, error: metadataError } = await supabase.from('GlowBackups').insert(metadataPayload).select('*').single()
+    if (metadataError) {
+      console.warn('GlowBackups metadata save failed:', metadataError.message || metadataError)
+      backupPayload.metadata.glow_backups_error = metadataError.message || String(metadataError)
+    } else {
+      backupRecord = savedBackup
+      backupPayload.metadata.glow_backups_id = savedBackup?.id || null
+    }
+
+    setLastBackupPayload(backupPayload)
+    const summary = backupRecord || {
+      backup_name: backupId,
+      created_at: createdAt,
+      status: metadataPayload.status,
+      destination: 'browser_download',
+      table_counts: tableCounts,
+      skipped_tables: skippedTables,
+      checksum: backupPayload.checksum,
+      file_path: backupId + '.json'
+    }
+    setBackupHistory((current) => [summary, ...current.filter((item) => item.backup_name !== summary.backup_name)].slice(0, 10))
+    window.localStorage.setItem('glow_last_backup_summary', JSON.stringify(summary))
+    setBackupStatus((metadataPayload.status === 'completed' ? 'Backup ready' : 'Backup ready with skipped tables') + ': ' + Object.keys(tableCounts).length + ' table(s), ' + skippedTables.length + ' skipped.')
+    downloadJson(backupId + '.json', backupPayload)
+    await createAuditLog('backup_created', 'Backup created: ' + backupId + '.', { backup_id: backupId, skipped_tables: skippedTables.length, checksum: backupPayload.checksum })
+    setBackupWorking(false)
+  }
+
+  function downloadLastBackup() {
+    if (!lastBackupPayload) {
+      alert('Create a backup first in this browser session.')
+      return
+    }
+    downloadJson(lastBackupPayload.backup_id + '.json', lastBackupPayload)
+  }
+
+  async function verifyCurrentBackup() {
+    if (!lastBackupPayload) {
+      setBackupVerifyMessage('Create or download a backup first, then verify it here.')
+      return
+    }
+    const requiredKeys = ['backup_id', 'created_at', 'table_counts', 'skipped_tables', 'data', 'checksum']
+    const missingKeys = requiredKeys.filter((key) => !(key in lastBackupPayload))
+    const countMismatches = Object.entries(lastBackupPayload.table_counts || {}).filter(([tableName, count]) => (lastBackupPayload.data?.[tableName] || []).length !== Number(count))
+    const recalculatedChecksum = createSimpleChecksum({ table_counts: lastBackupPayload.table_counts, skipped_tables: lastBackupPayload.skipped_tables, data: lastBackupPayload.data })
+    const checksumOk = recalculatedChecksum === lastBackupPayload.checksum
+    const verified = missingKeys.length === 0 && countMismatches.length === 0 && checksumOk
+    const message = verified
+      ? 'Backup verified: structure, table counts and checksum match.'
+      : 'Backup verification failed: ' + missingKeys.length + ' missing key(s), ' + countMismatches.length + ' count mismatch(es), checksum ' + (checksumOk ? 'ok' : 'mismatch') + '.'
+    setBackupVerifyMessage(message)
+
+    const glowBackupId = lastBackupPayload.metadata?.glow_backups_id
+    if (glowBackupId) {
+      const { error } = await supabase.from('GlowBackups').update({
+        verified_at: new Date().toISOString(),
+        verified_status: verified ? 'verified' : 'failed'
+      }).eq('id', glowBackupId)
+      if (error) console.warn('GlowBackups verify update failed:', error.message || error)
+    }
+    await createAuditLog('backup_verified', message, { backup_id: lastBackupPayload.backup_id, verified })
   }
 
   async function exportTableRows({ tableName, filename, queryBuilder }) {
@@ -12434,6 +12888,109 @@ function formatMoney(value) {
     )
   }
 
+  function renderBackupRecoveryPanel() {
+    if (!showManagerView) return null
+    const latestBackup = backupHistory[0]
+    const tableCountTotal = latestBackup?.table_counts ? Object.values(latestBackup.table_counts).reduce((sum, count) => sum + Number(count || 0), 0) : 0
+    const skippedCount = Array.isArray(latestBackup?.skipped_tables) ? latestBackup.skipped_tables.length : 0
+
+    return renderCollapsibleSection(
+      'Backup & Recovery',
+      collapseBackupRecovery,
+      setCollapseBackupRecovery,
+      <div style={MANAGER_LIGHT_PANEL_STYLE}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+          <div style={MANAGER_DARK_PANEL_STYLE}>
+            <h3 style={{ marginTop: 0 }}>Last automatic backup status</h3>
+            <p style={{ color: '#ddd' }}>{backupStatus}</p>
+            <p><strong>Last backup date/time:</strong><br />{latestBackup?.created_at ? formatDisplayDateTime(latestBackup.created_at) : 'No backup recorded'}</p>
+            <p><strong>Backup destination/status:</strong><br />{latestBackup?.destination || 'Browser download'} / {latestBackup?.status || 'Not created'}</p>
+            <p><strong>Rows captured:</strong> {tableCountTotal}</p>
+            <p><strong>Skipped tables:</strong> {skippedCount}</p>
+          </div>
+          <div style={MANAGER_DARK_PANEL_STYLE}>
+            <h3 style={{ marginTop: 0 }}>Backup Actions</h3>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button type="button" onClick={createBackupNow} disabled={backupWorking}>{backupWorking ? 'Backing up...' : 'Backup Now'}</button>
+              <button type="button" onClick={downloadLastBackup} disabled={!lastBackupPayload}>Download Backup</button>
+              <button type="button" onClick={verifyCurrentBackup} disabled={!lastBackupPayload}>Verify Backup</button>
+              <button type="button" onClick={loadBackupHistory} disabled={backupHistoryLoading}>{backupHistoryLoading ? 'Loading...' : 'Refresh History'}</button>
+            </div>
+            {backupVerifyMessage && <p style={{ color: backupVerifyMessage.includes('failed') ? '#ffb3ad' : '#9be2b5', fontWeight: 'bold' }}>{backupVerifyMessage}</p>}
+            <p style={{ color: '#aaa' }}>Missing tables are skipped safely and recorded in backup metadata. Browser download is used even if Supabase Storage is not configured.</p>
+          </div>
+        </div>
+
+        <div style={MANAGER_DARK_PANEL_STYLE}>
+          <h3 style={{ marginTop: 0 }}>Recent backups</h3>
+          {backupHistory.length === 0 ? <p style={{ color: '#aaa' }}>No recent backup metadata found. Create a backup to download JSON immediately.</p> : (
+            <div style={{ maxHeight: '260px', overflow: 'auto' }}>
+              {backupHistory.map((backup, index) => (
+                <div key={backup.id || backup.backup_name || index} style={{ borderBottom: '1px solid #222', padding: '8px 0' }}>
+                  <strong>{backup.backup_name || 'Glow backup'}</strong>
+                  <p style={{ margin: '4px 0', color: '#ccc' }}>{formatDisplayDateTime(backup.created_at)} / {backup.status || 'unknown'} / {backup.destination || 'browser_download'}</p>
+                  <p style={{ margin: '4px 0', color: '#aaa' }}>Checksum: {backup.checksum || '-'} / Verified: {backup.verified_status || 'Not verified'}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ ...MANAGER_DARK_PANEL_STYLE, marginTop: '12px', borderColor: '#6b2f2f' }}>
+          <h3 style={{ marginTop: 0 }}>Restore Backup</h3>
+          <p style={{ color: '#ffcc66' }}>{restoreMessage}</p>
+          <button type="button" disabled onClick={() => setRestoreMessage('Restore remains disabled until a verified restore test is completed.')}>Restore Backup - disabled</button>
+          <p style={{ color: '#aaa' }}>Foundation only: this screen is intentionally non-destructive and will not overwrite live salon data.</p>
+        </div>
+      </div>
+    )
+  }
+
+  function renderOfflineQueuePanel() {
+    if (!showManagerView) return null
+    const queueCounts = offlineQueue.reduce((totals, entry) => {
+      totals[entry.status] = Number(totals[entry.status] || 0) + 1
+      return totals
+    }, {})
+
+    return renderCollapsibleSection(
+      'Offline Queue',
+      collapseOfflineQueue,
+      setCollapseOfflineQueue,
+      <div style={MANAGER_LIGHT_PANEL_STYLE}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+          <div style={MANAGER_DARK_PANEL_STYLE}><strong>Pending</strong><h3>{queueCounts.pending || 0}</h3></div>
+          <div style={MANAGER_DARK_PANEL_STYLE}><strong>Failed</strong><h3>{queueCounts.failed || 0}</h3></div>
+          <div style={MANAGER_DARK_PANEL_STYLE}><strong>Conflict</strong><h3>{queueCounts.conflict || 0}</h3></div>
+          <div style={MANAGER_DARK_PANEL_STYLE}><strong>Synced</strong><h3>{queueCounts.synced || 0}</h3></div>
+        </div>
+        <div style={MANAGER_DARK_PANEL_STYLE}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+            <button type="button" onClick={() => syncOfflineQueue()} disabled={offlineQueueLoading || !internetOnline}>{offlineQueueLoading ? 'Syncing...' : 'Sync Now'}</button>
+            <button type="button" onClick={() => syncOfflineQueue()} disabled={offlineQueueLoading || !internetOnline}>Retry Failed</button>
+            <button type="button" onClick={clearSyncedOfflineQueue}>Clear Synced Entries</button>
+            <button type="button" onClick={loadOfflineQueue}>Refresh Queue</button>
+          </div>
+          {offlineQueueMessage && <p style={{ color: '#ffcc66' }}>{offlineQueueMessage}</p>}
+          <p style={{ color: '#aaa' }}>Foundation mode: safe audit events can sync automatically. Payment, booking, customer and minute-balance conflicts are held for manager review rather than auto-merged.</p>
+          <div style={{ maxHeight: '360px', overflow: 'auto', border: '1px solid #222' }}>
+            {offlineQueue.length === 0 ? <p style={{ padding: '10px', color: '#aaa' }}>No offline queue entries.</p> : offlineQueue.map((entry) => (
+              <div key={entry.local_id} style={{ padding: '10px', borderBottom: '1px solid #222' }}>
+                <strong>{formatStatus(entry.action_type)} / {formatStatus(entry.status)}</strong>
+                <p style={{ margin: '4px 0', color: '#ccc' }}>{formatDisplayDateTime(entry.created_at)} / {entry.staff_name || 'Unknown staff'} / {entry.table_name} {entry.operation}</p>
+                {entry.error && <p style={{ margin: '4px 0', color: '#ffb3ad' }}>{entry.error}</p>}
+                <details>
+                  <summary>Action details</summary>
+                  <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', color: '#ddd' }}>{JSON.stringify(entry.payload || {}, null, 2)}</pre>
+                </details>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function renderManagerReportsPanel() {
     if (!showManagerView) return null
     const selectedReport = getSelectedManagerReport()
@@ -13615,6 +14172,8 @@ function formatMoney(value) {
       { key: 'receipts', label: 'Receipt History', isOpen: !collapseReceipts },
       { key: 'reports', label: 'Reports', isOpen: !collapseReports },
       { key: 'audit', label: 'Staff Audit Logs', isOpen: !collapseAuditLogs },
+      { key: 'backup', label: 'Backup & Recovery', isOpen: !collapseBackupRecovery },
+      { key: 'offline', label: 'Offline Queue', isOpen: !collapseOfflineQueue },
       { key: 'loyalty', label: 'Rewards / Promos', isOpen: !collapseLoyaltyRewards }
     ]
 
@@ -15077,8 +15636,20 @@ function formatMoney(value) {
             <strong>{wixHealthIcon} {wixHealthDisplay.text}</strong>
             {wixHealthDisplay.detail && <span>{wixHealthDisplay.detail}</span>}
           </div>
+          <div className="v2-offline-status">
+            <strong>{internetOnline ? 'Internet: Online' : 'Internet: Offline'}</strong>
+            <span>Cloud/Supabase: {cloudStatus === 'connected' ? 'Connected' : cloudStatus === 'checking' ? 'Checking' : 'Disconnected'}</span>
+            <span>Local storage: {localStorageStatus === 'active' ? 'Active' : localStorageStatus === 'checking' ? 'Checking' : 'Error'}</span>
+            <span>Sync queue: {offlineQueue.filter((entry) => ['pending', 'failed', 'conflict'].includes(entry.status)).length}</span>
+            <span>Last sync: {offlineLastSyncTime ? formatDisplayDateTime(offlineLastSyncTime) : 'Never'}</span>
+            <span>Last backup: {backupHistory[0]?.created_at ? formatDisplayDateTime(backupHistory[0].created_at) : 'Never'}</span>
+          </div>
         </div>
       </aside>
+
+      {!internetOnline && (
+        <div className="offline-mode-banner">OFFLINE MODE - changes may not save to the cloud. Supported safe actions will be queued locally.</div>
+      )}
 
       <div className="v2-real-topbar">
         <div>
@@ -15193,6 +15764,8 @@ function formatMoney(value) {
       {v2ActiveTab === 'manager' && showManagerView && renderDailyTakingsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderManagerReportsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderAuditLogsPanel()}
+      {v2ActiveTab === 'manager' && showManagerView && renderBackupRecoveryPanel()}
+      {v2ActiveTab === 'manager' && showManagerView && renderOfflineQueuePanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderLoyaltyRewardsPanel()}
       {v2ActiveTab === 'manager' && showManagerView && renderDuplicateCustomersReportPanel()}
 
