@@ -5351,6 +5351,7 @@ function formatMoney(value) {
   }
 
   async function saveFloatMovement() {
+    if (!requireInternetConnection("Cash float movement")) return
     if (floatMovementSaving) return
     if (!requireStaffSignIn()) return
 
@@ -5449,6 +5450,7 @@ function formatMoney(value) {
   }
 
   async function saveStartDayFloat() {
+    if (!requireInternetConnection("Start-of-day cash float")) return
     if (cashFloatSaving) return
     if (!requireStaffSignIn()) return
 
@@ -5540,6 +5542,7 @@ function formatMoney(value) {
   }
 
   async function saveCashUp() {
+    if (!requireInternetConnection("Cash-up")) return
     if (cashUpCompleting) return
     const values = getCashUpCompletionValues()
     if (!values) return
@@ -5752,6 +5755,15 @@ function formatMoney(value) {
       console.warn('Offline queue load failed:', error.message || error)
       setLocalStorageStatus('error')
     }
+  }
+
+  function requireInternetConnection(actionLabel = 'This action') {
+    if (typeof navigator === 'undefined' || navigator.onLine) return true
+    const message = 'This action requires internet connection.'
+    setOfflineQueueMessage(message + ' ' + actionLabel + ' was not saved or queued.')
+    showToast(message, 'error')
+    window.alert(message)
+    return false
   }
 
   async function queueOfflineAction({ action_type, table_name, operation = 'insert', payload = {}, error = '' }) {
@@ -6100,6 +6112,7 @@ function formatMoney(value) {
   }
 
   async function sellProductsOnly() {
+    if (!requireInternetConnection("Product sale")) return
     if (!requireStaffSignIn()) return
 
     if (productCart.length === 0) {
@@ -8507,6 +8520,7 @@ function formatMoney(value) {
   }
 
   async function createBookingFromModal() {
+    if (!requireInternetConnection("Booking creation")) return
     if (bookingSaving) return
     if (!requireStaffSignIn()) return
 
@@ -8608,6 +8622,7 @@ function formatMoney(value) {
   }
 
   async function createStaffFreeBookingFromModal(member) {
+    if (!requireInternetConnection("Staff booking creation")) return
     if (!requireStaffSignIn()) return
 
     if (!member || !modalSlot?.bedId || !modalSlot?.time) {
@@ -8670,6 +8685,7 @@ function formatMoney(value) {
   }
 
   async function saveEditedBooking() {
+    if (!requireInternetConnection("Booking edit")) return
     if (bookingSaving) return
     if (!requireStaffSignIn()) return
 
@@ -8787,6 +8803,7 @@ function formatMoney(value) {
   }
 
   async function deleteBooking(booking) {
+    if (!requireInternetConnection("Booking deletion")) return
     if (!requireStaffSignIn()) return
     if (!requireManagerAccess('Manager PIN required to delete bookings:')) return
 
@@ -8805,6 +8822,7 @@ function formatMoney(value) {
   }
 
   async function updateBookingStatus(id, newStatus) {
+    if (!requireInternetConnection("Booking status update")) return
     if (!requireStaffSignIn()) return
     const currentBooking = bookings.find((booking) => Number(booking.id) === Number(id)) || modalBooking || null
 
@@ -8919,6 +8937,7 @@ function formatMoney(value) {
   }
 
   async function managerResetBooking(booking) {
+    if (!requireInternetConnection("Session reset")) return
     if (!requireStaffSignIn()) return
 
     if (!['completed', 'no_show', 'force_stopped'].includes(booking.status)) {
@@ -9071,6 +9090,7 @@ function formatMoney(value) {
   }
 
   async function startSession(booking) {
+    if (!requireInternetConnection("Session start")) return
     if (!requireStaffSignIn()) return
 
     if (!booking || hasSessionStarted(booking)) {
@@ -9156,6 +9176,7 @@ function formatMoney(value) {
   }
 
   async function forceStop(booking) {
+    if (!requireInternetConnection("Force stop")) return
     if (!requireStaffSignIn()) return
     if (!requireManagerAccess('Manager access required to force stop a session.')) return
     const tmaxStopped = await sendTmaxStopForBooking(booking)
@@ -9681,6 +9702,7 @@ function formatMoney(value) {
   }
 
   async function createSprayTanBookingFromModal() {
+    if (!requireInternetConnection("Spray tan booking creation")) return
     if (sprayTanSaving) return
     if (!requireStaffSignIn()) return
 
@@ -9828,6 +9850,7 @@ function formatMoney(value) {
   }
 
   async function saveSprayTanBookingEdits() {
+    if (!requireInternetConnection("Spray tan booking edit")) return
     if (sprayTanSaving) return
     if (!requireStaffSignIn()) return
     if (!sprayTanEditingBooking?.id) {
@@ -9979,6 +10002,7 @@ function formatMoney(value) {
   }
 
   async function cancelSprayTanBooking() {
+    if (!requireInternetConnection("Spray tan cancellation")) return
     if (!sprayTanEditingBooking?.id) return
     const confirmed = window.confirm('Cancel this spray tan booking? This will keep the record and mark it as Cancelled.')
     if (!confirmed) return
@@ -10090,6 +10114,7 @@ function formatMoney(value) {
   }
 
   async function deleteSprayTanBooking() {
+    if (!requireInternetConnection("Spray tan booking deletion")) return
     if (sprayTanSaving) return
     if (!requireStaffSignIn()) return
     if (!sprayTanEditingBooking?.id) return
@@ -10313,6 +10338,7 @@ function formatMoney(value) {
   }
 
   async function saveCustomerProfileNote(customer) {
+    if (!requireInternetConnection("Customer note update")) return
     if (!requireStaffSignIn()) return
     if (!customer?.id) return
     const noteText = customerProfileNoteText.trim()
@@ -10852,6 +10878,7 @@ function formatMoney(value) {
   }
 
   async function saveCustomerImport() {
+    if (!requireInternetConnection("Customer import")) return
     if (!requireStaffSignIn()) return
     if (customerImportSaving) return
 
@@ -11339,6 +11366,7 @@ function formatMoney(value) {
   }
 
   async function saveProduct() {
+    if (!requireInternetConnection("Product creation")) return
     if (!requireStaffSignIn()) return
     if (!requireManagerAccess('Manager PIN required to edit products/prices:')) return
 
@@ -11376,6 +11404,7 @@ function formatMoney(value) {
   }
 
   async function saveProductChanges() {
+    if (!requireInternetConnection("Product edit")) return
     if (!requireStaffSignIn()) return
     if (!requireManagerAccess('Manager PIN required to edit products/prices:')) return
     if (!productEditingId) {
