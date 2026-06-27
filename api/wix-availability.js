@@ -47,6 +47,8 @@ function getBlockedDurationMinutes(booking) {
 function buildWixBlockPayload(booking, action) {
   const start = getBookingStart(booking)
   const duration = getBlockedDurationMinutes(booking)
+  const bookingType = String(booking.booking_type || 'sunbed').toLowerCase()
+  const serviceName = booking.spraytan_service || booking.wix_service_name || null
   return {
     action,
     existingBlockId: booking.wix_block_id || null,
@@ -55,11 +57,14 @@ function buildWixBlockPayload(booking, action) {
     start,
     end: booking.booking_end || addMinutes(start, duration),
     durationMinutes: duration,
-    title: booking.booking_type === 'sunbed'
+    title: bookingType === 'sunbed'
       ? `Glow Sunbed Room ${booking.bed_id}`
-      : `Glow ${booking.spraytan_service || booking.booking_type || 'Appointment'}`,
-    bookingType: booking.booking_type || 'sunbed',
+      : `Glow ${serviceName || bookingType || 'Appointment'}`,
+    bookingType,
+    serviceName,
     room: booking.bed_id || null,
+    artistId: booking.assigned_artist_id || null,
+    artistName: booking.assigned_artist_name || booking.spraytan_artist || null,
     customerName: booking.customer_name || booking.wix_customer_name || null,
     notes: `Glow booking ${booking.id}`
   }
@@ -92,35 +97,68 @@ export default async function handler(req, res) {
   const body = getBody(req)
   const bookingId = body.booking_id || body.bookingId
   const action = body.action || 'upsert'
+  const bookingSnapshot = body.booking_snapshot && typeof body.booking_snapshot === 'object'
+    ? body.booking_snapshot
+    : null
   if (!bookingId) return sendJson(res, 400, { error: 'booking_id is required.' })
 
   try {
     const supabase = createSupabase()
-    const { data: booking, error: loadError } = await supabase.from('Bookings').select('*').eq('id', bookingId).single()
+    const { data: storedBooking, error: loadError } = await supabase
+      .from('Bookings')
+      .select('*')
+      .eq('id', bookingId)
+      .maybeSingle()
     if (loadError) throw loadError
+
+    // Deleted dashboard bookings are synced from a snapshot so their Wix block can still be removed.
+    const booking = storedBooking || bookingSnapshot
+    if (!booking) throw new Error('Booking was not found and no booking snapshot was supplied.')
     if (getBookingSource(booking) === 'wix') {
       return sendJson(res, 200, { ok: true, skipped: true, message: 'Wix-sourced bookings are never pushed back to Wix.' })
     }
 
     const payload = buildWixBlockPayload(booking, action)
-    await supabase.from('Bookings').update({ wix_sync_status: 'pending', wix_sync_error: null, last_wix_sync_at: new Date().toISOString() }).eq('id', booking.id)
+    const updateSyncState = async (changes) => {
+      if (!storedBooking) return
+      const { error } = await supabase.from('Bookings').update(changes).eq('id', booking.id)
+      if (error) console.warn('Wix availability status update failed:', { bookingId, changes, error })
+    }
+
+    await updateSyncState({
+      synced_to_wix: false,
+      wix_sync_status: 'pending',
+      wix_sync_error: null,
+      last_wix_sync_at: new Date().toISOString()
+    })
 
     try {
       const result = await callWixAvailability(payload)
       if (result.skipped) {
-        await supabase.from('Bookings').update({ synced_to_wix: false, wix_sync_status: 'pending', wix_sync_error: result.message, last_wix_sync_at: new Date().toISOString() }).eq('id', booking.id)
+        await updateSyncState({
+          synced_to_wix: false,
+          wix_sync_status: 'pending',
+          wix_sync_error: result.message,
+          last_wix_sync_at: new Date().toISOString()
+        })
         return sendJson(res, 200, { ok: true, pending: true, message: result.message, payload })
       }
-      await supabase.from('Bookings').update({
+
+      await updateSyncState({
         synced_to_wix: action === 'delete' ? false : true,
-        wix_block_id: result.blockId || result.id || booking.wix_block_id || null,
+        wix_block_id: action === 'delete' ? null : result.blockId || result.id || booking.wix_block_id || null,
         wix_sync_status: action === 'delete' ? 'removed' : 'synced',
         wix_sync_error: null,
         last_wix_sync_at: new Date().toISOString()
-      }).eq('id', booking.id)
-      return sendJson(res, 200, { ok: true, result })
+      })
+      return sendJson(res, 200, { ok: true, action, bookingId, result })
     } catch (syncError) {
-      await supabase.from('Bookings').update({ synced_to_wix: false, wix_sync_status: 'failed', wix_sync_error: syncError.message, last_wix_sync_at: new Date().toISOString() }).eq('id', booking.id)
+      await updateSyncState({
+        synced_to_wix: false,
+        wix_sync_status: 'failed',
+        wix_sync_error: syncError.message,
+        last_wix_sync_at: new Date().toISOString()
+      })
       return sendJson(res, 500, { ok: false, error: syncError.message, payload })
     }
   } catch (error) {

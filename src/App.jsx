@@ -618,6 +618,7 @@ function App() {
   const [wixServiceMappings, setWixServiceMappings] = useState([])
   const [wixServiceMappingDrafts, setWixServiceMappingDrafts] = useState({})
   const [wixServiceMappingSaving, setWixServiceMappingSaving] = useState({})
+  const [wixAvailabilitySyncingIds, setWixAvailabilitySyncingIds] = useState({})
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
   const wixAvailabilityEndpoint = import.meta.env.VITE_WIX_AVAILABILITY_ENDPOINT || '/api/wix-availability'
@@ -631,7 +632,7 @@ function App() {
   const [tmaxBridgeUrl, setTmaxBridgeUrl] = useState(() => typeof window === 'undefined' ? 'http://127.0.0.1:8787' : window.localStorage.getItem('glow_tmax_bridge_url') || 'http://127.0.0.1:8787')
   const [tmaxBridgeStatus, setTmaxBridgeStatus] = useState(null)
   const [wixSyncManualSprayTan, setWixSyncManualSprayTan] = useState(() => readStoredBoolean('glow_wix_sync_manual_spraytan', true))
-  const [wixSyncManualSunbed, setWixSyncManualSunbed] = useState(() => readStoredBoolean('glow_wix_sync_manual_sunbed', false))
+  const [wixSyncManualSunbed, setWixSyncManualSunbed] = useState(() => readStoredBoolean('glow_wix_sync_manual_sunbed', true))
   const [wixSyncStaffHolidays, setWixSyncStaffHolidays] = useState(() => readStoredBoolean('glow_wix_sync_staff_holidays', false))
   const [managerReceipts, setManagerReceipts] = useState([])
   const [receiptSearchStartDate, setReceiptSearchStartDate] = useState(formatLocalDate(new Date()))
@@ -7612,36 +7613,89 @@ function formatMoney(value) {
     }
   }
 
-  function shouldPushBookingToWixAvailability(booking) {
+  function shouldPushBookingToWixAvailability(booking, action = 'upsert') {
     if (!booking || isExistingWixBookingRecord(booking)) return false
+    if (action === 'delete' && (booking.wix_block_id || booking.synced_to_wix)) return true
     if (isSprayTanBooking(booking)) return wixSyncManualSprayTan
     if (isSunbedBooking(booking) && booking.bed_id) return wixSyncManualSunbed
     return false
   }
 
-  async function syncBookingToWixAvailability(bookingOrId, action = 'upsert') {
+  function getWixAvailabilityActionForBooking(booking) {
+    const status = String(booking?.status || booking?.approval_status || '').toLowerCase()
+    return ['cancelled', 'canceled', 'deleted', 'no_show'].includes(status) ? 'delete' : 'upsert'
+  }
+
+  async function syncBookingToWixAvailability(bookingOrId, action = 'upsert', options = {}) {
+    const { refresh = true, notify = true, force = false } = options
     const booking = typeof bookingOrId === 'object' ? bookingOrId : bookings.find((item) => Number(item.id) === Number(bookingOrId))
     const bookingId = typeof bookingOrId === 'object' ? bookingOrId?.id : bookingOrId
     if (!bookingId) return false
-    if (booking && !shouldPushBookingToWixAvailability(booking)) return false
+    if (booking && !force && !shouldPushBookingToWixAvailability(booking, action)) return false
+    if (booking && isExistingWixBookingRecord(booking)) return false
+
+    setWixAvailabilitySyncingIds((current) => ({ ...current, [bookingId]: true }))
     try {
       const response = await fetch(wixAvailabilityEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking_id: bookingId, action })
+        body: JSON.stringify({
+          booking_id: bookingId,
+          action,
+          booking_snapshot: booking || null
+        })
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || payload.ok === false) throw new Error(payload.error || payload.message || 'Wix availability sync failed.')
-      if (payload.pending) showToast('Wix availability sync is pending setup.', 'info')
-      else if (!payload.skipped) showToast(action === 'delete' ? 'Wix availability block removed.' : 'Wix availability block updated.', 'success')
-      await getBookings()
+      if (notify && payload.pending) showToast('Booking saved. Wix availability sync is pending setup.', 'info')
+      else if (notify && !payload.skipped) showToast(action === 'delete' ? 'Wix availability block removed.' : 'Wix availability block updated.', 'success')
+      if (refresh) await getBookings()
       return true
     } catch (error) {
-      console.error('Wix availability sync failed:', { bookingId, action, error })
-      showToast(error.message || 'Wix availability sync failed.', 'error')
-      await getBookings()
+      console.error('Wix availability sync failed:', { bookingId, action, booking, error })
+      if (action !== 'delete') {
+        const { error: pendingError } = await supabase.from('Bookings').update({
+          synced_to_wix: false,
+          wix_sync_status: 'pending',
+          wix_sync_error: error.message || 'Wix availability sync failed.',
+          last_wix_sync_at: new Date().toISOString()
+        }).eq('id', bookingId)
+        if (pendingError) console.error('Could not mark Wix availability sync pending:', { bookingId, pendingError })
+      }
+      if (notify) showToast(`Booking saved. Wix block pending: ${error.message || 'check Wix connection.'}`, 'error')
+      if (refresh) await getBookings()
       return false
+    } finally {
+      setWixAvailabilitySyncingIds((current) => {
+        const next = { ...current }
+        delete next[bookingId]
+        return next
+      })
     }
+  }
+
+  async function retryPendingWixAvailabilityBlocks() {
+    if (!requireStaffSignIn()) return
+    const pendingBookings = bookings.filter((booking) => (
+      !isExistingWixBookingRecord(booking)
+      && ['pending', 'failed'].includes(String(booking.wix_sync_status || '').toLowerCase())
+    ))
+    if (pendingBookings.length === 0) {
+      showToast('No pending or failed Wix blocks to retry.', 'info')
+      return
+    }
+
+    let synced = 0
+    for (const booking of pendingBookings) {
+      const ok = await syncBookingToWixAvailability(
+        booking,
+        getWixAvailabilityActionForBooking(booking),
+        { refresh: false, notify: false, force: true }
+      )
+      if (ok) synced += 1
+    }
+    await getBookings()
+    showToast(`Wix block retry finished: ${synced}/${pendingBookings.length} synced.`, synced === pendingBookings.length ? 'success' : 'info')
   }
 
   function getSavedWixMappingForService(service, mappings = wixServiceMappings) {
@@ -8600,7 +8654,7 @@ function formatMoney(value) {
       source: `staff_free:${member.id}`,
       booking_source: 'dashboard',
       ...getCreatedByStaffFields()
-    })
+    }).select().single()
 
     if (error) {
       alert('Staff booking was not saved. Please check the connection and try again.')
@@ -8682,7 +8736,7 @@ function formatMoney(value) {
     }
 
     setBookingSaving(true)
-    const { error } = await supabase.from('Bookings').update({
+    const { error, data: updatedBooking } = await supabase.from('Bookings').update({
       customer_id: customer.id,
       customer_name: customer.name,
       customer_phone: customer.phone || null,
@@ -8693,7 +8747,7 @@ function formatMoney(value) {
       source: isInternalShopTest ? 'shop_test' : modalBooking.source || 'calendar',
       booking_source: modalBooking.booking_source || 'dashboard',
       minutes_deducted: isInternalShopTest ? true : modalBooking.minutes_deducted
-    }).eq('id', modalBooking.id)
+    }).eq('id', modalBooking.id).select().single()
     if (!error) {
       if (!isInternalShopTest) {
         const checkoutSaved = await applySunbedCheckout(customer)
@@ -8720,7 +8774,7 @@ function formatMoney(value) {
           source: isInternalShopTest ? 'shop_test' : modalBooking.source || 'calendar'
         }
       }))
-      await syncBookingToWixAvailability(modalBooking, 'upsert')
+      await syncBookingToWixAvailability(updatedBooking || { ...modalBooking, bed_id: Number(editBedId), minutes: Number(selectedMinutes), appointment_time: appointmentDateTime.toISOString() }, 'upsert')
       closeModal()
       getBookings()
       getCustomers()
@@ -8771,7 +8825,7 @@ function formatMoney(value) {
       }
     }
 
-    const { error } = await supabase.from('Bookings').update({ status: newStatus }).eq('id', id)
+    const { error, data: updatedBooking } = await supabase.from('Bookings').update({ status: newStatus }).eq('id', id).select().single()
     if (!error) {
       const action = String(newStatus || '').toLowerCase() === 'no_show'
         ? 'booking_marked_no_show'
@@ -8779,6 +8833,9 @@ function formatMoney(value) {
           ? 'booking_cancelled'
           : 'booking_status_changed'
       await createAuditLog(action, `Booking ${id} status changed from ${currentBooking?.status || 'unknown'} to ${newStatus}.`, getBookingAuditMetadata(currentBooking, { booking_id: id, status_after: newStatus }))
+      if (updatedBooking) {
+        await syncBookingToWixAvailability(updatedBooking, getWixAvailabilityActionForBooking(updatedBooking))
+      }
     }
     if (error) {
       alert('Booking status was not saved. Please check the connection and try again.')
@@ -8875,7 +8932,7 @@ function formatMoney(value) {
     if (!isForceStoppedReset && !requireManagerAccess('Manager PIN required to reset completed or no-show bookings:')) return
 
     const previousStatus = booking.status
-    const { error } = await supabase.from('Bookings').update({
+    const { error, data: resetBooking } = await supabase.from('Bookings').update({
       status: 'booked',
       booking_start: null,
       booking_end: null,
@@ -8883,7 +8940,7 @@ function formatMoney(value) {
       tmax_status: null,
       customer_started_at: null,
       actual_tanning_end: null
-    }).eq('id', booking.id)
+    }).eq('id', booking.id).select().single()
     if (error) {
       alert('Booking reset was not saved. Please check the connection and try again.')
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
@@ -8900,6 +8957,7 @@ function formatMoney(value) {
       manager_pin_required: !isForceStoppedReset,
       minutes_deducted_unchanged: Boolean(booking.minutes_deducted)
     }))
+    if (resetBooking) await syncBookingToWixAvailability(resetBooking, 'upsert')
 
     closeModal()
     getBookings()
@@ -9067,14 +9125,14 @@ function formatMoney(value) {
         : await deductCustomerMinutesOnce(bookingForSession)
     if (!deducted) return
 
-    const { error } = await supabase.from('Bookings').update({
+    const { error, data: startedBooking } = await supabase.from('Bookings').update({
       status: 'undressing',
       booking_start: now.toISOString(),
       booking_end: cooldownEnd.toISOString(),
       tmax_sent_at: now.toISOString(),
       tmax_status: 'undressing',
       minutes_deducted: true
-    }).eq('id', booking.id)
+    }).eq('id', booking.id).select().single()
 
     if (error) {
       alert('Session start was not saved. Please check the connection and try again.')
@@ -9090,6 +9148,7 @@ function formatMoney(value) {
       tmax_status: 'undressing',
       minutes_deducted: true
     }))
+    if (startedBooking) await syncBookingToWixAvailability(startedBooking, 'upsert')
     closeModal()
     getBookings()
     getCustomers()
@@ -9104,12 +9163,12 @@ function formatMoney(value) {
 
     const now = new Date()
     const cooldownEnd = new Date(now.getTime() + COOLDOWN_SECONDS * 1000)
-    const { error } = await supabase.from('Bookings').update({
+    const { error, data: stoppedBooking } = await supabase.from('Bookings').update({
       status: 'force_stopped',
       actual_tanning_end: now.toISOString(),
       booking_end: cooldownEnd.toISOString(),
       tmax_status: 'force_stopped'
-    }).eq('id', booking.id)
+    }).eq('id', booking.id).select().single()
     if (error) {
       alert('Force stop was not saved. Please check the connection and try again.')
       showDataLoadWarning('A booking update failed. Please check the connection.', error)
@@ -9120,6 +9179,7 @@ function formatMoney(value) {
       status_after: 'force_stopped',
       cooldown_until: cooldownEnd.toISOString()
     }))
+    if (stoppedBooking) await syncBookingToWixAvailability(stoppedBooking, 'upsert')
     closeModal()
     getBookings()
   }
@@ -9149,12 +9209,12 @@ function formatMoney(value) {
     const now = new Date()
     const cooldownEnd = new Date(now.getTime() + COOLDOWN_SECONDS * 1000)
     const ids = activeBookings.map((booking) => booking.id)
-    const { error } = await supabase.from('Bookings').update({
+    const { error, data: stoppedBookings } = await supabase.from('Bookings').update({
       status: 'force_stopped',
       actual_tanning_end: now.toISOString(),
       booking_end: cooldownEnd.toISOString(),
       tmax_status: 'force_stopped'
-    }).in('id', ids)
+    }).in('id', ids).select()
 
     if (error) {
       alert('Emergency stop was not saved. Please check the connection and stop beds locally if needed.')
@@ -9163,6 +9223,9 @@ function formatMoney(value) {
       return
     }
 
+    for (const stoppedBooking of stoppedBookings || []) {
+      await syncBookingToWixAvailability(stoppedBooking, 'upsert', { refresh: false, notify: false })
+    }
     await getBookings()
     await createAuditLog('emergency_stop_all_beds', `${activeBookings.length} active bed session(s) marked Force Stopped.`, {
       booking_ids: ids,
@@ -9812,7 +9875,7 @@ function formatMoney(value) {
       : statusFields.approval_status
 
     setSprayTanSaving(true)
-    const { error } = await supabase.from('Bookings').update({
+    const { error, data: updatedSprayTanBooking } = await supabase.from('Bookings').update({
       customer_name: customerName,
       appointment_time: appointmentDateTime.toISOString(),
       spraytan_column: sprayTanColumn,
@@ -9838,7 +9901,7 @@ function formatMoney(value) {
       patch_test_date: sprayTanService === 'Patch Test' ? appointmentDateTime.toISOString() : patchDate,
       spraytan_balance_due: balanceDue,
       notes: sprayTanNotes || null
-    }).eq('id', sprayTanEditingBooking.id)
+    }).eq('id', sprayTanEditingBooking.id).select().single()
     setSprayTanSaving(false)
 
     if (error) {
@@ -9906,7 +9969,8 @@ function formatMoney(value) {
       })
     }
 
-    await syncBookingToWixAvailability(sprayTanEditingBooking, 'upsert')
+    const bookingForWixSync = updatedSprayTanBooking || sprayTanEditingBooking
+    await syncBookingToWixAvailability(bookingForWixSync, getWixAvailabilityActionForBooking(bookingForWixSync))
     closeSprayTanModal()
     await getBookings()
     await getCustomers()
@@ -9920,11 +9984,11 @@ function formatMoney(value) {
     if (!confirmed) return
     setSprayTanStatusControl('Cancelled')
     setSprayTanSaving(true)
-    const { error } = await supabase.from('Bookings').update({
+    const { error, data: cancelledBooking } = await supabase.from('Bookings').update({
       status: 'cancelled',
       approval_status: 'cancelled',
       last_wix_sync_at: sprayTanEditingBooking.booking_source === 'wix' ? new Date().toISOString() : sprayTanEditingBooking.last_wix_sync_at || null
-    }).eq('id', sprayTanEditingBooking.id)
+    }).eq('id', sprayTanEditingBooking.id).select().single()
     setSprayTanSaving(false)
 
     if (error) {
@@ -9934,7 +9998,7 @@ function formatMoney(value) {
       return
     }
 
-    await syncBookingToWixAvailability(sprayTanEditingBooking, 'delete')
+    await syncBookingToWixAvailability(cancelledBooking || sprayTanEditingBooking, 'delete')
     closeSprayTanModal()
     await getBookings()
   }
@@ -13831,6 +13895,12 @@ function formatMoney(value) {
     const oldMappedServices = wixServiceMappings.filter((mapping) => mapping.is_active !== false && mapping.wix_service_id && !activeWixServiceIds.has(String(mapping.wix_service_id)))
     const mappingFailureErrors = syncErrors.filter((error) => String(error.message || '').toLowerCase().includes('needs mapping'))
     const oldServiceMappingFailures = mappingFailureErrors.filter((error) => error.serviceId && !activeWixServiceIds.has(String(error.serviceId)))
+    const wixAvailabilityIssues = bookings
+      .filter((booking) => (
+        !isExistingWixBookingRecord(booking)
+        && ['pending', 'failed'].includes(String(booking.wix_sync_status || '').toLowerCase())
+      ))
+      .sort((a, b) => new Date(b.last_wix_sync_at || b.appointment_time || 0) - new Date(a.last_wix_sync_at || a.appointment_time || 0))
 
     return renderCollapsibleSection(
       'Wix Booking Sync',
@@ -13894,6 +13964,47 @@ function formatMoney(value) {
             </label>
           </div>
           <p style={{ color: '#aaa', marginBottom: 0 }}>T-Max live serial commands remain in bridge test mode until verified against the salon T-Max Manager G2.</p>
+        </div>
+
+        <div style={{ background: '#21170b', border: '1px solid rgba(212,168,83,0.55)', padding: '12px', marginBottom: '14px', color: '#f6ead2' }}>
+          <strong>Wix availability installation required</strong>
+          <p style={{ margin: '6px 0 0' }}>Dashboard bookings are only blocked on Wix when the Wix availability endpoint and Wix booking page availability check are both installed.</p>
+        </div>
+
+        <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.28)', padding: '12px', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
+            <div>
+              <h3 style={{ margin: '0 0 4px', color: '#d4a853' }}>Dashboard Availability Blocks</h3>
+              <p style={{ color: '#aaa', margin: 0 }}>Pending and failed dashboard-to-Wix block updates.</p>
+            </div>
+            <button type="button" onClick={retryPendingWixAvailabilityBlocks} disabled={wixAvailabilityIssues.length === 0}>
+              Retry Failed Wix Blocks
+            </button>
+          </div>
+          {wixAvailabilityIssues.length === 0 ? (
+            <p style={{ color: '#8fbf9b', marginBottom: 0 }}>No pending or failed Wix availability blocks.</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {wixAvailabilityIssues.map((booking) => {
+                const syncStatus = String(booking.wix_sync_status || 'pending').toLowerCase()
+                const action = getWixAvailabilityActionForBooking(booking)
+                const rowSyncing = Boolean(wixAvailabilitySyncingIds[booking.id])
+                return (
+                  <div key={booking.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) minmax(110px, auto) minmax(160px, 1fr) auto', gap: '10px', alignItems: 'center', background: '#090909', border: `1px solid ${syncStatus === 'failed' ? 'rgba(191,70,70,0.65)' : 'rgba(212,168,83,0.35)'}`, padding: '10px' }}>
+                    <div>
+                      <strong>{booking.customer_name || 'Customer'} - {isSunbedBooking(booking) ? getBedName(booking.bed_id) : booking.spraytan_service || formatStatus(booking.booking_type)}</strong>
+                      <div style={{ color: '#aaa', fontSize: '12px' }}>{formatDisplayDateTime(booking.appointment_time || booking.booking_start)}</div>
+                    </div>
+                    <strong style={{ color: syncStatus === 'failed' ? '#ff9a91' : '#ffcc66' }}>{formatStatus(syncStatus)}</strong>
+                    <span style={{ color: '#bbb', overflowWrap: 'anywhere' }}>{booking.wix_sync_error || 'Waiting to sync.'}</span>
+                    <button type="button" disabled={rowSyncing} onClick={() => syncBookingToWixAvailability(booking, action, { force: true })}>
+                      {rowSyncing ? 'Syncing...' : 'Resync'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <div style={{ background: '#111', border: '1px solid rgba(212,168,83,0.28)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
