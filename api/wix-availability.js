@@ -72,7 +72,7 @@ function buildWixBlockPayload(booking, action) {
 
 async function callWixAvailability(payload) {
   const endpoint = process.env.WIX_AVAILABILITY_BLOCK_ENDPOINT
-  const apiKey = process.env.WIX_API_KEY
+  const sharedSecret = process.env.GLOW_WIX_BLOCK_SECRET
   const siteId = process.env.WIX_SITE_ID
   if (!endpoint) {
     return { skipped: true, message: 'WIX_AVAILABILITY_BLOCK_ENDPOINT is not configured yet. Block left pending.' }
@@ -81,7 +81,7 @@ async function callWixAvailability(payload) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: apiKey,
+      Authorization: `Bearer ${sharedSecret}`,
       'wix-site-id': siteId || ''
     },
     body: JSON.stringify(payload)
