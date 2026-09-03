@@ -6705,9 +6705,7 @@ function formatMoney(value) {
 
   function getDisplaySunbedMinutes(booking) {
     if (!booking) return 0
-    const minutes = Number(booking.minutes || 0)
-    if (isWixBooking(booking) && isSunbedBooking(booking) && (!minutes || minutes === 15)) return 20
-    return minutes
+    return Number(booking.minutes || 0)
   }
 
   function getSprayTanDisplayDurationMinutes(booking) {
@@ -6720,7 +6718,7 @@ function formatMoney(value) {
 
   function getTotalBlockMinutes(booking) {
     if (isSprayTanBooking(booking)) return getSprayTanDisplayDurationMinutes(booking)
-    if (isWixBooking(booking) && isSunbedBooking(booking)) return getDisplaySunbedMinutes(booking) || 20
+    if (isWixBooking(booking) && isSunbedBooking(booking)) return getDisplaySunbedMinutes(booking)
     return Number(booking.minutes || 0) + UNDRESS_SECONDS / 60 + COOLDOWN_SECONDS / 60
   }
 
@@ -6751,7 +6749,7 @@ function formatMoney(value) {
     const appointmentStart = new Date(startSource)
     if (Number.isNaN(appointmentStart.getTime())) return null
     const explicitEnd = booking?.booking_end ? new Date(booking.booking_end) : null
-    const useCalculatedEnd = (isWixBooking(booking) && isSunbedBooking(booking) && Number(booking.minutes || 0) === 15) || isSprayTanBooking(booking)
+    const useCalculatedEnd = isSprayTanBooking(booking)
     const plannedEnd = explicitEnd && !Number.isNaN(explicitEnd.getTime()) && !useCalculatedEnd
       ? explicitEnd
       : new Date(appointmentStart.getTime() + getTotalBlockMinutes(booking) * 60000)
