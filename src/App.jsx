@@ -6820,8 +6820,10 @@ function formatMoney(value) {
   }
 
   function getBookingsForSelectedDate() {
+    const excludedLiveCalendarStatuses = new Set(['cancelled', 'canceled', 'deleted'])
     return bookings.filter((booking) => {
       if (!isSunbedBooking(booking)) return false
+      if (excludedLiveCalendarStatuses.has(getBookingStatusKey(booking))) return false
       if (String(booking?.booking_type || 'sunbed').toLowerCase() === 'sunbed' && !booking?.bed_id) return false
       const interval = getBookingCalendarDisplayInterval(booking)
       const included = Boolean(interval && getLocalDateStringFromValue(interval.start) === selectedDate)
