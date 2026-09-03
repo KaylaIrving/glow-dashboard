@@ -286,6 +286,7 @@ function normalizeBooking(booking) {
     patch_test_date: null,
     approval_status: isSprayLike ? 'pending' : 'approved',
     wix_raw_shape: describeShape(booking)
+  }
 }
 
 async function wixFetch(url, apiKey, siteId, body) {
