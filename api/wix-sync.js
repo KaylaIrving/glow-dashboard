@@ -137,92 +137,6 @@ function getWixProvidedDurationMinutes(booking, startIso, endIso) {
   return explicitDuration > 0 ? explicitDuration : null
 }
 
-function shouldLogKaylaIrvingDurationDiagnostic(booking, serviceName, startTime) {
-  const contact = booking?.contactDetails || booking?.customer || booking?.contact || {}
-  const firstName = String(firstValue(contact.firstName, contact.first_name, contact.name?.first, contact.name?.firstName)).trim().toLowerCase()
-  const lastName = String(firstValue(contact.lastName, contact.last_name, contact.name?.last, contact.name?.lastName)).trim().toLowerCase()
-  const displayName = typeof contact.name === 'string' ? contact.name.toLowerCase() : ''
-  const serviceKey = normalizeServiceKey(serviceName)
-  const startDate = startTime ? new Date(startTime) : null
-  const londonTime = startDate && !Number.isNaN(startDate.getTime())
-    ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false }).format(startDate)
-    : ''
-  const londonDate = startDate && !Number.isNaN(startDate.getTime()) ? getLondonDateKey(startDate) : ''
-  const isKaylaIrving = (firstName === 'kayla' && lastName === 'irving') || displayName.includes('kayla irving')
-  const isToneSunbed = serviceKey.includes('tone') || serviceKey.includes('stand up')
-  const isTargetTime = londonDate === '2026-09-03' && londonTime === '20:29'
-  return isKaylaIrving && isToneSunbed && isTargetTime
-}
-
-function getLondonDateTimeParts(value) {
-  const date = value ? new Date(value) : null
-  if (!date || Number.isNaN(date.getTime())) return { date: '', time: '' }
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).formatToParts(date)
-  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]))
-  return {
-    date: lookup.year + '-' + lookup.month + '-' + lookup.day,
-    time: lookup.hour + ':' + lookup.minute
-  }
-}
-
-function shouldTraceOrder18887(booking, serviceName, startTime) {
-  const contact = booking?.contactDetails || booking?.customer || booking?.contact || {}
-  const firstName = String(firstValue(contact.firstName, contact.first_name, contact.name?.first, contact.name?.firstName)).trim().toLowerCase()
-  const lastName = String(firstValue(contact.lastName, contact.last_name, contact.name?.last, contact.name?.lastName)).trim().toLowerCase()
-  const displayName = typeof contact.name === 'string' ? contact.name.toLowerCase() : ''
-  const serviceKey = normalizeServiceKey(serviceName)
-  const london = getLondonDateTimeParts(startTime)
-  const orderValue = String(firstValue(booking.orderNumber, booking.order_number, booking.order?.number, booking.orderId, booking.order?.id)).trim()
-  const isKaylaIrving = (firstName === 'kayla' && lastName === 'irving') || displayName.includes('kayla irving')
-  const isPrestige = serviceKey.includes('prestige') || serviceKey.includes('excellence')
-  const isTargetTime = london.date === '2026-09-03' && london.time === '19:14'
-  return orderValue === '18887' || (isKaylaIrving && isPrestige && isTargetTime)
-}
-
-function logTraceOrder18887(stage, data) {
-  console.log('WIX_TRACE_ORDER_18887', { stage, ...data })
-}
-
-function logKaylaIrvingDurationDiagnostic(booking, calculated) {
-  console.log('WIX_DURATION_DIAGNOSTIC_KAYLA_IRVING_2026_09_03_2029', {
-    rawTimingFields: {
-      bookingId: booking?.id || booking?.bookingId || '',
-      serviceName: calculated.serviceName,
-      startDate: booking?.startDate,
-      endDate: booking?.endDate,
-      startTime: booking?.startTime,
-      start: booking?.start,
-      durationMinutes: booking?.durationMinutes,
-      duration: booking?.duration,
-      bookedEntitySlotStartDate: booking?.bookedEntity?.slot?.startDate,
-      bookedEntitySlotEndDate: booking?.bookedEntity?.slot?.endDate,
-      slotStartDate: booking?.slot?.startDate,
-      slotEndDate: booking?.slot?.endDate,
-      scheduleStart: booking?.schedule?.start,
-      scheduleEnd: booking?.schedule?.end
-    },
-    normalizedTiming: {
-      startTime: calculated.startTime,
-      detectedEndTime: calculated.endTime,
-      calculatedActualDuration: calculated.calculatedActualDuration,
-      wixProvidedDuration: calculated.wixDurationMinutes,
-      fallbackMappingDuration: calculated.fallbackMappingDuration,
-      finalDurationMinutes: calculated.durationMinutes,
-      finalMinutes: calculated.finalMinutes,
-      finalBookingStart: calculated.startTime,
-      finalBookingEnd: calculated.bookingEnd
-    }
-  })
-}
-
 function describeShape(value, depth = 0) {
   if (!value || typeof value !== 'object' || depth > 2) return typeof value
   if (Array.isArray(value)) return value.length ? [describeShape(value[0], depth + 1)] : []
@@ -338,55 +252,8 @@ function normalizeBooking(booking) {
     : Number(wixDurationMinutes || requiredMapping?.minutes || 20)
   const bookingEnd = addMinutesToIsoDate(startTime, durationMinutes)
   const finalMinutes = bookingType === 'sunbed' ? durationMinutes : null
-  const shouldTrace18887 = shouldTraceOrder18887(booking, serviceName, startTime)
 
-  if (shouldTrace18887) {
-    logTraceOrder18887('api.raw_wix_booking', {
-      bookingId: booking?.id || booking?.bookingId || '',
-      orderNumber: firstValue(booking.orderNumber, booking.order_number, booking.order?.number, booking.orderId, booking.order?.id),
-      serviceName,
-      serviceId,
-      customerName: firstValue(contactDisplayName, `${contactFirstName} ${contactLastName}`.trim()),
-      rawTimingFields: {
-        startDate: booking?.startDate,
-        endDate: booking?.endDate,
-        startTime: booking?.startTime,
-        start: booking?.start,
-        durationMinutes: booking?.durationMinutes,
-        duration: booking?.duration,
-        bookedEntitySlotStartDate: booking?.bookedEntity?.slot?.startDate,
-        bookedEntitySlotEndDate: booking?.bookedEntity?.slot?.endDate,
-        slotStartDate: booking?.slot?.startDate,
-        slotEndDate: booking?.slot?.endDate,
-        scheduleStart: booking?.schedule?.start,
-        scheduleEnd: booking?.schedule?.end
-      },
-      resourceFields: {
-        staffMemberName: booking?.staffMemberName,
-        staffName: booking?.staffName,
-        resourceName: booking?.resourceName,
-        bookedEntityTitle: booking?.bookedEntity?.title,
-        bookedEntityName: booking?.bookedEntity?.name
-      },
-      rawShape: describeShape(booking)
-    })
-  }
-
-  if (shouldLogKaylaIrvingDurationDiagnostic(booking, serviceName, startTime)) {
-    logKaylaIrvingDurationDiagnostic(booking, {
-      serviceName,
-      startTime,
-      endTime,
-      calculatedActualDuration: getDurationFromStartEnd(startTime, endTime),
-      wixDurationMinutes,
-      fallbackMappingDuration: isSprayLike ? requiredMapping?.spraytan_duration_minutes : requiredMapping?.minutes,
-      durationMinutes,
-      finalMinutes,
-      bookingEnd
-    })
-  }
-
-  const normalizedBooking = {
+  return {
     wix_booking_id: booking.id || booking.bookingId || '',
     booking_source: 'wix',
     wix_service_id: serviceId,
@@ -419,33 +286,6 @@ function normalizeBooking(booking) {
     patch_test_date: null,
     approval_status: isSprayLike ? 'pending' : 'approved',
     wix_raw_shape: describeShape(booking)
-  }
-
-  if (shouldTrace18887) {
-    logTraceOrder18887('api.normalizeBooking.result', {
-      normalizedBooking: {
-        wix_booking_id: normalizedBooking.wix_booking_id,
-        booking_source: normalizedBooking.booking_source,
-        wix_service_id: normalizedBooking.wix_service_id,
-        wix_service_name: normalizedBooking.wix_service_name,
-        booking_type: normalizedBooking.booking_type,
-        bed_id: normalizedBooking.bed_id,
-        minutes: normalizedBooking.minutes,
-        appointment_time: normalizedBooking.appointment_time,
-        booking_start: normalizedBooking.booking_start,
-        booking_end: normalizedBooking.booking_end,
-        status: normalizedBooking.status,
-        approval_status: normalizedBooking.approval_status
-      },
-      detectedEndTime: endTime,
-      calculatedActualDuration: getDurationFromStartEnd(startTime, endTime),
-      wixProvidedDuration: wixDurationMinutes,
-      fallbackMappingDuration: isSprayLike ? requiredMapping?.spraytan_duration_minutes : requiredMapping?.minutes,
-      finalDurationMinutes: durationMinutes
-    })
-  }
-
-  return normalizedBooking
 }
 
 async function wixFetch(url, apiKey, siteId, body) {

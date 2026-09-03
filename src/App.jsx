@@ -170,48 +170,6 @@ const WIX_LIVE_SERVICE_DEFAULTS = Object.fromEntries(
   WIX_REQUIRED_SERVICE_MAPPINGS.map((mapping) => [mapping.wix_service_name.trim().replace(/\s+/g, ' ').toLowerCase(), mapping])
 )
 
-function getWixTrace18887LondonParts(value) {
-  const date = value ? new Date(value) : null
-  if (!date || Number.isNaN(date.getTime())) return { date: '', time: '' }
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).formatToParts(date)
-  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]))
-  return {
-    date: lookup.year + '-' + lookup.month + '-' + lookup.day,
-    time: lookup.hour + ':' + lookup.minute
-  }
-}
-
-function shouldTraceWixOrder18887Booking(booking) {
-  const serviceName = String(booking?.wix_service_name || booking?.service_name || booking?.serviceName || booking?.spraytan_service || '').trim()
-  const serviceKey = serviceName.trim().replace(/\s+/g, ' ').toLowerCase()
-  const startValue = booking?.appointment_time || booking?.booking_start || booking?.start_time || booking?.startDate
-  const london = getWixTrace18887LondonParts(startValue)
-  const customerName = String(booking?.customer_name || booking?.wix_customer_name || `${booking?.first_name || ''} ${booking?.last_name || ''}`.trim()).toLowerCase()
-  const orderValue = String(booking?.orderNumber || booking?.order_number || booking?.wix_order_number || booking?.order_id || '').trim()
-  const isKaylaIrving = customerName.includes('kayla irving')
-  const isPrestige = serviceKey.includes('prestige') || serviceKey.includes('excellence')
-  const isTargetTime = london.date === '2026-09-03' && london.time === '19:14'
-  return orderValue === '18887' || (isKaylaIrving && isPrestige && isTargetTime)
-}
-
-function logWixTraceOrder18887(stage, data, onceKey = '') {
-  if (typeof window !== 'undefined' && onceKey) {
-    window.__glowWixTraceOrder18887 = window.__glowWixTraceOrder18887 || {}
-    const key = `${stage}:${onceKey}`
-    if (window.__glowWixTraceOrder18887[key]) return
-    window.__glowWixTraceOrder18887[key] = true
-  }
-  console.log('WIX_TRACE_ORDER_18887', { stage, ...data })
-}
-
 function inferWixServiceMapping(serviceName) {
   const key = String(serviceName || '').trim().replace(/\s+/g, ' ').toLowerCase()
   if (!key) return null
@@ -6795,25 +6753,34 @@ function formatMoney(value) {
     const plannedEnd = explicitEnd && !Number.isNaN(explicitEnd.getTime()) && !useCalculatedEnd
       ? explicitEnd
       : new Date(appointmentStart.getTime() + getTotalBlockMinutes(booking) * 60000)
-    if (shouldTraceWixOrder18887Booking(booking)) {
-      const calendarStart = `${String(appointmentStart.getHours()).padStart(2, '0')}:${String(appointmentStart.getMinutes()).padStart(2, '0')}`
-      const calendarEnd = `${String(plannedEnd.getHours()).padStart(2, '0')}:${String(plannedEnd.getMinutes()).padStart(2, '0')}`
-      logWixTraceOrder18887('app.calendar.interval', {
-        bookingId: booking.id,
-        wixBookingId: booking.wix_booking_id,
-        bedId: booking.bed_id,
-        minutes: booking.minutes,
-        booking_start: booking.booking_start,
-        booking_end: booking.booking_end,
-        appointment_time: booking.appointment_time,
-        calculatedCalendarStart: calendarStart,
-        calculatedCalendarEnd: calendarEnd,
-        usedExplicitBookingEnd: explicitEnd && !Number.isNaN(explicitEnd.getTime()) && !useCalculatedEnd,
-        generatedFiveMinuteSlotExists: appointmentStart.getMinutes() % SLOT_MINUTES === 0,
-        exactStartPreventsGeneratedRowMatch: appointmentStart.getMinutes() % SLOT_MINUTES !== 0
-      }, `interval:${booking.id || booking.wix_booking_id || calendarStart}`)
-    }
     return { start: appointmentStart, end: plannedEnd }
+  }
+
+  function floorDateToCalendarSlot(date) {
+    const anchoredDate = new Date(date)
+    const anchoredMinutes = Math.floor(anchoredDate.getMinutes() / SLOT_MINUTES) * SLOT_MINUTES
+    anchoredDate.setMinutes(anchoredMinutes, 0, 0)
+    return anchoredDate
+  }
+
+  function ceilDateToCalendarSlot(date) {
+    const roundedDate = new Date(date)
+    const minutes = roundedDate.getMinutes()
+    const hasSeconds = roundedDate.getSeconds() > 0 || roundedDate.getMilliseconds() > 0
+    const roundedMinutes = Math.ceil((minutes + (hasSeconds ? 1 : 0)) / SLOT_MINUTES) * SLOT_MINUTES
+    roundedDate.setMinutes(roundedMinutes, 0, 0)
+    return roundedDate
+  }
+
+  function getBookingCalendarVisualInterval(booking) {
+    const interval = getBookingCalendarDisplayInterval(booking)
+    if (!interval) return null
+    return {
+      start: floorDateToCalendarSlot(interval.start),
+      end: ceilDateToCalendarSlot(interval.end),
+      actualStart: interval.start,
+      actualEnd: interval.end
+    }
   }
 
   function getCalendarDisplayStartTimeString(booking) {
@@ -6822,8 +6789,20 @@ function formatMoney(value) {
     return `${String(interval.start.getHours()).padStart(2, '0')}:${String(interval.start.getMinutes()).padStart(2, '0')}`
   }
 
-  function getCalendarDisplaySlotCount(booking) {
+  function getCalendarDisplayEndTimeString(booking) {
     const interval = getBookingCalendarDisplayInterval(booking)
+    if (!interval) return ''
+    return `${String(interval.end.getHours()).padStart(2, '0')}:${String(interval.end.getMinutes()).padStart(2, '0')}`
+  }
+
+  function getCalendarVisualStartTimeString(booking) {
+    const interval = getBookingCalendarVisualInterval(booking)
+    if (!interval) return ''
+    return `${String(interval.start.getHours()).padStart(2, '0')}:${String(interval.start.getMinutes()).padStart(2, '0')}`
+  }
+
+  function getCalendarDisplaySlotCount(booking) {
+    const interval = getBookingCalendarVisualInterval(booking)
     if (!interval) return getTotalSlotCount(booking)
     return Math.max(1, Math.ceil((interval.end - interval.start) / (SLOT_MINUTES * 60000)))
   }
@@ -6846,19 +6825,6 @@ function formatMoney(value) {
       if (String(booking?.booking_type || 'sunbed').toLowerCase() === 'sunbed' && !booking?.bed_id) return false
       const interval = getBookingCalendarDisplayInterval(booking)
       const included = Boolean(interval && getLocalDateStringFromValue(interval.start) === selectedDate)
-      if (shouldTraceWixOrder18887Booking(booking)) {
-        logWixTraceOrder18887('app.getBookingsForSelectedDate', {
-          selectedDate,
-          bookingId: booking.id,
-          wixBookingId: booking.wix_booking_id,
-          bedId: booking.bed_id,
-          minutes: booking.minutes,
-          intervalStart: interval?.start?.toISOString?.() || null,
-          intervalEnd: interval?.end?.toISOString?.() || null,
-          localDateFromIntervalStart: interval ? getLocalDateStringFromValue(interval.start) : null,
-          included
-        }, `selected-date:${selectedDate}:${booking.id || booking.wix_booking_id || ''}`)
-      }
       return included
     })
   }
@@ -7853,24 +7819,6 @@ function formatMoney(value) {
       throw new Error(`Wix service "${serviceName || 'Unknown service'}" needs mapping in Manager > Integrations > Wix > Service Booking Map.`)
     }
 
-    if (shouldTraceWixOrder18887Booking(wixBookingPayload)) {
-      logWixTraceOrder18887('app.applyWixServiceMapping.mapping_used', {
-        wixBookingId: wixBookingPayload.wix_booking_id,
-        wixServiceId: serviceId,
-        wixServiceName: serviceName,
-        mapping: {
-          id: mapping.id || null,
-          wix_service_id: mapping.wix_service_id || null,
-          wix_service_name: mapping.wix_service_name || null,
-          glow_service_type: mapping.glow_service_type || mapping.service_type || null,
-          bed_id: mapping.bed_id || null,
-          minutes: mapping.minutes || null,
-          default_status: mapping.default_status || null,
-          is_active: mapping.is_active
-        }
-      }, `mapping-used:${wixBookingPayload.wix_booking_id || serviceName}`)
-    }
-
     const mappedServiceType = mapping.glow_service_type || mapping.service_type
     if (mappedServiceType === 'ignore' || mapping.is_active === false) return null
 
@@ -8397,32 +8345,6 @@ function formatMoney(value) {
         try {
           const mappedWixBooking = applyWixServiceMapping(wixBooking, serviceMappings)
           attemptedBookingPayload = mappedWixBooking || wixBooking
-          if (shouldTraceWixOrder18887Booking(wixBooking) || shouldTraceWixOrder18887Booking(mappedWixBooking)) {
-            logWixTraceOrder18887('app.runWixBookingSync.mapping_result', {
-              incomingBooking: {
-                wix_booking_id: wixBooking?.wix_booking_id,
-                wix_service_name: wixBooking?.wix_service_name,
-                booking_type: wixBooking?.booking_type,
-                bed_id: wixBooking?.bed_id,
-                minutes: wixBooking?.minutes,
-                appointment_time: wixBooking?.appointment_time,
-                booking_start: wixBooking?.booking_start,
-                booking_end: wixBooking?.booking_end,
-                customer_name: wixBooking?.customer_name || wixBooking?.wix_customer_name
-              },
-              mappedBooking: mappedWixBooking ? {
-                wix_booking_id: mappedWixBooking.wix_booking_id,
-                wix_service_name: mappedWixBooking.wix_service_name,
-                booking_type: mappedWixBooking.booking_type,
-                bed_id: mappedWixBooking.bed_id,
-                minutes: mappedWixBooking.minutes,
-                appointment_time: mappedWixBooking.appointment_time,
-                booking_start: mappedWixBooking.booking_start,
-                booking_end: mappedWixBooking.booking_end,
-                customer_name: mappedWixBooking.customer_name || mappedWixBooking.wix_customer_name
-              } : null
-            }, `mapping:${wixBooking?.wix_booking_id || mappedWixBooking?.wix_booking_id || ''}`)
-          }
           if (!mappedWixBooking) {
             diagnostics.skipped.bookings += 1
             diagnostics.skipped.total += 1
@@ -8554,23 +8476,6 @@ function formatMoney(value) {
       last_wix_sync_at: new Date().toISOString()
     }
 
-    if (shouldTraceWixOrder18887Booking(wixBookingPayload) || shouldTraceWixOrder18887Booking(bookingPayload)) {
-      logWixTraceOrder18887('app.upsertWixBooking.supabase_payload', {
-        incoming: {
-          wix_booking_id: wixBookingPayload.wix_booking_id,
-          wix_service_name: wixBookingPayload.wix_service_name,
-          booking_type: wixBookingPayload.booking_type,
-          bed_id: wixBookingPayload.bed_id,
-          minutes: wixBookingPayload.minutes,
-          appointment_time: wixBookingPayload.appointment_time,
-          booking_start: wixBookingPayload.booking_start,
-          booking_end: wixBookingPayload.booking_end,
-          customer_name: wixBookingPayload.customer_name || wixBookingPayload.wix_customer_name
-        },
-        bookingPayload
-      }, `payload:${wixBookingPayload.wix_booking_id || bookingPayload.wix_booking_id || ''}`)
-    }
-
     const { data: existingBooking, error: lookupError } = await supabase
       .from('Bookings')
       .select('id,source,booking_source,wix_booking_id')
@@ -8578,14 +8483,6 @@ function formatMoney(value) {
       .maybeSingle()
 
     if (lookupError) throw lookupError
-
-    if (shouldTraceWixOrder18887Booking(wixBookingPayload) || shouldTraceWixOrder18887Booking(bookingPayload)) {
-      logWixTraceOrder18887('app.upsertWixBooking.existing_row_match', {
-        wixBookingId: wixBookingPayload.wix_booking_id,
-        matchedExistingRow: Boolean(existingBooking),
-        existingBooking
-      }, `existing:${wixBookingPayload.wix_booking_id || ''}`)
-    }
 
     if (existingBooking) {
       if (!isExistingWixBookingRecord(existingBooking)) {
@@ -9607,31 +9504,15 @@ function formatMoney(value) {
 
   function getCalendarBookingStartingAt(time, bedId) {
     const selectedBookings = getBookingsForSelectedDate()
-    const booking = selectedBookings.find((item) => getCalendarDisplayStartTimeString(item) === time && Number(item.bed_id) === Number(bedId))
-    const traceBooking = selectedBookings.find((item) => shouldTraceWixOrder18887Booking(item) && Number(item.bed_id) === Number(bedId))
-    if (traceBooking) {
-      const traceStart = getCalendarDisplayStartTimeString(traceBooking)
-      logWixTraceOrder18887('app.calendar.slot_attach_check', {
-        generatedSlotBeingChecked: time,
-        bedId,
-        traceBookingId: traceBooking.id,
-        traceWixBookingId: traceBooking.wix_booking_id,
-        traceBookingStartTimeString: traceStart,
-        exactSlotMatch: traceStart === time,
-        currentFunctionReturnedTraceBooking: booking?.id === traceBooking.id,
-        generatedSlotExistsForTraceStart: traceStart ? generateTimeSlots(getSunbedCalendarTimeRange().start, getSunbedCalendarTimeRange().end).includes(traceStart) : false,
-        exact1914StartPreventsGeneratedRowMatch: traceStart === '19:14' && !generateTimeSlots(getSunbedCalendarTimeRange().start, getSunbedCalendarTimeRange().end).includes(traceStart)
-      }, `slot:${bedId}:${time}:${traceBooking.id || traceBooking.wix_booking_id || ''}`)
-    }
-    return booking
+    return selectedBookings.find((item) => getCalendarVisualStartTimeString(item) === time && Number(item.bed_id) === Number(bedId))
   }
 
   function isSlotCoveredByEarlierBooking(time, bedId) {
     const slotTime = getSlotDateTime(time)
     return getBookingsForSelectedDate().some((booking) => {
       if (Number(booking.bed_id) !== Number(bedId)) return false
-      if (getCalendarDisplayStartTimeString(booking) === time) return false
-      const interval = getBookingCalendarDisplayInterval(booking)
+      if (getCalendarVisualStartTimeString(booking) === time) return false
+      const interval = getBookingCalendarVisualInterval(booking)
       if (!interval) return false
       return slotTime > interval.start && slotTime < interval.end
     })
@@ -16171,6 +16052,7 @@ function formatMoney(value) {
                           <div>
                             <strong>{booking.customer_name}</strong><br />
                             {isWixBooking(booking) && <><span style={{ display: 'inline-block', color: '#050505', background: '#d4a853', borderRadius: '6px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold', margin: '3px 0' }}>Wix</span><br /></>}
+                            {getCalendarDisplayStartTimeString(booking)}-{getCalendarDisplayEndTimeString(booking)}<br />
                             {booking.minutes} mins<br />
                             Blocked: {getTotalBlockMinutes(booking)} mins<br />
                             <span style={getStatusChipStyle(getPhase(booking))}>{getPhase(booking)}</span>
