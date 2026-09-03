@@ -622,6 +622,7 @@ function App() {
   const [toastMessage, setToastMessage] = useState(null)
   const wixSyncEndpoint = import.meta.env.VITE_WIX_SYNC_ENDPOINT || '/api/wix-sync'
   const wixAvailabilityEndpoint = import.meta.env.VITE_WIX_AVAILABILITY_ENDPOINT || '/api/wix-availability'
+  const wixBookingStatusEndpoint = import.meta.env.VITE_WIX_BOOKING_STATUS_ENDPOINT || '/api/wix-booking-status'
   const readStoredBoolean = (key, fallback = false) => {
     if (typeof window === 'undefined') return fallback
     const stored = window.localStorage.getItem(key)
@@ -7825,6 +7826,7 @@ function formatMoney(value) {
     if (mappedServiceType === 'ignore' || mapping.is_active === false) return null
 
     const defaultApproval = mapping.default_status === 'pending' ? 'pending' : 'approved'
+    const mappedApproval = wixBookingPayload.approval_status || defaultApproval
     if (mappedServiceType === 'sunbed') {
       const realWixMinutes = Number(wixBookingPayload.minutes || 0)
       return {
@@ -7834,7 +7836,7 @@ function formatMoney(value) {
         minutes: realWixMinutes > 0 ? realWixMinutes : Number(mapping.minutes || 0),
         wix_service_id: serviceId,
         wix_service_name: serviceName,
-        approval_status: defaultApproval
+        approval_status: mappedApproval
       }
     }
 
@@ -7847,7 +7849,7 @@ function formatMoney(value) {
       service_name: sprayService,
       wix_service_id: serviceId,
       wix_service_name: serviceName,
-      approval_status: defaultApproval,
+      approval_status: mappedApproval,
       spraytan_duration_minutes: Number(mapping.minutes || wixBookingPayload.spraytan_duration_minutes || (mappedServiceType === 'patch_test' ? 10 : 30)),
       patch_test_required: mappedServiceType === 'spraytan',
       patch_test_completed: false
@@ -7856,10 +7858,41 @@ function formatMoney(value) {
 
   function getWixMappedStatus(wixBookingPayload, bookingType) {
     const rawStatus = String(wixBookingPayload.wix_status || wixBookingPayload.status || '').trim().toLowerCase()
+    const rawPaymentStatus = String(wixBookingPayload.wix_payment_status || wixBookingPayload.paymentStatus || wixBookingPayload.payment_status || '').trim().toLowerCase()
     const cancelled = ['cancelled', 'canceled', 'declined', 'voided'].some((status) => rawStatus.includes(status))
     if (cancelled) return { status: 'cancelled', approval_status: 'cancelled' }
-    if (['spraytan', 'patch_test'].includes(String(bookingType).toLowerCase())) return { status: 'booked', approval_status: wixBookingPayload.approval_status || 'pending' }
+    if (['spraytan', 'patch_test'].includes(String(bookingType).toLowerCase())) {
+      const approved = ['confirmed', 'booked'].some((status) => rawStatus.includes(status)) || ['paid', 'partially_paid'].some((status) => rawPaymentStatus.includes(status))
+      return { status: 'booked', approval_status: wixBookingPayload.approval_status || (approved ? 'approved' : 'pending') }
+    }
     return { status: 'booked', approval_status: wixBookingPayload.approval_status || 'approved' }
+  }
+
+  async function syncApprovedSprayTanStatusToWix(booking) {
+    if (!booking?.id || !isExistingWixBookingRecord(booking)) return false
+    if (!['spraytan', 'patch_test'].includes(String(booking.booking_type || '').toLowerCase())) return false
+    if (String(booking.approval_status || '').toLowerCase() !== 'approved') return false
+
+    try {
+      const response = await fetch(wixBookingStatusEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: booking.id, action: 'approve' })
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload.ok === false) throw new Error(payload.error || payload.message || 'Wix booking approval sync failed.')
+      if (!payload.skipped) showToast('Wix booking approval updated.', 'success')
+      return true
+    } catch (error) {
+      console.error('Wix booking approval sync failed:', { booking, error })
+      await supabase.from('Bookings').update({
+        wix_sync_status: 'failed',
+        wix_sync_error: error.message || 'Wix booking approval sync failed.',
+        last_wix_sync_at: new Date().toISOString()
+      }).eq('id', booking.id)
+      showToast(`Glow saved. Wix approval sync needs review: ${error.message || 'check Wix connection.'}`, 'error')
+      return false
+    }
   }
 
   function getSampleWixSprayTanPayload() {
@@ -10063,6 +10096,7 @@ function formatMoney(value) {
 
     const bookingForWixSync = updatedSprayTanBooking || sprayTanEditingBooking
     await syncBookingToWixAvailability(bookingForWixSync, getWixAvailabilityActionForBooking(bookingForWixSync))
+    await syncApprovedSprayTanStatusToWix(bookingForWixSync)
     closeSprayTanModal()
     await getBookings()
     await getCustomers()
@@ -10171,7 +10205,10 @@ function formatMoney(value) {
       return
     }
 
-    if (data) await syncBookingToWixAvailability(data, 'upsert')
+    if (data) {
+      await syncBookingToWixAvailability(data, 'upsert')
+      await syncApprovedSprayTanStatusToWix(data)
+    }
     setSprayTanEditingBooking(data)
     setSprayTanDepositPaid(Number(data.deposit_paid || 0))
     setSprayTanDepositPaymentMethod(data.spraytan_deposit_payment_method || sprayTanApprovalPaymentMethod)
@@ -15315,7 +15352,7 @@ function formatMoney(value) {
           ))}
         </div>
 
-        <div style={{ background: 'linear-gradient(180deg, rgba(205, 154, 143, 0.085), rgba(20, 16, 15, 0.96))', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
+        <div style={{ background: '#fffaf0', border: '1px solid rgba(171,129,55,0.28)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
           <div style={{ minWidth: '760px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '12px', padding: '0 0 10px', color: '#d4a853', fontWeight: 'bold' }}>
               <span>Time</span>
@@ -15414,7 +15451,7 @@ function formatMoney(value) {
           ))}
         </div>
 
-        <div style={{ background: 'linear-gradient(180deg, rgba(205, 154, 143, 0.085), rgba(20, 16, 15, 0.96))', border: '1px solid rgba(212,168,83,0.25)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
+        <div style={{ background: '#fffaf0', border: '1px solid rgba(171,129,55,0.28)', borderRadius: '16px', padding: '16px', overflowX: 'auto' }}>
           <table className="spraytan-calendar-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px', tableLayout: 'fixed' }}>
             <thead>
               <tr>

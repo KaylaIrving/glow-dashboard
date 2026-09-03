@@ -137,6 +137,27 @@ function getWixProvidedDurationMinutes(booking, startIso, endIso) {
   return explicitDuration > 0 ? explicitDuration : null
 }
 
+function getWixPaymentStatus(booking) {
+  return String(firstValue(
+    booking.paymentStatus,
+    booking.payment_status,
+    booking.payment?.status,
+    booking.paymentDetails?.status,
+    booking.ecomOrder?.paymentStatus,
+    booking.order?.paymentStatus
+  )).trim().toLowerCase()
+}
+
+function isWixBookingPaid(booking) {
+  const paymentStatus = getWixPaymentStatus(booking)
+  return ['paid', 'partially_paid'].some((status) => paymentStatus.includes(status))
+}
+
+function isWixBookingConfirmed(booking) {
+  const status = String(firstValue(booking.status, booking.wixStatus)).trim().toLowerCase()
+  return ['confirmed', 'booked'].some((value) => status.includes(value))
+}
+
 function describeShape(value, depth = 0) {
   if (!value || typeof value !== 'object' || depth > 2) return typeof value
   if (Array.isArray(value)) return value.length ? [describeShape(value[0], depth + 1)] : []
@@ -252,12 +273,19 @@ function normalizeBooking(booking) {
     : Number(wixDurationMinutes || requiredMapping?.minutes || 20)
   const bookingEnd = addMinutesToIsoDate(startTime, durationMinutes)
   const finalMinutes = bookingType === 'sunbed' ? durationMinutes : null
+  const wixPaymentStatus = getWixPaymentStatus(booking)
+  const wixPaidOrConfirmed = isWixBookingPaid(booking) || isWixBookingConfirmed(booking)
+  const importedDepositPaid = Number(booking.depositPaid || 0)
+  const depositPaid = isSprayLike && isWixBookingPaid(booking) && importedDepositPaid <= 0 && depositRequired > 0
+    ? depositRequired
+    : importedDepositPaid
 
   return {
     wix_booking_id: booking.id || booking.bookingId || '',
     booking_source: 'wix',
     wix_service_id: serviceId,
     wix_status: booking.status || booking.wixStatus || '',
+    wix_payment_status: wixPaymentStatus,
     booking_type: bookingType,
     bed_id: requiredMapping?.bed_id || null,
     minutes: finalMinutes,
@@ -279,12 +307,12 @@ function normalizeBooking(booking) {
     spraytan_artist: firstValue(booking.staffMemberName, booking.staffName, booking.resourceName, 'Unassigned'),
     spraytan_duration_minutes: durationMinutes,
     deposit_required: depositRequired,
-    deposit_paid: Number(booking.depositPaid || 0),
-    deposit_status: Number(booking.depositPaid || 0) >= depositRequired && depositRequired > 0 ? 'paid' : 'pending',
+    deposit_paid: depositPaid,
+    deposit_status: bookingType === 'patch_test' ? 'not_required' : depositPaid >= depositRequired && depositRequired > 0 ? 'paid' : depositPaid > 0 ? 'pending' : 'not_paid',
     patch_test_required: bookingType === 'spraytan' && !lowerService.includes('patch'),
     patch_test_completed: false,
     patch_test_date: null,
-    approval_status: isSprayLike ? 'pending' : 'approved',
+    approval_status: isSprayLike ? (wixPaidOrConfirmed ? 'approved' : 'pending') : 'approved',
     wix_raw_shape: describeShape(booking)
   }
 }

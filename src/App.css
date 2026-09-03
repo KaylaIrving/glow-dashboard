@@ -710,6 +710,35 @@ input::placeholder {
   color: rgba(212, 168, 83, 0.48) !important;
 }
 
+.spraytan-view .spraytan-calendar-table {
+  background: #fffaf0 !important;
+}
+
+.spraytan-view .spraytan-calendar-table th {
+  background: #f1dfb6 !important;
+  border-color: rgba(92, 69, 33, 0.18) !important;
+  color: #1f1710 !important;
+}
+
+.spraytan-view .spraytan-calendar-table td {
+  background: #fffaf0 !important;
+  border-color: rgba(92, 69, 33, 0.16) !important;
+  color: #1f1710 !important;
+}
+
+.spraytan-view .spraytan-calendar-table tr[data-spraytan-current-time-row="true"] td {
+  border-top-color: #9d2936 !important;
+}
+
+.spraytan-view .spraytan-calendar-table tr[data-spraytan-current-time-row="true"] td:first-child {
+  background: #7a1f2a !important;
+  color: #fff8f2 !important;
+}
+
+.spraytan-view .spraytan-calendar-table td > span {
+  color: rgba(171, 129, 55, 0.58) !important;
+}
+
 .booking-modal-overlay {
   background: rgba(0, 0, 0, 0.82) !important;
   backdrop-filter: blur(5px);
