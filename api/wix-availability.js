@@ -38,8 +38,15 @@ function getBlockedDurationMinutes(booking) {
   const type = String(booking?.booking_type || 'sunbed').toLowerCase()
   if (type === 'patch_test') return 10
   if (type === 'spraytan' || type === 'express_tan') return Number(booking?.spraytan_duration_minutes || 30)
-  const sessionMinutes = Number(booking?.blocked_minutes || booking?.total_blocked_minutes || 0)
-  if (sessionMinutes > 0) return sessionMinutes
+  const explicitDuration = Number(booking?.blocked_minutes || booking?.total_blocked_minutes || 0)
+  if (explicitDuration > 0) return explicitDuration
+  if (booking?.booking_start && booking?.booking_end) {
+    const start = new Date(booking.booking_start)
+    const end = new Date(booking.booking_end)
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end > start) {
+      return Math.ceil((end - start) / 60000)
+    }
+  }
   const tanningMinutes = Number(booking?.minutes || 0) || 20
   return tanningMinutes + 6
 }
@@ -47,21 +54,24 @@ function getBlockedDurationMinutes(booking) {
 function buildWixBlockPayload(booking, action) {
   const start = getBookingStart(booking)
   const duration = getBlockedDurationMinutes(booking)
+  const end = booking.booking_end || addMinutes(start, duration)
   const bookingType = String(booking.booking_type || 'sunbed').toLowerCase()
   const serviceName = booking.spraytan_service || booking.wix_service_name || null
+  if (!start || !end) throw new Error('Booking needs a start and end time before it can block Wix availability.')
   return {
     action,
     existingBlockId: booking.wix_block_id || null,
     bookingId: booking.id,
     source: 'glow-dashboard',
     start,
-    end: booking.booking_end || addMinutes(start, duration),
+    end,
     durationMinutes: duration,
     title: bookingType === 'sunbed'
       ? `Glow Sunbed Room ${booking.bed_id}`
       : `Glow ${serviceName || bookingType || 'Appointment'}`,
     bookingType,
     serviceName,
+    status: booking.status || booking.approval_status || null,
     room: booking.bed_id || null,
     artistId: booking.assigned_artist_id || null,
     artistName: booking.assigned_artist_name || booking.spraytan_artist || null,
@@ -77,6 +87,9 @@ async function callWixAvailability(payload) {
   if (!endpoint) {
     return { skipped: true, message: 'WIX_AVAILABILITY_BLOCK_ENDPOINT is not configured yet. Block left pending.' }
   }
+  if (!sharedSecret) {
+    return { skipped: true, message: 'GLOW_WIX_BLOCK_SECRET is not configured yet. Block left pending.' }
+  }
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -87,8 +100,16 @@ async function callWixAvailability(payload) {
     body: JSON.stringify(payload)
   })
   const text = await response.text()
-  const data = text ? JSON.parse(text) : {}
-  if (!response.ok) throw new Error(data.message || data.error || `Wix availability endpoint returned ${response.status}`)
+  let data = {}
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch (error) {
+    data = { raw: text }
+  }
+  if (!response.ok) {
+    const message = data.message || data.error || data.raw || `Wix availability endpoint returned ${response.status}`
+    throw new Error(message)
+  }
   return data
 }
 
@@ -144,9 +165,20 @@ export default async function handler(req, res) {
         return sendJson(res, 200, { ok: true, pending: true, message: result.message, payload })
       }
 
+      if (result.ok !== true) {
+        throw new Error(result.message || result.error || 'Wix availability endpoint did not confirm success.')
+      }
+      if (action === 'delete') {
+        if (result.removed !== true && result.notFound !== true) {
+          throw new Error(result.message || 'Wix availability endpoint did not confirm delete/remove success.')
+        }
+      } else if (!result.blockId && !result.id) {
+        throw new Error('Wix availability endpoint did not return a real blockId for the created Wix calendar event.')
+      }
+
       await updateSyncState({
         synced_to_wix: action === 'delete' ? false : true,
-        wix_block_id: action === 'delete' ? null : result.blockId || result.id || booking.wix_block_id || null,
+        wix_block_id: action === 'delete' ? null : result.blockId || result.id,
         wix_sync_status: action === 'delete' ? 'removed' : 'synced',
         wix_sync_error: null,
         last_wix_sync_at: new Date().toISOString()

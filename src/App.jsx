@@ -7639,6 +7639,21 @@ function formatMoney(value) {
     return ['cancelled', 'canceled', 'deleted', 'no_show'].includes(status) ? 'delete' : 'upsert'
   }
 
+  function getPlannedBookingEndIso(startIso, durationMinutes) {
+    if (!startIso) return null
+    return addMinutesToIsoDate(startIso, Number(durationMinutes || 0))
+  }
+
+  function getPlannedSunbedBookingEndIso(startIso, minutes) {
+    return getPlannedBookingEndIso(startIso, Number(minutes || 0) + UNDRESS_SECONDS / 60 + COOLDOWN_SECONDS / 60)
+  }
+
+  function getPlannedSprayTanBookingEndIso(startIso, durationMinutes, serviceName) {
+    const normalizedService = String(serviceName || '').toLowerCase()
+    const plannedDuration = normalizedService.includes('patch') ? 10 : Math.max(30, Number(durationMinutes || 30))
+    return getPlannedBookingEndIso(startIso, plannedDuration)
+  }
+
   async function syncBookingToWixAvailability(bookingOrId, action = 'upsert', options = {}) {
     const { refresh = true, notify = true, force = false } = options
     const booking = typeof bookingOrId === 'object' ? bookingOrId : bookings.find((item) => Number(item.id) === Number(bookingOrId))
@@ -7771,11 +7786,12 @@ function formatMoney(value) {
 
     const defaultApproval = mapping.default_status === 'pending' ? 'pending' : 'approved'
     if (mappedServiceType === 'sunbed') {
+      const realWixMinutes = Number(wixBookingPayload.minutes || 0)
       return {
         ...wixBookingPayload,
         booking_type: 'sunbed',
         bed_id: Number(mapping.bed_id),
-        minutes: Number(mapping.minutes || 0),
+        minutes: realWixMinutes > 0 ? realWixMinutes : Number(mapping.minutes || 0),
         wix_service_id: serviceId,
         wix_service_name: serviceName,
         approval_status: defaultApproval
@@ -8501,6 +8517,8 @@ function formatMoney(value) {
       minutes: testMinutes,
       minutes_deducted: true,
       appointment_time: appointmentDateTime.toISOString(),
+      booking_start: appointmentDateTime.toISOString(),
+      booking_end: getPlannedSunbedBookingEndIso(appointmentDateTime.toISOString(), testMinutes),
       status: 'booked',
       source: 'shop_test',
       booking_source: 'dashboard',
@@ -8595,6 +8613,8 @@ function formatMoney(value) {
       minutes: Number(selectedMinutes),
       minutes_deducted: isInternalShopTest,
       appointment_time: appointmentDateTime.toISOString(),
+      booking_start: appointmentDateTime.toISOString(),
+      booking_end: getPlannedSunbedBookingEndIso(appointmentDateTime.toISOString(), Number(selectedMinutes)),
       status: 'booked',
       source: isInternalShopTest ? 'shop_test' : 'calendar',
       booking_source: 'dashboard',
@@ -8665,6 +8685,8 @@ function formatMoney(value) {
       minutes: sessionMinutes,
       minutes_deducted: false,
       appointment_time: appointmentDateTime.toISOString(),
+      booking_start: appointmentDateTime.toISOString(),
+      booking_end: getPlannedSunbedBookingEndIso(appointmentDateTime.toISOString(), sessionMinutes),
       status: 'booked',
       source: `staff_free:${member.id}`,
       booking_source: 'dashboard',
@@ -8760,6 +8782,8 @@ function formatMoney(value) {
       bed_id: Number(editBedId),
       minutes: Number(selectedMinutes),
       appointment_time: appointmentDateTime.toISOString(),
+      booking_start: appointmentDateTime.toISOString(),
+      booking_end: getPlannedSunbedBookingEndIso(appointmentDateTime.toISOString(), Number(selectedMinutes)),
       source: isInternalShopTest ? 'shop_test' : modalBooking.source || 'calendar',
       booking_source: modalBooking.booking_source || 'dashboard',
       minutes_deducted: isInternalShopTest ? true : modalBooking.minutes_deducted
@@ -8790,7 +8814,7 @@ function formatMoney(value) {
           source: isInternalShopTest ? 'shop_test' : modalBooking.source || 'calendar'
         }
       }))
-      await syncBookingToWixAvailability(updatedBooking || { ...modalBooking, bed_id: Number(editBedId), minutes: Number(selectedMinutes), appointment_time: appointmentDateTime.toISOString() }, 'upsert')
+      await syncBookingToWixAvailability(updatedBooking || { ...modalBooking, bed_id: Number(editBedId), minutes: Number(selectedMinutes), appointment_time: appointmentDateTime.toISOString(), booking_start: appointmentDateTime.toISOString(), booking_end: getPlannedSunbedBookingEndIso(appointmentDateTime.toISOString(), Number(selectedMinutes)) }, 'upsert')
       closeModal()
       getBookings()
       getCustomers()
@@ -9769,6 +9793,8 @@ function formatMoney(value) {
       customer_phone: customer.phone || null,
       customer_email: customer.email || null,
       appointment_time: appointmentDateTime.toISOString(),
+      booking_start: appointmentDateTime.toISOString(),
+      booking_end: getPlannedSprayTanBookingEndIso(appointmentDateTime.toISOString(), Number(sprayTanDuration || 0), sprayTanService),
       status: statusFields.status,
       booking_source: 'dashboard',
       booking_type: 'spraytan',
@@ -9901,6 +9927,8 @@ function formatMoney(value) {
     const { error, data: updatedSprayTanBooking } = await supabase.from('Bookings').update({
       customer_name: customerName,
       appointment_time: appointmentDateTime.toISOString(),
+      booking_start: appointmentDateTime.toISOString(),
+      booking_end: getPlannedSprayTanBookingEndIso(appointmentDateTime.toISOString(), Number(sprayTanDuration || 0), sprayTanService),
       spraytan_column: sprayTanColumn,
       spraytan_service: sprayTanService,
       spraytan_artist: sprayTanArtist || null,
@@ -10102,6 +10130,7 @@ function formatMoney(value) {
       return
     }
 
+    if (data) await syncBookingToWixAvailability(data, 'upsert')
     setSprayTanEditingBooking(data)
     setSprayTanDepositPaid(Number(data.deposit_paid || 0))
     setSprayTanDepositPaymentMethod(data.spraytan_deposit_payment_method || sprayTanApprovalPaymentMethod)

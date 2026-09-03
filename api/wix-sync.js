@@ -99,6 +99,93 @@ function addMinutesToIsoDate(startIso, minutes) {
   return new Date(startDate.getTime() + durationMinutes * 60000).toISOString()
 }
 
+function getBookingStartDate(booking) {
+  return normalizeDate(firstValue(
+    booking.startDate,
+    booking.startTime,
+    booking.start,
+    booking.slot?.startDate,
+    booking.bookedEntity?.slot?.startDate,
+    booking.schedule?.start
+  ))
+}
+
+function getBookingEndDate(booking) {
+  return normalizeDate(firstValue(
+    booking.endDate,
+    booking.endTime,
+    booking.end,
+    booking.slot?.endDate,
+    booking.bookedEntity?.slot?.endDate,
+    booking.schedule?.end
+  ))
+}
+
+function getDurationFromStartEnd(startIso, endIso) {
+  if (!startIso || !endIso) return null
+  const startDate = new Date(startIso)
+  const endDate = new Date(endIso)
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null
+  const durationMinutes = Math.round((endDate.getTime() - startDate.getTime()) / 60000)
+  return durationMinutes > 0 ? durationMinutes : null
+}
+
+function getWixProvidedDurationMinutes(booking, startIso, endIso) {
+  const durationFromDates = getDurationFromStartEnd(startIso, endIso)
+  if (durationFromDates) return durationFromDates
+  const explicitDuration = Number(firstValue(booking.durationMinutes, booking.duration))
+  return explicitDuration > 0 ? explicitDuration : null
+}
+
+function shouldLogKaylaIrvingDurationDiagnostic(booking, serviceName, startTime) {
+  const contact = booking?.contactDetails || booking?.customer || booking?.contact || {}
+  const firstName = String(firstValue(contact.firstName, contact.first_name, contact.name?.first, contact.name?.firstName)).trim().toLowerCase()
+  const lastName = String(firstValue(contact.lastName, contact.last_name, contact.name?.last, contact.name?.lastName)).trim().toLowerCase()
+  const displayName = typeof contact.name === 'string' ? contact.name.toLowerCase() : ''
+  const serviceKey = normalizeServiceKey(serviceName)
+  const startDate = startTime ? new Date(startTime) : null
+  const londonTime = startDate && !Number.isNaN(startDate.getTime())
+    ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false }).format(startDate)
+    : ''
+  const londonDate = startDate && !Number.isNaN(startDate.getTime()) ? getLondonDateKey(startDate) : ''
+  const isKaylaIrving = (firstName === 'kayla' && lastName === 'irving') || displayName.includes('kayla irving')
+  const isToneSunbed = serviceKey.includes('tone') || serviceKey.includes('stand up')
+  const isTargetTime = londonDate === '2026-09-03' && londonTime === '20:29'
+  return isKaylaIrving && isToneSunbed && isTargetTime
+}
+
+function logKaylaIrvingDurationDiagnostic(booking, calculated) {
+  console.log('WIX_DURATION_DIAGNOSTIC_KAYLA_IRVING_2026_09_03_2029', {
+    rawTimingFields: {
+      bookingId: booking?.id || booking?.bookingId || '',
+      serviceName: calculated.serviceName,
+      startDate: booking?.startDate,
+      endDate: booking?.endDate,
+      startTime: booking?.startTime,
+      start: booking?.start,
+      durationMinutes: booking?.durationMinutes,
+      duration: booking?.duration,
+      bookedEntitySlotStartDate: booking?.bookedEntity?.slot?.startDate,
+      bookedEntitySlotEndDate: booking?.bookedEntity?.slot?.endDate,
+      slotStartDate: booking?.slot?.startDate,
+      slotEndDate: booking?.slot?.endDate,
+      scheduleStart: booking?.schedule?.start,
+      scheduleEnd: booking?.schedule?.end
+    },
+    normalizedTiming: {
+      startTime: calculated.startTime,
+      detectedEndTime: calculated.endTime,
+      calculatedActualDuration: calculated.calculatedActualDuration,
+      wixProvidedDuration: calculated.wixDurationMinutes,
+      fallbackMappingDuration: calculated.fallbackMappingDuration,
+      finalDurationMinutes: calculated.durationMinutes,
+      finalMinutes: calculated.finalMinutes,
+      finalBookingStart: calculated.startTime,
+      finalBookingEnd: calculated.bookingEnd
+    }
+  })
+}
+
 function describeShape(value, depth = 0) {
   if (!value || typeof value !== 'object' || depth > 2) return typeof value
   if (Array.isArray(value)) return value.length ? [describeShape(value[0], depth + 1)] : []
@@ -203,11 +290,31 @@ function normalizeBooking(booking) {
   const contactFirstName = firstValue(contact.firstName, contact.first_name, contact.name?.first, contact.name?.firstName)
   const contactLastName = firstValue(contact.lastName, contact.last_name, contact.name?.last, contact.name?.lastName)
   const contactDisplayName = typeof contact.name === 'string' ? contact.name : ''
-  const startTime = normalizeDate(firstValue(booking.startDate, booking.startTime, booking.start, booking.slot?.startDate, booking.schedule?.start))
+  const startTime = getBookingStartDate(booking)
+  const endTime = getBookingEndDate(booking)
   const servicePrice = lowerService.includes('express') ? 35 : lowerService.includes('face') ? 8 : lowerService.includes('legs') ? 18 : lowerService.includes('upper') ? 22 : lowerService.includes('patch') ? 0 : 30
   const isSprayLike = bookingType === 'spraytan' || bookingType === 'patch_test'
   const depositRequired = bookingType === 'spraytan' && servicePrice > 0 ? servicePrice * 0.5 : 0
-  const durationMinutes = Number(requiredMapping?.minutes || requiredMapping?.spraytan_duration_minutes || booking.durationMinutes || booking.duration || (lowerService.includes('patch') ? 10 : 30))
+  const wixDurationMinutes = getWixProvidedDurationMinutes(booking, startTime, endTime)
+  const durationMinutes = isSprayLike
+    ? Number(wixDurationMinutes || requiredMapping?.spraytan_duration_minutes || (lowerService.includes('patch') ? 10 : 30))
+    : Number(wixDurationMinutes || requiredMapping?.minutes || 20)
+  const bookingEnd = addMinutesToIsoDate(startTime, durationMinutes)
+  const finalMinutes = bookingType === 'sunbed' ? durationMinutes : null
+
+  if (shouldLogKaylaIrvingDurationDiagnostic(booking, serviceName, startTime)) {
+    logKaylaIrvingDurationDiagnostic(booking, {
+      serviceName,
+      startTime,
+      endTime,
+      calculatedActualDuration: getDurationFromStartEnd(startTime, endTime),
+      wixDurationMinutes,
+      fallbackMappingDuration: isSprayLike ? requiredMapping?.spraytan_duration_minutes : requiredMapping?.minutes,
+      durationMinutes,
+      finalMinutes,
+      bookingEnd
+    })
+  }
 
   return {
     wix_booking_id: booking.id || booking.bookingId || '',
@@ -216,7 +323,7 @@ function normalizeBooking(booking) {
     wix_status: booking.status || booking.wixStatus || '',
     booking_type: bookingType,
     bed_id: requiredMapping?.bed_id || null,
-    minutes: requiredMapping?.minutes || null,
+    minutes: finalMinutes,
     service_name: serviceName,
     wix_service_name: serviceName,
     customer_name: firstValue(contactDisplayName, `${contactFirstName} ${contactLastName}`.trim()),
@@ -229,7 +336,7 @@ function normalizeBooking(booking) {
     wix_contact_id: firstValue(contact.contactId, contact.id, booking.contactId),
     appointment_time: startTime,
     booking_start: startTime,
-    booking_end: addMinutesToIsoDate(startTime, durationMinutes),
+    booking_end: bookingEnd,
     spraytan_column: bookingType === 'patch_test' ? 'patch_test' : lowerService.includes('express') ? 'express_tan' : 'spray_tan',
     spraytan_service: requiredMapping?.spraytan_service || (lowerService.includes('patch') ? 'Spray Tan patch test' : serviceName),
     spraytan_artist: firstValue(booking.staffMemberName, booking.staffName, booking.resourceName, 'Unassigned'),
