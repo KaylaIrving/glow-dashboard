@@ -15456,7 +15456,7 @@ function formatMoney(value) {
             <thead>
               <tr>
                 <th style={{ width: '90px', color: '#d4a853', padding: '8px', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>
-                {SPRAY_TAN_COLUMNS.map((column) => <th key={column.value} style={{ color: '#d4a853', padding: '8px', textAlign: 'left', borderBottom: '1px solid #333' }}>{column.label}</th>)}
+                {SPRAY_TAN_COLUMNS.map((column) => <th key={column.value} style={{ color: '#d4a853', padding: '8px', textAlign: 'center', borderBottom: '1px solid #333' }}>{column.label}</th>)}
               </tr>
             </thead>
             <tbody>
